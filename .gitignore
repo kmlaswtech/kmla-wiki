@@ -1,0 +1,33 @@
+.DS_Store
+/node_modules/
+**/node_modules/
+/deno.lock
+
+# Env
+.env
+.env.*
+!.env.example
+
+# React Router
+/.react-router/
+/build/
+
+# Lint and format caches
+/.eslintcache
+
+# Tests
+/coverage/
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
+
+# Supabase CLI
+/supabase/.temp/
+/supabase/.branches/
+
+# Vercel
+/.vercel/
+
+# Local notes
+**.local.md

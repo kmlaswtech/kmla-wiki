@@ -1,0 +1,282 @@
+import type {
+  Backlink,
+  PageView,
+  RecentChange,
+  ResolvedBody,
+  RevisionBody,
+  RevisionSummary,
+  SearchHit,
+} from "../model/types";
+import { parseTitle, titleKey, type Namespace } from "~/features/markup";
+import { getSupabase } from "~/shared/supabase/client";
+import { unwrap } from "~/shared/supabase/errors";
+
+// RPC가 jsonb로 돌려주는 모양. DB의 `get_page_view` · `resolve_body`와 맞춘다.
+interface RawResolved {
+  templates: { title: string; body: string }[];
+  existing: string[];
+}
+
+interface RawBacklink {
+  title: string;
+  is_redirect: boolean;
+}
+
+interface RawPageView {
+  found: boolean;
+  title: string | null;
+  valid_title?: boolean;
+  can_edit: boolean;
+  is_admin: boolean;
+  redirected_from?: string | null;
+  page?: {
+    id: number;
+    title: string;
+    namespace: Namespace;
+    protection: "open" | "admin";
+    redirect_target: string | null;
+    current_revision_id: number | null;
+    updated_at: string;
+    deleted_at: string | null;
+  };
+  revision?: {
+    id: number;
+    body: string;
+    created_at: string;
+    is_current: boolean;
+  } | null;
+  resolved?: RawResolved;
+  backlinks: RawBacklink[];
+  children?: string[];
+  members?: string[];
+}
+
+function toResolved(raw: RawResolved): ResolvedBody {
+  return {
+    templates: new Map(
+      raw.templates.map((template) => [
+        titleKey(template.title),
+        template.body,
+      ]),
+    ),
+    existing: new Set(raw.existing),
+  };
+}
+
+function toBacklinks(raw: RawBacklink[]): Backlink[] {
+  return raw.map((link) => ({
+    title: link.title,
+    isRedirect: link.is_redirect,
+  }));
+}
+
+/**
+ * 문서 보기 화면에 필요한 전부를 한 번에 읽는다.
+ *
+ * @param followRedirect 넘겨주기 문서면 대상을 보여 줄지. 넘겨주기 문서 자체를 고칠 때는 끈다.
+ * @param revisionId 예전 판을 볼 때.
+ */
+export async function getPageView(
+  title: string,
+  {
+    followRedirect = true,
+    revisionId,
+  }: { followRedirect?: boolean; revisionId?: number } = {},
+): Promise<PageView> {
+  const raw = unwrap(
+    await getSupabase().rpc("get_page_view", {
+      p_title: title,
+      p_follow_redirect: followRedirect,
+      p_revision_id: revisionId,
+    }),
+  ) as unknown as RawPageView;
+
+  const viewer = { canEdit: raw.can_edit, isAdmin: raw.is_admin };
+
+  if (!raw.found || !raw.page || !raw.resolved) {
+    return {
+      found: false,
+      title: raw.title,
+      validTitle: raw.valid_title ?? false,
+      backlinks: toBacklinks(raw.backlinks),
+      ...viewer,
+    };
+  }
+
+  return {
+    found: true,
+    page: {
+      id: raw.page.id,
+      title: raw.page.title,
+      namespace: raw.page.namespace,
+      protection: raw.page.protection,
+      redirectTarget: raw.page.redirect_target,
+      currentRevisionId: raw.page.current_revision_id,
+      updatedAt: raw.page.updated_at,
+      deletedAt: raw.page.deleted_at,
+    },
+    redirectedFrom: raw.redirected_from ?? null,
+    revision: raw.revision
+      ? {
+          id: raw.revision.id,
+          body: raw.revision.body,
+          createdAt: raw.revision.created_at,
+          isCurrent: raw.revision.is_current,
+        }
+      : null,
+    resolved: toResolved(raw.resolved),
+    backlinks: toBacklinks(raw.backlinks),
+    children: raw.children ?? [],
+    members: raw.members ?? [],
+    ...viewer,
+  };
+}
+
+/** 아직 저장하지 않은 본문을 그리는 데 필요한 것(편집 미리보기). */
+export async function resolveBody(body: string): Promise<ResolvedBody> {
+  const raw = unwrap(await getSupabase().rpc("resolve_body", { p_body: body }));
+  return toResolved(raw as unknown as RawResolved);
+}
+
+// 목록에는 본문을 싣지 않는다. 판마다 본문 전체가 들어 있어 목록에서 읽으면 전송량이 커진다.
+const SUMMARY_COLUMNS =
+  "id, parent_revision_id, kind, summary, author_pseudonym, byte_size, byte_delta, created_at, hidden_at";
+
+interface RawRevision {
+  id: number;
+  parent_revision_id: number | null;
+  kind: string;
+  summary: string;
+  author_pseudonym: string;
+  byte_size: number;
+  byte_delta: number;
+  created_at: string;
+  hidden_at: string | null;
+}
+
+function toSummary(row: RawRevision): RevisionSummary {
+  return {
+    id: row.id,
+    parentRevisionId: row.parent_revision_id,
+    kind: row.kind as RevisionSummary["kind"],
+    summary: row.summary,
+    authorPseudonym: row.author_pseudonym,
+    byteSize: row.byte_size,
+    byteDelta: row.byte_delta,
+    createdAt: row.created_at,
+    hiddenAt: row.hidden_at,
+  };
+}
+
+export const HISTORY_PAGE_SIZE = 50;
+
+/** 문서의 판 기록, 최신순. `before`보다 오래된 판부터 이어서 읽는다. */
+export async function listHistory(
+  pageId: number,
+  before?: number,
+): Promise<RevisionSummary[]> {
+  let query = getSupabase()
+    .from("revisions")
+    .select(SUMMARY_COLUMNS)
+    .eq("page_id", pageId)
+    .order("id", { ascending: false })
+    .limit(HISTORY_PAGE_SIZE);
+  if (before !== undefined) query = query.lt("id", before);
+
+  return unwrap(await query).map(toSummary);
+}
+
+/** 모든 문서의 최근 변경, 최신순. */
+export async function listRecentChanges(
+  before?: number,
+): Promise<RecentChange[]> {
+  let query = getSupabase()
+    .from("revisions")
+    // pages와 revisions 사이에 외래 키가 둘이라(page_id, current_revision_id) 어느 쪽인지 적는다.
+    .select(`${SUMMARY_COLUMNS}, page:pages!revisions_page_id_fkey(title)`)
+    .order("id", { ascending: false })
+    .limit(HISTORY_PAGE_SIZE);
+  if (before !== undefined) query = query.lt("id", before);
+
+  return unwrap(await query).map((row) => ({
+    ...toSummary(row),
+    pageTitle: row.page.title,
+  }));
+}
+
+/** 판 비교용. 요청한 판 가운데 볼 수 있는 것만 돌려준다. */
+export async function getRevisionBodies(
+  pageId: number,
+  revisionIds: readonly number[],
+): Promise<RevisionBody[]> {
+  const rows = unwrap(
+    await getSupabase()
+      .from("revisions")
+      .select(`${SUMMARY_COLUMNS}, body`)
+      .eq("page_id", pageId)
+      .in("id", [...revisionIds]),
+  );
+  return rows.map((row) => ({ ...toSummary(row), body: row.body }));
+}
+
+/** 판 기록에서 내가 쓴 판을 표시하기 위한, 이 문서에서의 내 가명. 편집한 적이 없으면 `null`. */
+export async function getMyPseudonym(pageId: number): Promise<string | null> {
+  return unwrap(await getSupabase().rpc("my_pseudonym", { p_page_id: pageId }));
+}
+
+export async function searchPages(query: string): Promise<SearchHit[]> {
+  if (query.trim() === "") return [];
+  const rows = unwrap(
+    await getSupabase().rpc("search_pages", { p_query: query }),
+  );
+  return rows.map((row) => ({
+    title: row.title,
+    matchedRedirect: row.matched_redirect,
+    snippet: row.snippet,
+  }));
+}
+
+/**
+ * 검색어와 제목이 정확히 같은(대소문자 무시) 문서의 제목. 없으면 `null`.
+ *
+ * 머리띠 검색에서 Enter를 쳤을 때 결과 목록 대신 그 문서로 바로 보내는 데 쓴다. 넘겨주기 문서도
+ * 잡히고, 넘겨주기는 문서 보기가 따라간다.
+ */
+export async function findExactTitle(query: string): Promise<string | null> {
+  const title = parseTitle(query);
+  if (!title) return null;
+  const rows = unwrap(
+    await getSupabase()
+      .from("pages")
+      .select("title")
+      .is("deleted_at", null)
+      .eq("title_key", titleKey(title))
+      .limit(1),
+  );
+  return rows[0]?.title ?? null;
+}
+
+/** 아무 문서의 제목. 문서가 하나도 없으면 `null`. */
+export async function getRandomTitle(): Promise<string | null> {
+  return unwrap(await getSupabase().rpc("random_page"));
+}
+
+/** 자동완성용 제목 목록. `prefix`가 있으면 그 이름공간(`틀:`, `분류:`) 안에서만 찾는다. */
+export async function suggestTitles(
+  query: string,
+  prefix = "",
+  limit = 8,
+): Promise<string[]> {
+  // LIKE에서 뜻이 있는 글자는 글자 그대로 찾도록 막는다.
+  const escaped = query.toLowerCase().replace(/[\\%_]/g, "\\$&");
+  const rows = unwrap(
+    await getSupabase()
+      .from("pages")
+      .select("title")
+      .is("deleted_at", null)
+      .like("title_key", `${prefix.toLowerCase()}%${escaped}%`)
+      .order("title_key")
+      .limit(limit),
+  );
+  return rows.map((row) => row.title);
+}

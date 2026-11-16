@@ -1,0 +1,324 @@
+import { ChevronRight, CornerDownRight, Lock } from "lucide-react";
+import { useCallback, useMemo, type ReactNode } from "react";
+import { Link } from "react-router";
+
+import type { FoundPage } from "../model/types";
+import {
+  ancestorTitles,
+  baseName,
+  findSections,
+  pageHref,
+  parseWiki,
+  TableOfContents,
+  titleKey,
+  WikiContent,
+} from "~/features/markup";
+import { LinkButton } from "~/shared/components/link-button";
+import { RelativeTime } from "~/shared/components/relative-time";
+import { formatDateTime } from "~/shared/lib/time";
+import { Badge } from "~/shared/ui/badge";
+
+interface PageArticleProps {
+  view: FoundPage;
+  /** 올린 이미지를 그리는 방법. 이미지 기능이 준다. */
+  renderImage?: (imageId: string, alt: string) => ReactNode;
+  /** 제목 줄 오른쪽에 덧붙일 버튼(관리 메뉴). */
+  headerActions?: ReactNode;
+}
+
+/** 이 사용자가 이 문서를 고칠 수 있는가. 화면용 판단이고 실제 판정은 서버가 한다. */
+export function canEditPage(view: FoundPage): boolean {
+  if (view.isAdmin) return true;
+  return (
+    view.canEdit &&
+    view.page.protection === "open" &&
+    view.page.deletedAt === null
+  );
+}
+
+/** 문서 한 편: 경로, 제목, 안내, 목차, 본문, 하위 문서, 분류, 역링크. */
+export function PageArticle({
+  view,
+  renderImage,
+  headerActions,
+}: PageArticleProps) {
+  const { page, revision, resolved } = view;
+  const body = revision?.body ?? "";
+  const viewingOldRevision = revision !== null && !revision.isCurrent;
+  const editable = canEditPage(view);
+
+  const document = useMemo(
+    () => parseWiki(body, { templates: resolved.templates }),
+    [body, resolved.templates],
+  );
+
+  // 문단 편집은 원문의 제목 번호로 문단을 찾는다. 끼워 넣은 틀이 제목을 더하면 화면의 번호와
+  // 원문의 번호가 어긋나므로, 둘의 개수가 같을 때만 문단 편집 링크를 건다.
+  const sectionEditable =
+    editable &&
+    !viewingOldRevision &&
+    findSections(body).length === document.headings.length;
+  const sectionEditHref = useCallback(
+    (index: number) => `${pageHref(page.title, "edit")}?section=${index}`,
+    [page.title],
+  );
+
+  const ancestors = ancestorTitles(page.title);
+
+  return (
+    <article>
+      {ancestors.length > 0 ? (
+        <nav
+          aria-label="상위 문서"
+          className="mb-1 flex flex-wrap items-center gap-1 text-sm text-muted-foreground"
+        >
+          {ancestors.map((ancestor) => (
+            <span key={ancestor} className="flex items-center gap-1">
+              <Link to={pageHref(ancestor)} className="hover:text-primary">
+                {ancestor.split("/").at(-1)}
+              </Link>
+              <ChevronRight className="size-3.5" aria-hidden />
+            </span>
+          ))}
+        </nav>
+      ) : null}
+
+      <header className="mb-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b pb-3">
+        <h1 className="flex min-w-0 items-center gap-2 text-3xl leading-10 font-bold break-keep">
+          {page.title}
+          {page.protection === "admin" ? (
+            <Lock
+              className="size-5 shrink-0 text-muted-foreground"
+              aria-label="보호된 문서"
+            />
+          ) : null}
+        </h1>
+        <div className="flex shrink-0 gap-1.5">
+          {viewingOldRevision ? null : editable ? (
+            <LinkButton size="sm" to={pageHref(page.title, "edit")}>
+              편집
+            </LinkButton>
+          ) : (
+            // 고칠 수 없어도 원문은 볼 수 있다. 틀·표 문법을 원문에서 배우는 사람이 많다.
+            <LinkButton
+              size="sm"
+              variant="outline"
+              to={pageHref(page.title, "edit")}
+              title={
+                page.protection === "admin"
+                  ? "보호된 문서라 관리자만 편집할 수 있습니다."
+                  : "지금은 편집할 수 없습니다."
+              }
+            >
+              <Lock aria-hidden />
+              원문 보기
+            </LinkButton>
+          )}
+          <LinkButton
+            size="sm"
+            variant="outline"
+            to={pageHref(page.title, "history")}
+          >
+            기록
+          </LinkButton>
+          {editable ? (
+            <LinkButton
+              size="sm"
+              variant="outline"
+              to={pageHref(page.title, "move")}
+            >
+              이동
+            </LinkButton>
+          ) : null}
+          {headerActions}
+        </div>
+      </header>
+
+      <p className="mb-4 text-right text-xs text-muted-foreground">
+        {viewingOldRevision ? `r${revision.id} 저장` : "최근 수정"}{" "}
+        <UpdatedAt
+          value={viewingOldRevision ? revision.createdAt : page.updatedAt}
+        />
+      </p>
+
+      <div className="space-y-2">
+        {view.redirectedFrom ? (
+          <Notice>
+            <CornerDownRight className="size-4 shrink-0" aria-hidden />
+            <span>
+              <Link
+                to={`${pageHref(view.redirectedFrom)}?redirect=no`}
+                className="text-primary hover:underline"
+              >
+                {view.redirectedFrom}
+              </Link>
+              에서 넘어옴
+            </span>
+          </Notice>
+        ) : null}
+        {page.deletedAt ? (
+          <Notice tone="warning">
+            삭제된 문서입니다. 관리자에게만 보입니다.
+          </Notice>
+        ) : null}
+        {viewingOldRevision ? (
+          <Notice tone="warning">
+            <span>
+              예전 판(r{revision.id})을 보고 있습니다.{" "}
+              <Link
+                to={pageHref(page.title)}
+                className="text-primary hover:underline"
+              >
+                현재 판 보기
+              </Link>
+            </span>
+          </Notice>
+        ) : null}
+        {revision === null ? (
+          <Notice tone="warning">이 판은 볼 수 없습니다.</Notice>
+        ) : null}
+        {document.redirect ? (
+          <Notice>
+            <CornerDownRight className="size-4 shrink-0" aria-hidden />
+            <span>
+              이 문서는{" "}
+              <Link
+                to={pageHref(document.redirect)}
+                className="text-primary hover:underline"
+              >
+                {document.redirect}
+              </Link>{" "}
+              문서로 넘겨줍니다.
+            </span>
+          </Notice>
+        ) : null}
+      </div>
+
+      <TableOfContents headings={document.headings} />
+
+      <WikiContent
+        withToc
+        document={document}
+        existing={resolved.existing}
+        sectionEditHref={sectionEditable ? sectionEditHref : undefined}
+        renderImage={renderImage}
+      />
+
+      {view.members.length > 0 ? (
+        <TitleList
+          heading={
+            page.namespace === "category"
+              ? `"${baseName(page.title)}" 분류에 속한 문서`
+              : "이 틀을 쓰는 문서"
+          }
+          titles={view.members}
+        />
+      ) : null}
+
+      {view.children.length > 0 ? (
+        <TitleList
+          heading="하위 문서"
+          titles={view.children}
+          // 하위 문서는 상위 이름을 떼고 보여 준다.
+          label={(title) => title.slice(page.title.length + 1)}
+        />
+      ) : null}
+
+      {document.categories.length > 0 ? (
+        <footer className="mt-8 flex flex-wrap items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
+          <span className="text-muted-foreground">분류</span>
+          {document.categories.map((category) => (
+            <Badge
+              key={category}
+              variant={
+                resolved.existing.has(titleKey(category))
+                  ? "secondary"
+                  : "outline"
+              }
+              render={<Link to={pageHref(category)} />}
+            >
+              {baseName(category)}
+            </Badge>
+          ))}
+        </footer>
+      ) : null}
+
+      {view.backlinks.length > 0 ? (
+        <details className="mt-4 text-sm">
+          <summary className="cursor-pointer text-muted-foreground">
+            이 문서를 가리키는 문서 {view.backlinks.length}개
+          </summary>
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {view.backlinks.map((link) => (
+              <li key={link.title}>
+                <Link
+                  to={`${pageHref(link.title)}${link.isRedirect ? "?redirect=no" : ""}`}
+                  className="text-primary hover:underline"
+                >
+                  {link.title}
+                </Link>
+                {link.isRedirect ? (
+                  <span className="text-muted-foreground"> (넘겨주기)</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </article>
+  );
+}
+
+/** 정보가 빨리 낡는 위키라, 언제 고친 글인지를 제목 바로 아래에서 보여 준다. */
+function UpdatedAt({ value }: { value: string }) {
+  return (
+    <>
+      {formatDateTime(value)} (<RelativeTime value={value} />)
+    </>
+  );
+}
+
+function Notice({
+  children,
+  tone = "info",
+}: {
+  children: ReactNode;
+  tone?: "info" | "warning";
+}) {
+  return (
+    <p
+      className={
+        tone === "warning"
+          ? "flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
+          : "flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground"
+      }
+    >
+      {children}
+    </p>
+  );
+}
+
+function TitleList({
+  heading,
+  titles,
+  label = (title) => title,
+}: {
+  heading: string;
+  titles: readonly string[];
+  label?: (title: string) => string;
+}) {
+  return (
+    <section className="mt-8">
+      <h2 className="mb-2 border-b pb-1.5 text-xl font-bold">{heading}</h2>
+      <ul className="columns-2 gap-x-6 text-sm sm:columns-3">
+        {titles.map((title) => (
+          <li key={title} className="break-inside-avoid py-0.5">
+            <Link to={pageHref(title)} className="text-primary hover:underline">
+              {label(title)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

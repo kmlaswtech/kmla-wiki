@@ -1,0 +1,172 @@
+import { Copy } from "lucide-react";
+import { Link, useOutletContext } from "react-router";
+import { toast } from "sonner";
+
+import type { Route } from "./+types/edit";
+import { nonNegativeInt, titleFromParams } from "./title-param";
+import { withVerifiedMember, type MemberStatus } from "~/features/auth";
+import { EditorForm, type EditTarget } from "~/features/editor";
+import { findSections, getSection, pageHref } from "~/features/markup";
+import { canEditPage, getPageView, type ResolvedBody } from "~/features/pages";
+import { formatDateTime } from "~/shared/lib/time";
+import { Button } from "~/shared/ui/button";
+
+type Blocked = "protected" | "deleted" | "invalid-title";
+
+export async function clientLoader({
+  request,
+  params,
+}: Route.ClientLoaderArgs) {
+  const title = titleFromParams(params);
+  const sectionParam = new URL(request.url).searchParams.get("section");
+
+  // 넘겨주기 문서를 고칠 때는 대상이 아니라 그 문서 자체를 연다.
+  const view = await withVerifiedMember(request, () =>
+    getPageView(title, { followRedirect: false }),
+  );
+
+  const empty: ResolvedBody = { templates: new Map(), existing: new Set() };
+  if (!view.found) {
+    const target: EditTarget = {
+      title: view.title ?? title,
+      baseRevisionId: null,
+      baseBody: "",
+      sectionIndex: null,
+    };
+    return {
+      target,
+      resolved: empty,
+      isNew: true,
+      blocked: (view.validTitle ? null : "invalid-title") as Blocked | null,
+    };
+  }
+
+  const body = view.revision?.body ?? "";
+  const requested = nonNegativeInt(sectionParam);
+  const sectionIndex =
+    requested !== null && findSections(body)[requested] ? requested : null;
+
+  const target: EditTarget = {
+    title: view.page.title,
+    baseRevisionId: view.page.currentRevisionId,
+    baseBody: body,
+    sectionIndex,
+  };
+  const blocked: Blocked | null = canEditPage(view)
+    ? null
+    : view.page.deletedAt
+      ? "deleted"
+      : view.page.protection === "admin"
+        ? "protected"
+        : null;
+
+  return { target, resolved: view.resolved, isNew: false, blocked };
+}
+
+export function meta({ loaderData }: Route.MetaArgs) {
+  return [{ title: `${loaderData?.target.title ?? ""} 편집 - 큼온 위키` }];
+}
+
+const BLOCKED_MESSAGE: Record<Blocked, string> = {
+  protected: "보호된 문서라 관리자만 편집할 수 있습니다.",
+  deleted: "삭제된 문서입니다. 다시 만들려면 관리자에게 복구를 요청해 주세요.",
+  "invalid-title":
+    "이 제목으로는 문서를 만들 수 없습니다. [ ] { } | # < > 는 제목에 쓸 수 없습니다.",
+};
+
+export default function EditRoute({ loaderData }: Route.ComponentProps) {
+  const { target, resolved, isNew, blocked } = loaderData;
+  const status = useOutletContext<MemberStatus>();
+  const section =
+    target.sectionIndex === null
+      ? null
+      : findSections(target.baseBody)[target.sectionIndex];
+  const readOnly = Boolean(status.ban) || blocked !== null;
+  const source =
+    target.sectionIndex === null
+      ? target.baseBody
+      : (getSection(target.baseBody, target.sectionIndex) ?? "");
+
+  return (
+    <div>
+      <header className="mb-4 border-b pb-3">
+        <h1 className="text-2xl font-bold">
+          <Link to={pageHref(target.title)} className="hover:underline">
+            {target.title}
+          </Link>{" "}
+          <span className="font-normal text-muted-foreground">
+            {isNew
+              ? "새 문서"
+              : section
+                ? `"${section.title}" 문단 ${readOnly ? "원문" : "편집"}`
+                : readOnly
+                  ? "원문"
+                  : "편집"}
+          </span>
+        </h1>
+      </header>
+
+      {status.ban ? (
+        // 실제 차단은 서버가 한다. 여기서는 쓰기 전에 알려 헛수고를 막는다.
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+          편집이 차단된 상태입니다
+          {status.ban.endsAt
+            ? ` (${formatDateTime(status.ban.endsAt)}까지)`
+            : " (기한 없음)"}
+          . 사유: {status.ban.reason}
+        </p>
+      ) : blocked ? (
+        <p className="rounded-md border p-4 text-sm">
+          {BLOCKED_MESSAGE[blocked]}
+        </p>
+      ) : null}
+
+      {readOnly ? (
+        // 고칠 수 없어도 원문은 보여 준다. 없는 문서는 보여 줄 원문이 없다.
+        isNew ? null : (
+          <RawSource body={source} />
+        )
+      ) : (
+        // 문서나 문단이 바뀌면 편집기를 새로 만든다. 앞 문서의 글이 남으면 안 된다.
+        <EditorForm
+          key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
+          target={target}
+          initialResolved={resolved}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 고칠 수 없는 문서의 원문. 복사해서 다른 문서에 쓸 수 있게 한다. */
+function RawSource({ body }: { body: string }) {
+  return (
+    <section aria-label="원문" className="mt-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">원문</h2>
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          onClick={() => {
+            navigator.clipboard.writeText(body).then(
+              () => toast.success("원문을 복사했습니다."),
+              () =>
+                toast.error("복사하지 못했습니다. 직접 선택해 복사해 주세요."),
+            );
+          }}
+        >
+          <Copy aria-hidden />
+          복사
+        </Button>
+      </div>
+      <pre className="max-h-[70vh] overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-sm leading-6 break-all whitespace-pre-wrap">
+        {body === "" ? (
+          <span className="text-muted-foreground">(빈 문서)</span>
+        ) : (
+          body
+        )}
+      </pre>
+    </section>
+  );
+}

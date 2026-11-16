@@ -1,0 +1,278 @@
+-- 문서 쓰기·읽기, 문서별 가명, 충돌, 보이는 범위.
+begin;
+\ir helpers.inc
+select * from no_plan();
+
+-- ── 회원 확인이 없으면 쓰지도 읽지도 못한다 ──────────────────────────────────
+select login(:outsider);
+select throws_ok(
+  $$select * from public.save_revision('신성', null, '본문')$$, '42501', null,
+  'a non-member cannot create a page'
+);
+select logout();
+
+select login(:expired);
+select throws_ok(
+  $$select * from public.save_revision('신성', null, '본문')$$, '42501', null,
+  'an expired member cannot create a page'
+);
+select logout();
+
+-- ── 새 문서 ──────────────────────────────────────────────────────────────────
+select login(:alice);
+select page_id as p1, revision_id as r1 from public.save_revision(' 귀가 /  정기_귀가 ', null, '첫 판', '만듦') \gset
+
+select results_eq(
+  format($$select title, namespace, parent_key, protection from public.pages where id = %s$$, :p1),
+  $$values ('귀가/정기 귀가'::text, 'main'::text, '귀가'::text, 'open'::text)$$,
+  'the title is normalized and the parent is derived from the slash'
+);
+select matches(
+  (select author_pseudonym from public.revisions where id = :r1),
+  '^익명#[0-9A-F]{6}$',
+  'the author is shown as a pseudonym'
+);
+select author_pseudonym as alice_p1 from public.revisions where id = :r1 \gset
+select is(public.my_pseudonym(:p1), :'alice_p1', 'I can learn my own pseudonym on this page');
+
+select throws_ok(
+  format($$select * from public.save_revision('귀가/정기 귀가', %s, '첫 판')$$, :r1),
+  'WK007', null, 'saving an unchanged body is rejected'
+);
+select throws_ok(
+  $$select * from public.save_revision('귀가/정기 귀가', null, '다른 사람이 만든 줄 모르고 새로 씀')$$,
+  'WK001', null, 'creating a page that already exists is an edit conflict'
+);
+select logout();
+
+-- ── 같은 문서의 다른 사람, 충돌 ──────────────────────────────────────────────
+select login(:bob);
+select revision_id as r2 from public.save_revision('귀가/정기 귀가', :r1, '둘째 판', '') \gset
+select isnt(
+  (select author_pseudonym from public.revisions where id = :r2), :'alice_p1',
+  'another member gets a different pseudonym on the same page'
+);
+select is(public.my_pseudonym(:p1), (select author_pseudonym from public.revisions where id = :r2),
+  'my_pseudonym is per caller');
+select logout();
+
+select login(:alice);
+select throws_ok(
+  format($$select * from public.save_revision('귀가/정기 귀가', %s, '낡은 판 기준')$$, :r1),
+  'WK001', null, 'saving on top of a stale revision is an edit conflict'
+);
+select revision_id as r3 from public.save_revision('귀가/정기 귀가', :r2, '셋째 판 [[신성]] [[분류:생활]]') \gset
+select is(
+  (select author_pseudonym from public.revisions where id = :r3), :'alice_p1',
+  'the same member keeps the same pseudonym on the same page'
+);
+select results_eq(
+  format($$select parent_revision_id, byte_delta from public.revisions where id = %s$$, :r3),
+  format($$select %s::bigint, octet_length('셋째 판 [[신성]] [[분류:생활]]') - octet_length('둘째 판')$$, :r2),
+  'a revision records its parent and size change'
+);
+
+-- 다른 문서에서는 다른 가명이다. 문서 사이를 잇는 단서가 화면 데이터에 없어야 한다.
+select page_id as p2, revision_id as r4 from public.save_revision('신성', null, '신성 시간은…') \gset
+select isnt(
+  (select author_pseudonym from public.revisions where id = :r4), :'alice_p1',
+  'the same member gets a different pseudonym on a different page'
+);
+
+-- ── 파생 정보 ────────────────────────────────────────────────────────────────
+select set_eq(
+  format($$select kind, target_key from public.page_refs where from_page_id = %s$$, :p1),
+  $$values ('link', '신성'), ('category', '분류:생활')$$,
+  'links and categories are extracted from the body on save'
+);
+select is(
+  public.page_backlinks('신성'),
+  '[{"title": "귀가/정기 귀가", "is_redirect": false}]'::jsonb,
+  'backlinks list the pages that link here'
+);
+
+-- ── 직접 쓰기는 막혀 있다 ────────────────────────────────────────────────────
+select throws_ok($$insert into public.pages (title) values ('몰래')$$, '42501', null,
+  'a member cannot insert a page directly');
+select throws_ok($$update public.revisions set body = '조작'$$, '42501', null,
+  'nor rewrite history');
+select throws_ok($$delete from public.pages$$, '42501', null, 'nor delete pages');
+select throws_ok($$select * from private.page_pseudonyms$$, '42501', null,
+  'nor read who is behind a pseudonym');
+select throws_ok($$select * from private.revision_authors$$, '42501', null,
+  'nor read who wrote a revision');
+
+-- ── 제목과 상한 ──────────────────────────────────────────────────────────────
+select throws_ok($$select * from public.save_revision('나쁜[제목]', null, 'x')$$, 'WK004', null,
+  'wiki syntax characters are not allowed in titles');
+select throws_ok($$select * from public.save_revision('a/../b', null, 'x')$$, 'WK004', null,
+  'path traversal segments are not allowed in titles');
+select throws_ok($$select * from public.save_revision('틀:', null, 'x')$$, 'WK004', null,
+  'a namespace without a name is not a title');
+select throws_ok(
+  $$select * from public.save_revision('긴 문서', null, repeat('가', 200001))$$, 'WK005', null,
+  'a body over the safety limit is rejected');
+select throws_ok(
+  $$select * from public.save_revision('없는 문서', 12345, 'x')$$, 'WK006', null,
+  'editing a page that does not exist is rejected');
+select throws_ok(
+  $$select * from public.save_revision('빈 문서', null, '   ')$$, 'WK007', null,
+  'a new page needs a body');
+
+-- 대소문자만 다른 제목은 같은 문서다.
+select page_id as p3, revision_id as r5 from public.save_revision('PRISM', null, '프리즘') \gset
+select throws_ok($$select * from public.save_revision('Prism', null, '또 프리즘')$$, 'WK001', null,
+  'titles are unique regardless of letter case');
+
+-- ── 되돌리기 ─────────────────────────────────────────────────────────────────
+select revision_id as r6 from public.revert_page(:r2, '실수') \gset
+select results_eq(
+  format($$select body, kind, summary from public.revisions where id = %s$$, :r6),
+  format($$values ('둘째 판'::text, 'revert'::text, 'r%s 판으로 되돌림: 실수'::text)$$, :r2),
+  'reverting writes a new revision with the old body'
+);
+select is(
+  (select count(*) from public.revisions where page_id = :p1), 4::bigint,
+  'reverting keeps the whole history'
+);
+select is_empty(
+  format($$select 1 from public.page_refs where from_page_id = %s$$, :p1),
+  'reverting recomputes the derived references'
+);
+select throws_ok(format($$select * from public.revert_page(%s)$$, :r2), 'WK007', null,
+  'reverting to the current content is rejected');
+
+-- ── 이동과 넘겨주기 ──────────────────────────────────────────────────────────
+select throws_ok($$select * from public.move_page('신성', 'prism')$$, 'WK009', null,
+  'a page cannot be moved onto an existing title');
+select revision_id as r7 from public.move_page('신성', '신성 시간') \gset
+select is((select title from public.pages where id = :p2), '신성 시간', 'moving renames the page');
+select is(
+  (select author_pseudonym from public.revisions where id = :r7),
+  (select author_pseudonym from public.revisions where id = :r4),
+  'moving keeps my pseudonym because the page is the same page'
+);
+select results_eq(
+  $$select redirect_target from public.pages where title = '신성'$$,
+  $$values ('신성 시간'::text)$$,
+  'moving leaves a redirect at the old title'
+);
+select is(
+  public.get_page_view('신성') ->> 'title', '신성 시간',
+  'viewing a redirect shows the target'
+);
+select is(
+  public.get_page_view('신성') ->> 'redirected_from', '신성',
+  'and says where the reader came from'
+);
+select is(
+  public.get_page_view('신성', false) ->> 'title', '신성',
+  'the redirect page itself can still be opened'
+);
+select is(
+  public.get_page_view('없는 문서') -> 'found', 'false'::jsonb,
+  'a missing page is reported as not found rather than as an error'
+);
+select is(
+  public.get_page_view('귀가/정기_귀가') -> 'revision' ->> 'body', '둘째 판',
+  'the view carries the current body'
+);
+
+-- ── 검색 ─────────────────────────────────────────────────────────────────────
+select results_eq(
+  $$select title, matched_redirect from public.search_pages('신성')$$,
+  $$values ('신성 시간'::text, null::text)$$,
+  'search finds a page by title and does not list its redirect separately'
+);
+select results_eq(
+  $$select title from public.search_pages('프리즘')$$,
+  $$values ('PRISM'::text)$$,
+  'search finds a page by body'
+);
+select logout();
+
+-- 넘겨주기 이름으로만 맞는 경우.
+select login(:bob);
+select page_id as p4 from public.save_revision('중베', null, '#넘겨주기 [[PRISM]]') \gset
+select results_eq(
+  $$select title, matched_redirect from public.search_pages('중베')$$,
+  $$values ('PRISM'::text, '중베'::text)$$,
+  'search by a redirect name returns the target page'
+);
+select logout();
+
+-- ── 차단, 보호, 삭제, 숨김 ───────────────────────────────────────────────────
+insert into private.bans (member_id, reason)
+select id, '훼손' from private.members where kmla_profile_id = 9002;
+
+select login(:bob);
+select throws_ok(
+  format($$select * from public.save_revision('PRISM', %s, '차단 중 편집')$$, :r5), 'WK002', null,
+  'a banned member cannot edit any page');
+select throws_ok($$select * from public.move_page('PRISM', 'P')$$, 'WK002', null,
+  'nor move one');
+select isnt_empty($$select 1 from public.pages$$, 'but can still read');
+select logout();
+
+update public.pages set protection = 'admin' where id = :p3;
+select login(:alice);
+select throws_ok(
+  format($$select * from public.save_revision('PRISM', %s, '보호 문서 편집')$$, :r5), 'WK003', null,
+  'a member cannot edit a protected page');
+select logout();
+select login(:admin);
+select lives_ok(
+  format($$select * from public.save_revision('PRISM', %s, '관리자 편집')$$, :r5),
+  'an admin can edit a protected page');
+select logout();
+
+update public.revisions set hidden_at = now() where id = :r1;
+update public.pages set deleted_at = now() where id = :p2;
+
+select login(:alice);
+select is_empty(format($$select 1 from public.revisions where id = %s$$, :r1),
+  'a hidden revision is invisible to members');
+select throws_ok(format($$select * from public.revert_page(%s)$$, :r1), 'WK006', null,
+  'and cannot be restored by reverting to it');
+select is_empty(format($$select 1 from public.pages where id = %s$$, :p2),
+  'a deleted page is invisible to members');
+select is_empty(format($$select 1 from public.revisions where page_id = %s$$, :p2),
+  'and so is its history');
+select throws_ok(
+  $$select * from public.save_revision('신성 시간', null, '다시 만들기')$$, 'WK008', null,
+  'a deleted page cannot be recreated by a member');
+select is(public.get_page_view('신성 시간') -> 'found', 'false'::jsonb,
+  'viewing a deleted page says not found');
+select logout();
+
+select login(:admin);
+select isnt_empty(format($$select 1 from public.revisions where id = %s$$, :r1),
+  'an admin still sees a hidden revision');
+select isnt_empty(format($$select 1 from public.pages where id = %s$$, :p2),
+  'and a deleted page');
+select logout();
+
+select login(:outsider);
+select is_empty($$select 1 from public.pages$$, 'a non-member sees no pages');
+select is_empty($$select 1 from public.revisions$$, 'no revisions');
+select is_empty($$select 1 from public.page_refs$$, 'and no references');
+select logout();
+
+-- ── 저장 빈도 상한 ───────────────────────────────────────────────────────────
+with written as (
+  insert into public.revisions (page_id, body, author_pseudonym, kind, byte_size, byte_delta)
+  select :p1, 'x', '익명#000000', 'edit', 1, 0 from generate_series(1, 60)
+  returning id
+)
+insert into private.revision_authors (revision_id, member_id)
+select written.id, (select id from private.members where kmla_profile_id = 9001)
+from written;
+
+select login(:alice);
+select throws_ok(
+  $$select * from public.save_revision('상한 시험', null, 'x')$$, 'WK005', null,
+  'sixty saves in ten minutes trips the safety limit');
+select logout();
+
+select * from finish();
+rollback;

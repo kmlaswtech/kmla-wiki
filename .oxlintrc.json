@@ -1,0 +1,142 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "jsx-a11y", "import", "vitest", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "browser": true,
+    "es2022": true
+  },
+  "ignorePatterns": [
+    "build/**",
+    "coverage/**",
+    ".react-router/**",
+    ".vercel/**",
+    "supabase/.temp/**",
+    "supabase/functions/**",
+    "app/shared/supabase/database.types.ts",
+    "app/shared/ui/**"
+  ],
+  "rules": {
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "fixStyle": "inline-type-imports"
+      }
+    ],
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "react/react-in-jsx-scope": "off",
+    "import/no-unassigned-import": "off",
+    "typescript/no-unsafe-type-assertion": "off",
+    "typescript/consistent-return": "off",
+    "typescript/no-misused-spread": "off",
+    "vitest/valid-title": "off",
+    "vitest/valid-expect": [
+      "error",
+      {
+        "maxArgs": 2
+      }
+    ],
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "react/no-unstable-nested-components": [
+      "warn",
+      {
+        "allowAsProps": true
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["app/features/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["~/routes", "~/routes/**"],
+                "message": "Features must not depend on route modules."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["app/features/*/model/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["~/routes", "~/routes/**"],
+                "message": "Features must not depend on route modules."
+              },
+              {
+                "group": ["~/shared/supabase/client", "@supabase/*"],
+                "message": "model/ is pure: Supabase I/O belongs in data/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["app/shared/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "~/features",
+                  "~/features/**",
+                  "~/routes",
+                  "~/routes/**"
+                ],
+                "message": "Shared code must not depend on features or routes."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["app/routes/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["~/shared/supabase", "~/shared/supabase/**"],
+                "message": "Route modules must call Supabase through feature data APIs."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["app/features/markup/components/wiki-content.tsx"],
+      "rules": {
+        "react/no-unstable-nested-components": "off"
+      }
+    }
+  ]
+}

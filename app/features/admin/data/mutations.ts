@@ -1,0 +1,111 @@
+import { getSupabase } from "~/shared/supabase/client";
+import { unwrap } from "~/shared/supabase/errors";
+
+/**
+ * 관리 조치. 관리자 여부, 사유, 대상 상태는 모두 서버가 검사한다.
+ *
+ * 대상은 "판"이다. 가명은 문서마다 달라서 사람을 가리키지 못하고, 서버가 판에서 사람을 찾는다.
+ * 어떤 조치도 그 사람이 누구인지 돌려주지 않는다.
+ */
+
+/** 판 작성자의 편집을 모든 문서에서 막는다. `days`가 `null`이면 기한 없음. */
+export async function banEditor(
+  revisionId: number,
+  days: number | null,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("ban_editor", {
+      p_revision_id: revisionId,
+      // 생성된 타입은 NULL 가능 여부를 모른다. 기한 없는 차단은 NULL을 보낸다.
+      p_days: days as number,
+      p_reason: reason,
+    }),
+  );
+}
+
+export async function liftBan(banId: number, reason: string): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("lift_ban", {
+      p_ban_log_id: banId,
+      p_reason: reason,
+    }),
+  );
+}
+
+export async function setProtection(
+  pageId: number,
+  level: "open" | "admin",
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("set_protection", {
+      p_page_id: pageId,
+      p_level: level,
+      p_reason: reason,
+    }),
+  );
+}
+
+/** 삭제는 숨기는 것이다. 판 기록은 남고 복구할 수 있다. */
+export async function deletePage(
+  pageId: number,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("delete_page", {
+      p_page_id: pageId,
+      p_reason: reason,
+    }),
+  );
+}
+
+export async function restorePage(
+  pageId: number,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("restore_page", {
+      p_page_id: pageId,
+      p_reason: reason,
+    }),
+  );
+}
+
+export async function setRevisionHidden(
+  revisionId: number,
+  hidden: boolean,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("set_revision_hidden", {
+      p_revision_id: revisionId,
+      p_hidden: hidden,
+      p_reason: reason,
+    }),
+  );
+}
+
+export async function grantAdmin(
+  revisionId: number,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("grant_admin", {
+      p_revision_id: revisionId,
+      p_reason: reason,
+    }),
+  );
+}
+
+export async function revokeAdmin(
+  handle: string,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("revoke_admin", {
+      p_admin_handle: handle,
+      p_reason: reason,
+    }),
+  );
+}
