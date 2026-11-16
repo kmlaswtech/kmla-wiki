@@ -3,11 +3,19 @@ import { useBlocker, useNavigate } from "react-router";
 import { toast } from "sonner";
 
 import { buildFullBody, saveEdit, type EditTarget } from "../data/save";
+import { insertBlock } from "../model/commands";
 import { isLargeDeletion } from "../model/conflict";
 import { clearDraft, loadDraft, saveDraft } from "../storage/drafts";
 import { SourceEditor, type SourceEditorHandle } from "./source-editor";
 import { Toolbar } from "./toolbar";
 import { loginHref } from "~/features/auth";
+import {
+  IMAGE_INPUT_ACCEPT,
+  resolveImages,
+  uploadImage,
+  WikiImage,
+  type ImageInfo,
+} from "~/features/images";
 import {
   getSection,
   pageHref,
@@ -79,7 +87,13 @@ export function EditorForm({ target, initialResolved }: EditorFormProps) {
   const [summary, setSummary] = useState(draft?.summary ?? "");
   const [settledText, setSettledText] = useState(initialText);
   const [resolved, setResolved] = useState(initialResolved);
-  const [tab, setTab] = useState<"edit" | "preview">("edit");
+  // 좁은 화면은 세 탭을 번갈아, 넓은 화면은 편집기 옆 칸에서 미리보기와 변경 사항을 번갈아 본다.
+  const [tab, setTab] = useState<"edit" | "preview" | "changes">("edit");
+  const [images, setImages] = useState<ReadonlyMap<string, ImageInfo>>(
+    () => new Map(),
+  );
+  const [uploading, setUploading] = useState(0);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
@@ -182,10 +196,58 @@ export function EditorForm({ target, initialResolved }: EditorFormProps) {
     };
   }, [settledText]);
 
+  // 미리보기의 이미지 크기와 경로. 이미지가 없는 글이면 요청이 나가지 않는다.
+  useEffect(() => {
+    let cancelled = false;
+    resolveImages(settledText)
+      .then((next) => {
+        if (!cancelled) setImages(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [settledText]);
+
+  const renderImage = useCallback(
+    (imageId: string, alt: string) => (
+      <WikiImage info={images.get(imageId)} alt={alt} />
+    ),
+    [images],
+  );
+
   const preview = useMemo(
     () => parseWiki(settledText, { templates: resolved.templates }),
     [settledText, resolved.templates],
   );
+
+  /** 고른·붙여넣은·끌어놓은 이미지를 한 장씩 올려 커서 자리에 넣는다. */
+  async function insertImages(files: File[]) {
+    for (const file of files) {
+      setUploading((count) => count + 1);
+      try {
+        const uploaded = await uploadImage(file);
+        const handle = editor.current;
+        if (handle) {
+          handle.apply(
+            insertBlock(
+              handle.getValue(),
+              handle.getSelection(),
+              uploaded.markdown,
+            ),
+          );
+        }
+      } catch (caught) {
+        toast.error(
+          caught instanceof Error
+            ? caught.message
+            : "이미지를 올리지 못했습니다.",
+        );
+      } finally {
+        setUploading((count) => count - 1);
+      }
+    }
+  }
 
   async function save(confirmed: boolean) {
     if (saving) return;
@@ -292,52 +354,88 @@ export function EditorForm({ target, initialResolved }: EditorFormProps) {
         </section>
       ) : null}
 
-      <div
-        role="tablist"
-        aria-label="편집과 미리보기"
-        className="flex gap-1 lg:hidden"
-      >
-        {(["edit", "preview"] as const).map((name) => (
-          <Button
-            key={name}
-            type="button"
-            role="tab"
-            aria-selected={tab === name}
-            size="sm"
-            variant={tab === name ? "secondary" : "ghost"}
-            onClick={() => setTab(name)}
-          >
-            {name === "edit" ? "편집" : "미리보기"}
-          </Button>
-        ))}
-      </div>
+      <TabButtons
+        label="편집, 미리보기, 변경 사항"
+        className="flex lg:hidden"
+        tabs={["edit", "preview", "changes"]}
+        selected={tab}
+        onSelect={setTab}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className={cn(tab !== "edit" && "hidden lg:block")}>
-          <Toolbar editor={editor} />
+          <Toolbar
+            editor={editor}
+            onPickImage={() => fileInput.current?.click()}
+          />
+          <input
+            ref={fileInput}
+            type="file"
+            accept={IMAGE_INPUT_ACCEPT}
+            multiple
+            hidden
+            aria-label="올릴 이미지"
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              // 같은 파일을 다시 골라도 onChange가 오게 비운다.
+              event.target.value = "";
+              void insertImages(files);
+            }}
+          />
           <SourceEditor
             ref={editor}
             initialValue={initialText}
             onChange={setText}
             suggest={suggestTitles}
+            onImageFiles={(files) => void insertImages(files)}
             ariaLabel={`${target.title} 본문`}
           />
-        </div>
-        <section
-          aria-label="미리보기"
-          className={cn(
-            "min-w-0 rounded-md border p-4",
-            tab !== "preview" && "hidden lg:block",
-          )}
-        >
-          {settledText.trim() === "" ? (
-            <p className="text-sm text-muted-foreground">
-              쓴 내용이 여기에 보입니다.
+          {uploading > 0 ? (
+            <p
+              role="status"
+              className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground"
+            >
+              <Spinner /> 이미지를 올리는 중입니다…
             </p>
+          ) : null}
+        </div>
+        <div className={cn("min-w-0", tab === "edit" && "hidden lg:block")}>
+          <TabButtons
+            label="미리보기와 변경 사항"
+            className="mb-2 hidden lg:flex"
+            tabs={["preview", "changes"]}
+            selected={tab === "changes" ? "changes" : "preview"}
+            onSelect={setTab}
+          />
+          {tab === "changes" ? (
+            <section aria-label="변경 사항" className="min-w-0">
+              {dirty ? (
+                <DiffView before={baseText} after={text} />
+              ) : (
+                <p className="rounded-md border p-4 text-sm text-muted-foreground">
+                  아직 바꾼 것이 없습니다.
+                </p>
+              )}
+            </section>
           ) : (
-            <WikiContent document={preview} existing={resolved.existing} />
+            <section
+              aria-label="미리보기"
+              className="min-w-0 rounded-md border p-4"
+            >
+              {settledText.trim() === "" ? (
+                <p className="text-sm text-muted-foreground">
+                  쓴 내용이 여기에 보입니다.
+                </p>
+              ) : (
+                <WikiContent
+                  document={preview}
+                  existing={resolved.existing}
+                  renderImage={renderImage}
+                />
+              )}
+            </section>
           )}
-        </section>
+        </div>
       </div>
 
       <div className="grid gap-1.5">
@@ -359,7 +457,7 @@ export function EditorForm({ target, initialResolved }: EditorFormProps) {
       ) : null}
 
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={saving || !dirty}>
+        <Button type="submit" disabled={saving || !dirty || uploading > 0}>
           {saving ? <Spinner /> : null}
           저장
         </Button>
@@ -481,5 +579,45 @@ export function EditorForm({ target, initialResolved }: EditorFormProps) {
         </DialogContent>
       </Dialog>
     </form>
+  );
+}
+
+type EditorTab = "edit" | "preview" | "changes";
+
+const TAB_LABELS: Record<EditorTab, string> = {
+  edit: "편집",
+  preview: "미리보기",
+  changes: "변경 사항",
+};
+
+function TabButtons({
+  label,
+  className,
+  tabs,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  className?: string;
+  tabs: EditorTab[];
+  selected: EditorTab;
+  onSelect: (tab: EditorTab) => void;
+}) {
+  return (
+    <div role="tablist" aria-label={label} className={cn("gap-1", className)}>
+      {tabs.map((name) => (
+        <Button
+          key={name}
+          type="button"
+          role="tab"
+          aria-selected={selected === name}
+          size="sm"
+          variant={selected === name ? "secondary" : "ghost"}
+          onClick={() => onSelect(name)}
+        >
+          {TAB_LABELS[name]}
+        </Button>
+      ))}
+    </div>
   );
 }

@@ -127,14 +127,54 @@ export default function EditRoute({ loaderData }: Route.ComponentProps) {
           <RawSource body={source} />
         )
       ) : (
-        // 문서나 문단이 바뀌면 편집기를 새로 만든다. 앞 문서의 글이 남으면 안 된다.
-        <EditorForm
-          key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
-          target={target}
-          initialResolved={resolved}
-        />
+        <>
+          <EditNotice />
+          {/* 문서나 문단이 바뀌면 편집기를 새로 만든다. 앞 문서의 글이 남으면 안 된다. */}
+          <EditorForm
+            key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
+            target={target}
+            initialResolved={resolved}
+          />
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * 편집 화면 위의 안내문. 이 위키의 규칙을 쓰는 순간에 보이게 한다.
+ * 자세한 내용은 위키:편집 도움말 문서에 두고, 여기에는 꼭 지켜야 할 것만 둔다.
+ */
+function EditNotice() {
+  return (
+    <aside
+      aria-label="편집 안내"
+      className="mb-3 rounded-md border bg-muted/40 px-3 py-2 text-sm"
+    >
+      <ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
+        <li>
+          학교생활에 관한 정보를 적습니다. 학교 밖에 그대로 퍼져도 괜찮은 내용만
+          씁니다.
+        </li>
+        <li>
+          특정 학생·교직원에 대한 문서를 만들거나, 누구인지 알 수 있게 쓰지
+          않습니다.
+        </li>
+        <li>저장한 글은 다른 회원이 고치고, 판 기록에 계속 남습니다.</li>
+      </ul>
+      <p className="mt-1.5">
+        문법과 규칙은{" "}
+        <Link
+          to={pageHref("위키:편집 도움말")}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary hover:underline"
+        >
+          위키:편집 도움말
+        </Link>
+        에 있습니다.
+      </p>
+    </aside>
   );
 }
 

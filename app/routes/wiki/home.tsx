@@ -1,8 +1,10 @@
+import { useCallback } from "react";
 import { Link } from "react-router";
 
 import type { Route } from "./+types/home";
 import { LinkButton } from "~/shared/components/link-button";
 import { withVerifiedMember } from "~/features/auth";
+import { resolveImages, WikiImage } from "~/features/images";
 import { pageHref } from "~/features/markup";
 import {
   getPageView,
@@ -19,16 +21,26 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const [view, recent] = await withVerifiedMember(request, () =>
     Promise.all([getPageView(MAIN_PAGE), listRecentChanges()]),
   );
-  return { view, recent: recent.slice(0, RECENT_COUNT) };
+  // 이미지 정보를 못 받아도 대문은 보여 준다.
+  const images = await resolveImages(
+    view.found ? (view.revision?.body ?? "") : "",
+  ).catch(() => new Map<string, never>());
+  return { view, images, recent: recent.slice(0, RECENT_COUNT) };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { view, recent } = loaderData;
+  const { view, images, recent } = loaderData;
+  const renderImage = useCallback(
+    (imageId: string, alt: string) => (
+      <WikiImage info={images.get(imageId)} alt={alt} />
+    ),
+    [images],
+  );
 
   return (
     <div className="space-y-10">
       {view.found ? (
-        <PageArticle view={view} />
+        <PageArticle view={view} renderImage={renderImage} />
       ) : (
         <section>
           <h1 className="mb-2 text-3xl font-bold">큼온 위키</h1>

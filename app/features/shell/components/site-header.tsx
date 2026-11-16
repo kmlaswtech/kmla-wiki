@@ -8,7 +8,7 @@ import { cn } from "~/shared/lib/utils";
 const NAV_LINK =
   "rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground";
 
-/** 모든 화면 위의 띠: 대문, 검색, 최근 변경, 아무 문서, 내 정보. */
+/** 모든 화면 위의 띠: 대문, 검색, 최근 변경, 특수 기능, 아무 문서, 내 정보. */
 export function SiteHeader({ status }: { status: MemberStatus }) {
   return (
     <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
@@ -30,6 +30,14 @@ export function SiteHeader({ status }: { status: MemberStatus }) {
             }
           >
             최근 변경
+          </NavLink>
+          <NavLink
+            to="/special"
+            className={({ isActive }) =>
+              cn(NAV_LINK, isActive && "text-foreground")
+            }
+          >
+            특수 기능
           </NavLink>
           <Link to="/random" className={NAV_LINK} aria-label="아무 문서로">
             <Shuffle className="size-4" aria-hidden />

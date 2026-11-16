@@ -321,6 +321,12 @@ export type Database = {
           is_me: boolean
         }[]
       }
+      list_all_pages: {
+        Args: { p_after?: string; p_limit?: number; p_namespace?: string }
+        Returns: {
+          title: string
+        }[]
+      }
       list_author_edits: {
         Args: {
           p_before_revision_id?: number
@@ -355,6 +361,12 @@ export type Database = {
         }[]
       }
       my_pseudonym: { Args: { p_page_id: number }; Returns: string }
+      orphan_pages: {
+        Args: { p_after?: string; p_limit?: number }
+        Returns: {
+          title: string
+        }[]
+      }
       page_backlinks: { Args: { p_title_key: string }; Returns: Json }
       random_page: { Args: Record<PropertyKey, never>; Returns: string }
       record_member_verification: {
@@ -420,6 +432,13 @@ export type Database = {
       set_revision_hidden: {
         Args: { p_hidden: boolean; p_reason: string; p_revision_id: number }
         Returns: undefined
+      }
+      wanted_pages: {
+        Args: { p_limit?: number }
+        Returns: {
+          ref_count: number
+          title_key: string
+        }[]
       }
     }
     Enums: {

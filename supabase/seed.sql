@@ -48,8 +48,6 @@ on conflict (kmla_profile_id) do update set verified_until = excluded.verified_u
 do $$
 declare
   v_pages constant jsonb := jsonb_build_array(
-    jsonb_build_array('위키:대문', E'큼온 위키에 온 것을 환영합니다. 학교 안에 있어야만 알 수 있는 것을 함께 적습니다.\n\n## 둘러보기\n\n- [[귀가]]\n- [[신성]]\n- [[민사고 용어]]\n\n## 처음이라면\n\n[[위키:편집 도움말]]을 읽어 보세요. 틀려도 괜찮습니다. 다른 사람이 고칩니다.'),
-    jsonb_build_array('위키:편집 도움말', E'## 글자\n\n| 하고 싶은 것 | 이렇게 씁니다 |\n| --- | --- |\n| 굵게 | `**글자**` |\n| 밑줄 | `__글자__` |\n| 취소선 | `~~글자~~` |\n| 다른 문서로 링크 | `[[문서 이름]]` 또는 `[[문서 이름|보여 줄 글자]]` |\n| 각주 | 문장 뒤에 `[^1]`, 문서 끝에 `[^1]: 내용` |\n\n## 문단\n\n`## 제목`으로 문단을 나눕니다. 제목이 셋 이상이면 목차가 생깁니다.\n\n:::접기 예시 보기\n접어 둔 내용입니다.\n:::'),
     jsonb_build_array('틀:오래된 정보', E'> ⚠️ 이 문서의 내용은 바뀌었을 수 있습니다. 아는 사람이 고쳐 주세요.'),
     jsonb_build_array('귀가', E'집에 가는 방법을 모은 문서입니다.[^1]\n\n## 종류\n\n- [[귀가/정기 귀가]]\n- [[외출·외박]]\n\n## 신청\n\n신청은 담임 선생님께 합니다.\n\n## 주의\n\n[[신성]] 시간과 겹치지 않게 합니다.\n\n[^1]: 2026년 기준.\n\n[[분류:생활]]'),
     jsonb_build_array('귀가/정기 귀가', E'{{틀:오래된 정보}}\n\n귀가주에 집에 가는 것. __금요일__ 수업이 끝나면 출발합니다.\n\n[[분류:생활]]'),
@@ -59,16 +57,16 @@ declare
   );
   v_page jsonb;
 begin
-  if exists (select 1 from public.pages) then
-    return;
-  end if;
-
   perform set_config(
     'request.jwt.claims',
     '{"sub":"10000000-0000-0000-0000-0000000000a1","role":"authenticated"}',
     true
   );
   for v_page in select * from jsonb_array_elements(v_pages) loop
+    -- 이미 있는 문서는 건너뛴다. 위키:대문, 위키:편집 도움말처럼 마이그레이션이 넣는 문서도 있다.
+    continue when exists (
+      select 1 from public.pages where title_key = lower(v_page ->> 0)
+    );
     perform public.save_revision(v_page ->> 0, null, v_page ->> 1, '예시 문서');
   end loop;
   perform set_config('request.jwt.claims', '', true);

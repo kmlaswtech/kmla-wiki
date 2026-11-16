@@ -1,4 +1,12 @@
-import { data, Link, redirect, useFetcher, useRevalidator } from "react-router";
+import { useState } from "react";
+import {
+  data,
+  Link,
+  redirect,
+  useFetcher,
+  useNavigate,
+  useRevalidator,
+} from "react-router";
 
 import type { Route } from "./+types/history";
 import { formText, positiveInt, titleFromParams } from "./title-param";
@@ -17,6 +25,17 @@ import {
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
 import { Button } from "~/shared/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/shared/ui/dialog";
+import { Input } from "~/shared/ui/input";
+import { Label } from "~/shared/ui/label";
+import { Spinner } from "~/shared/ui/spinner";
 
 export async function clientLoader({
   request,
@@ -44,7 +63,11 @@ export async function clientLoader({
   });
 }
 
-/** 되돌리기. 지정한 판의 내용으로 새 판을 만든다. */
+/**
+ * 되돌리기. 지정한 판의 내용으로 새 판을 만든다.
+ *
+ * 요약은 DB가 "r123 판으로 되돌림"을 앞에 붙이므로, 사용자가 적은 사유만 넘긴다.
+ */
 export async function clientAction({
   request,
   params,
@@ -55,7 +78,9 @@ export async function clientAction({
     return data({ error: "되돌릴 판을 찾을 수 없습니다." }, { status: 400 });
 
   try {
-    await withVerifiedMember(request, () => revertPage(revisionId, ""));
+    await withVerifiedMember(request, () =>
+      revertPage(revisionId, formText(form, "summary").trim()),
+    );
   } catch (error) {
     if (error instanceof Response) throw error;
     return data({ error: describeWriteError(error) }, { status: 400 });
@@ -77,8 +102,16 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
     currentRevisionId,
   } = loaderData;
   const revalidator = useRevalidator();
-  const fetcher = useFetcher<typeof clientAction>();
+  const navigate = useNavigate();
   const oldest = revisions.at(-1);
+
+  // 비교할 두 판. 처음에는 최신 판과 그 앞 판이다.
+  const [compareFrom, setCompareFrom] = useState(revisions[1]?.id ?? null);
+  const [compareTo, setCompareTo] = useState(revisions[0]?.id ?? null);
+  const [revertTarget, setRevertTarget] = useState<number | null>(null);
+
+  const canCompare =
+    compareFrom !== null && compareTo !== null && compareFrom !== compareTo;
 
   return (
     <div>
@@ -95,32 +128,74 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
         </p>
       </header>
 
-      {fetcher.data?.error ? (
-        <p role="alert" className="mb-3 text-sm text-destructive">
-          {fetcher.data.error}
-        </p>
+      {revisions.length > 1 ? (
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!canCompare}
+            onClick={() => {
+              if (!canCompare) return;
+              // 어느 칸에서 골랐든 앞 판이 `from`이 되게 맞춘다.
+              const from = Math.min(compareFrom, compareTo);
+              const to = Math.max(compareFrom, compareTo);
+              void navigate(`${pageHref(title, "diff")}?from=${from}&to=${to}`);
+            }}
+          >
+            고른 두 판 비교
+          </Button>
+          <span>왼쪽 칸에서 이전 판, 오른쪽 칸에서 이후 판을 고릅니다.</span>
+        </div>
       ) : null}
 
       <RevisionList
         revisions={revisions}
         pageTitle={() => title}
         myPseudonym={myPseudonym}
+        leading={
+          revisions.length > 1
+            ? (revision) => {
+                // 숨긴 판은 관리자만 본문을 볼 수 있다.
+                const disabled = revision.hiddenAt !== null && !isAdmin;
+                return (
+                  <span className="flex shrink-0 items-center gap-1">
+                    <input
+                      type="radio"
+                      name="compare-from"
+                      aria-label={`r${revision.id}을 이전 판으로`}
+                      checked={compareFrom === revision.id}
+                      disabled={disabled}
+                      onChange={() => setCompareFrom(revision.id)}
+                      className="size-4 accent-primary"
+                    />
+                    <input
+                      type="radio"
+                      name="compare-to"
+                      aria-label={`r${revision.id}을 이후 판으로`}
+                      checked={compareTo === revision.id}
+                      disabled={disabled}
+                      onChange={() => setCompareTo(revision.id)}
+                      className="size-4 accent-primary"
+                    />
+                  </span>
+                );
+              }
+            : undefined
+        }
         actions={(revision) => (
           <>
             {canRevert &&
             revision.id !== currentRevisionId &&
             !revision.hiddenAt ? (
-              <fetcher.Form method="post">
-                <input type="hidden" name="revisionId" value={revision.id} />
-                <Button
-                  type="submit"
-                  size="xs"
-                  variant="ghost"
-                  disabled={fetcher.state !== "idle"}
-                >
-                  이 판으로 되돌리기
-                </Button>
-              </fetcher.Form>
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={() => setRevertTarget(revision.id)}
+              >
+                이 판으로 되돌리기
+              </Button>
             ) : null}
             {isAdmin ? (
               <RevisionAdminMenu
@@ -144,6 +219,100 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
           </LinkButton>
         </div>
       ) : null}
+
+      <RevertDialog
+        key={revertTarget ?? "closed"}
+        title={title}
+        revisionId={revertTarget}
+        currentRevisionId={currentRevisionId}
+        onClose={() => setRevertTarget(null)}
+      />
     </div>
+  );
+}
+
+/** 되돌리기 전에 묻고, 사유(선택)를 받는다. */
+function RevertDialog({
+  title,
+  revisionId,
+  currentRevisionId,
+  onClose,
+}: {
+  title: string;
+  revisionId: number | null;
+  currentRevisionId: number | null;
+  onClose: () => void;
+}) {
+  const fetcher = useFetcher<typeof clientAction>();
+  const [summary, setSummary] = useState("");
+  const busy = fetcher.state !== "idle";
+  const autoSummary = `r${revisionId} 판으로 되돌림`;
+
+  return (
+    <Dialog
+      open={revisionId !== null}
+      onOpenChange={(open) => {
+        if (!open && !busy) onClose();
+      }}
+    >
+      <DialogContent>
+        <fetcher.Form method="post" className="contents">
+          <input type="hidden" name="revisionId" value={revisionId ?? ""} />
+          <DialogHeader>
+            <DialogTitle>r{revisionId} 판으로 되돌릴까요?</DialogTitle>
+            <DialogDescription>
+              지금 판의 내용을 r{revisionId} 판 내용으로 바꾼 새 판이 생깁니다.
+              기록은 지워지지 않아 다시 되돌릴 수 있습니다.{" "}
+              {currentRevisionId !== null && revisionId !== null ? (
+                <Link
+                  to={`${pageHref(title, "diff")}?from=${Math.min(revisionId, currentRevisionId)}&to=${Math.max(revisionId, currentRevisionId)}`}
+                  className="text-primary hover:underline"
+                >
+                  지금 판과 비교
+                </Link>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="revert-summary">사유 (선택)</Label>
+            <Input
+              id="revert-summary"
+              name="summary"
+              type="text"
+              value={summary}
+              maxLength={150}
+              placeholder="왜 되돌리는지 한 줄로"
+              onChange={(event) => setSummary(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              편집 요약: {autoSummary}
+              {summary.trim() ? `: ${summary.trim()}` : ""}
+            </p>
+          </div>
+
+          {fetcher.data?.error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {fetcher.data.error}
+            </p>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={onClose}
+            >
+              그만두기
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? <Spinner /> : null}
+              되돌리기
+            </Button>
+          </DialogFooter>
+        </fetcher.Form>
+      </DialogContent>
+    </Dialog>
   );
 }

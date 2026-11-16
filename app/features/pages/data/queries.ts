@@ -256,6 +256,42 @@ export async function findExactTitle(query: string): Promise<string | null> {
   return rows[0]?.title ?? null;
 }
 
+export const SPECIAL_PAGE_SIZE = 100;
+
+/** 링크는 걸려 있는데 아직 없는 문서. 많이 가리켜진 순. 영문 제목은 소문자로 온다. */
+export async function listWantedPages(): Promise<
+  { title: string; refCount: number }[]
+> {
+  const rows = unwrap(await getSupabase().rpc("wanted_pages"));
+  return rows.map((row) => ({ title: row.title_key, refCount: row.ref_count }));
+}
+
+/** 어디서도 링크하지 않는 일반 문서. `after` 제목 다음부터. */
+export async function listOrphanPages(after?: string): Promise<string[]> {
+  const rows = unwrap(
+    await getSupabase().rpc("orphan_pages", {
+      p_after: after,
+      p_limit: SPECIAL_PAGE_SIZE,
+    }),
+  );
+  return rows.map((row) => row.title);
+}
+
+/** 이름공간의 모든 문서, 가나다순. `after` 제목 다음부터. */
+export async function listAllPages(
+  namespace: Namespace = "main",
+  after?: string,
+): Promise<string[]> {
+  const rows = unwrap(
+    await getSupabase().rpc("list_all_pages", {
+      p_namespace: namespace,
+      p_after: after,
+      p_limit: SPECIAL_PAGE_SIZE,
+    }),
+  );
+  return rows.map((row) => row.title);
+}
+
 /** 아무 문서의 제목. 문서가 하나도 없으면 `null`. */
 export async function getRandomTitle(): Promise<string | null> {
   return unwrap(await getSupabase().rpc("random_page"));

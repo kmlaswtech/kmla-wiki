@@ -18,6 +18,8 @@ interface RevisionListProps<Row extends RevisionSummary> {
   myPseudonym?: string | null;
   /** 줄 끝에 붙일 버튼들(되돌리기, 관리 메뉴). */
   actions?: (revision: Row) => ReactNode;
+  /** 줄 맨 앞에 붙일 것(판 기록의 비교할 판 고르기). */
+  leading?: (revision: Row) => ReactNode;
 }
 
 /** 판 목록 한 벌. 판 기록, 최근 변경, 관리자의 "다른 편집 보기"가 같이 쓴다. */
@@ -27,6 +29,7 @@ export function RevisionList<Row extends RevisionSummary>({
   showPage = false,
   myPseudonym,
   actions,
+  leading,
 }: RevisionListProps<Row>) {
   if (revisions.length === 0) {
     return (
@@ -47,6 +50,7 @@ export function RevisionList<Row extends RevisionSummary>({
               revision.hiddenAt && "opacity-60",
             )}
           >
+            {leading?.(revision)}
             <span className="w-20 shrink-0 text-muted-foreground">
               <RelativeTime value={revision.createdAt} />
             </span>

@@ -58,7 +58,9 @@ test("편집 중 글을 잃지 않는다: 취소 확인, 나가기 확인, 단�
   await expect(page).toHaveURL(/\/recent$/);
 
   await page.goto(path("편집 보호", "edit"));
-  await expect(page.getByText("저장하지 않은 글을 불러왔습니다.")).toBeVisible();
+  await expect(
+    page.getByText("저장하지 않은 글을 불러왔습니다."),
+  ).toBeVisible();
   await page.getByRole("button", { name: "버리고 현재 판으로" }).click();
   await expect(page.locator(".cm-content")).toHaveText("첫 내용");
 
@@ -124,7 +126,7 @@ test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 
 
   // 각주 번호를 누르면 그 자리에 내용이 뜨고, 아래로 내려가지 않는다.
   await page.goto(path("읽기"));
-  await page.getByRole("link", { name: "각주 1" }).click();
+  await page.getByRole("button", { name: "각주 1" }).click();
   await expect(
     page.locator("[data-slot=popover-content]").getByText("각주 내용입니다"),
   ).toBeVisible();
