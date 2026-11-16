@@ -7,7 +7,13 @@ import type {
   RevisionSummary,
   SearchHit,
 } from "../model/types";
-import { parseTitle, titleKey, type Namespace } from "~/features/markup";
+import { titleMatchPattern } from "../model/hangul-match";
+import {
+  parseTitle,
+  searchKey,
+  titleKey,
+  type Namespace,
+} from "~/features/markup";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap } from "~/shared/supabase/errors";
 
@@ -303,16 +309,16 @@ export async function suggestTitles(
   prefix = "",
   limit = 8,
 ): Promise<string[]> {
-  // LIKE에서 뜻이 있는 글자는 글자 그대로 찾도록 막는다.
-  const escaped = query.toLowerCase().replace(/[\\%_]/g, "\\$&");
+  // 제목 키와 같은 꼴로 맞춘 검색어 하나로, 넓힌 정규식(걸러 내기)과 글자 그대로의 순위를 함께 만든다.
+  const needle = searchKey(query);
   const rows = unwrap(
-    await getSupabase()
-      .from("pages")
-      .select("title")
-      .is("deleted_at", null)
-      .like("title_key", `${prefix.toLowerCase()}%${escaped}%`)
-      .order("title_key")
-      .limit(limit),
+    await getSupabase().rpc("suggest_titles", {
+      p_query: needle,
+      p_pattern: titleMatchPattern(needle),
+      // 접두어는 코드에 박힌 이름공간(`틀:` 등)이다.
+      p_prefix: titleKey(prefix),
+      p_limit: limit,
+    }),
   );
   return rows.map((row) => row.title);
 }

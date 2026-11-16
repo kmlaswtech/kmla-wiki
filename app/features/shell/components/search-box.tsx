@@ -25,15 +25,26 @@ type Suggestion =
 export function SearchBox({ className }: { className?: string }) {
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
+  /** 입력칸의 확정된 값. Base UI에 넘기는 데만 쓴다. */
   const [query, setQuery] = useState("");
+  /**
+   * 후보를 찾을 값. 한글을 조합하는 동안에는 Base UI가 `onValueChange`를 부르지 않아 `query`가
+   * 멈춰 있으므로, 입력칸 값을 직접 받아 둔다. Base UI는 조합 중에 바깥 값이 바뀌지 않게 일부러
+   * 막아 두었으므로(mui/base-ui#2942) 이 값은 `query`에 넣지 않는다. 후보 찾기와 제출은 이 값을
+   * 쓴다. 그래야 조합 중에 Enter를 쳐도 화면에 보이는 검색어로 찾는다.
+   */
+  const [typed, setTyped] = useState("");
   const [titles, setTitles] = useState<string[]>([]);
   /** 늦게 도착한 앞선 응답이 새 결과를 덮지 않게 요청마다 번호를 매긴다. */
   const requestId = useRef(0);
 
+  /** 후보 찾기와 제출에 같이 쓰는 검색어. */
+  const trimmed = typed.trim();
+
   useEffect(() => {
     const id = ++requestId.current;
-    const trimmed = query.trim();
-    // 빈 검색어에는 후보를 그리지 않는다(아래 `items`). 앞선 후보는 다음 응답이 덮는다.
+    // 빈 검색어에는 후보를 그리지 않는다(아래 `items`). 앞선 후보는 다음 응답이 덮는다. 입력칸을
+    // 비우면 후보도 비운다(`changeTyped`). 남겨 두면 새로 친 글자에 맞지 않는 후보가 잠깐 보인다.
     if (trimmed === "") return;
     const timer = window.setTimeout(() => {
       suggestTitles(trimmed, "", SUGGEST_LIMIT)
@@ -44,7 +55,7 @@ export function SearchBox({ className }: { className?: string }) {
         .catch(() => undefined);
     }, SUGGEST_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [query]);
+  }, [trimmed]);
 
   // `/`를 누르면 검색창으로 간다. 글을 쓰는 중에는 가로채지 않는다.
   useEffect(() => {
@@ -64,7 +75,6 @@ export function SearchBox({ className }: { className?: string }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const trimmed = query.trim();
   const items: Suggestion[] =
     trimmed === ""
       ? []
@@ -73,9 +83,19 @@ export function SearchBox({ className }: { className?: string }) {
           { kind: "search", query: trimmed },
         ];
 
-  function go(to: string) {
+  function changeTyped(next: string) {
+    setTyped(next);
+    // 이미 비어 있으면 그대로 둔다(새 배열을 넣으면 쓸데없이 다시 그린다).
+    if (next.trim() === "") setTitles((prev) => (prev.length ? [] : prev));
+  }
+
+  function reset() {
     setQuery("");
-    setTitles([]);
+    changeTyped("");
+  }
+
+  function go(to: string) {
+    reset();
     input.current?.blur();
     void navigate(to);
   }
@@ -91,7 +111,7 @@ export function SearchBox({ className }: { className?: string }) {
           return;
         }
         // 제출 뒤에는 검색창을 비운다. 검색어는 검색 화면 제목에 남는다.
-        window.setTimeout(() => setQuery(""), 0);
+        window.setTimeout(reset, 0);
       }}
     >
       <input type="hidden" name="q" value={trimmed} />
@@ -102,7 +122,12 @@ export function SearchBox({ className }: { className?: string }) {
         value={query}
         onValueChange={(next, details) => {
           // 후보를 골라 입력칸이 바뀌는 것은 무시한다. 고르면 곧바로 다른 화면으로 간다.
-          if (details.reason !== "item-press") setQuery(next);
+          // 보통의 입력은 아래 `onChange`가 이미 받았지만, 입력 이벤트 없이 바뀌는 경우(지우기 등)가
+          // 있어 여기서도 맞춘다. 값이 같으면 React가 다시 그리지 않는다.
+          if (details.reason !== "item-press") {
+            setQuery(next);
+            changeTyped(next);
+          }
         }}
         itemToStringValue={(item: Suggestion) =>
           item.kind === "page" ? item.title : item.query
@@ -110,6 +135,8 @@ export function SearchBox({ className }: { className?: string }) {
       >
         <Autocomplete.Input
           ref={input}
+          // 조합 중인 값도 후보 찾기에 쓴다(`typed` 설명).
+          onChange={(event) => changeTyped(event.currentTarget.value)}
           type="search"
           aria-label="문서 검색"
           placeholder="문서 검색"

@@ -433,6 +433,17 @@ export type Database = {
         Args: { p_hidden: boolean; p_reason: string; p_revision_id: number }
         Returns: undefined
       }
+      suggest_titles: {
+        Args: {
+          p_limit?: number
+          p_pattern: string
+          p_prefix?: string
+          p_query: string
+        }
+        Returns: {
+          title: string
+        }[]
+      }
       wanted_pages: {
         Args: { p_limit?: number }
         Returns: {

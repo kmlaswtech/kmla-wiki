@@ -17,6 +17,7 @@ export {
   normalizeTitle,
   pageHref,
   parseTitle,
+  searchKey,
   titleKey,
   titleToPath,
   type Namespace,

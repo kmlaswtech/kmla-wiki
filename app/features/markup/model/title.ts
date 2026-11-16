@@ -52,6 +52,14 @@ export function titleKey(title: string): string {
   return title.toLowerCase();
 }
 
+/**
+ * 치는 중인 검색어를 제목 키와 같은 꼴로 맞춘다. 제목처럼 NFC로 맞추고 공백·밑줄 묶음을 공백
+ * 하나로 바꾸지만, 아직 다 치지 않은 글이라 앞뒤를 자르거나 검증하지 않는다.
+ */
+export function searchKey(query: string): string {
+  return titleKey(query.normalize("NFC").replace(/[\s_]+/g, " "));
+}
+
 export function namespaceOf(title: string): Namespace {
   for (const [namespace, prefix] of Object.entries(NAMESPACE_PREFIX)) {
     if (title.startsWith(prefix)) return namespace as Namespace;

@@ -98,6 +98,52 @@ test("검색창: 후보를 골라 바로 가고, 정확한 제목은 Enter로 �
   ).toBeVisible();
 });
 
+test("검색창: 한글을 조합하는 중에도 후보가 뜬다", async ({ page }) => {
+  await loginAsMember(page);
+  const search = page.getByRole("combobox", { name: "문서 검색" });
+  await search.click();
+
+  // 입력기가 "신성"을 치는 도중의 모습. 조합을 끝내지 않은 채로 둔다. 앞 단계의 후보가 남아
+  // 있으면 이 단계의 패턴이 틀려도 통과하므로, 단계마다 비우고 후보가 사라진 것을 본 뒤 조합한다.
+  const cdp = await page.context().newCDPSession(page);
+  /** 조합 중인 글자를 `text`로 둔다(빈 글자면 조합을 거둔다). */
+  const compose = (text: string) =>
+    cdp.send("Input.imeSetComposition", {
+      text,
+      selectionStart: text.length,
+      selectionEnd: text.length,
+    });
+  const option = page.getByRole("option", { name: "신성", exact: true });
+  for (const text of ["신", "신ㅅ", "신서"]) {
+    await compose("");
+    await search.fill("");
+    await expect(option).toBeHidden();
+
+    await compose(text);
+    await expect(search).toHaveValue(text);
+    // seed의 "신성" 문서.
+    await expect(option).toBeVisible();
+  }
+});
+
+test("검색창: 정규식 기호가 든 제목도 글자 그대로 찾는다", async ({ page }) => {
+  await loginAsMember(page);
+  // 앞선 실행이 남긴 비슷한 제목에 밀리지 않게 이번 실행의 표시를 검색어 안에 넣는다.
+  const name = `괄호${RUN}(시험). 문서`;
+  await createPage(page, name, "본문");
+
+  const search = page.getByRole("combobox", { name: "문서 검색" });
+  const option = page.getByRole("option", { name: title(name), exact: true });
+  // 마지막 글자 "시"는 넓혀 찾고, 앞의 `(`는 글자 그대로 찾는다.
+  await search.fill(`괄호${RUN}(시`);
+  await expect(option).toBeVisible();
+  await search.fill(`괄호${RUN}(시험). 문`);
+  await expect(option).toBeVisible();
+  // `)`와 `.`이 정규식 기호로 쓰이면 엉뚱한 글자도 맞는다. 글자 그대로여야 한다.
+  await search.fill(`괄호${RUN}(시험)x`);
+  await expect(option).toBeHidden();
+});
+
 test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 미리보기", async ({
   page,
 }) => {
