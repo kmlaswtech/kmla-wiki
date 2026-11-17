@@ -4,7 +4,8 @@
  * 흐름: 위키 `/auth/callback`이 `custom:kmla`로 받은 세션의 `provider_token`(KMLA가 위키 클라이언트에
  * 발급한 OAuth 액세스 토큰)을 넘긴다. 그 토큰으로 KMLA `get_external_identity()`를 한 번 부르고,
  * 1행이면 `record_member_verification`(14일), 0행이거나 KMLA가 토큰을 거부하면
- * `revoke_member_verification`을 부른다. 토큰은 저장하지 않는다.
+ * `revoke_member_verification`을 부른다. 끝나면 그 토큰의 KMLA 세션을 끊는다(`endKmlaSession`).
+ * 토큰은 저장하지 않는다.
  *
  * 토큰 서명은 검증하지 않는다. KMLA가 그 토큰으로 RPC를 받아 주면 서명은 KMLA가 이미 검증한 것이고,
  * 서명은 페이로드 전체를 덮으므로 호출이 성공한 토큰의 `sub`·`client_id`는 믿을 수 있다. 다만
@@ -82,6 +83,21 @@ export async function handleKmlaVerify(
     return fail(403, "token_mismatch", cors);
   }
 
+  // 확인이 끝나면 결과와 상관없이 이 토큰의 KMLA 세션을 끝낸다(아래 `endKmlaSession`).
+  try {
+    return await checkMembership(user, providerToken, config, deps, cors);
+  } finally {
+    await endKmlaSession(providerToken, config, deps);
+  }
+}
+
+async function checkMembership(
+  user: WikiUser,
+  providerToken: string,
+  config: VerifyConfig,
+  deps: VerifyDeps,
+  cors: Headers,
+): Promise<Response> {
   let response: Response;
   try {
     response = await deps.fetch(
@@ -117,6 +133,34 @@ export async function handleKmlaVerify(
   }
   await deps.recordVerification(user.id, profileId);
   return ok(true, cors);
+}
+
+/**
+ * 위키 로그인으로 생긴 KMLA 세션을 끝낸다(`logout?scope=local`, 이 세션만).
+ *
+ * KMLA OAuth 토큰은 DB 권한을 좁혀도(KMLA의 Custom Access Token Hook) KMLA Auth API에서는 그
+ * 사용자로 동작한다. 이메일 조회, 비밀번호 변경, 다른 세션 로그아웃까지 된다. 같이 발급된 refresh
+ * token은 위키 브라우저에도 전달된다. 세션을 지우면 그 refresh token과 Auth API 사용이 함께 막힌다.
+ * 동의 기록은 남으므로 다음 로그인은 동의 화면 없이 넘어간다.
+ *
+ * 실패해도 회원 확인 결과는 그대로 돌려준다. 토큰은 발급 1시간 뒤 만료된다.
+ */
+async function endKmlaSession(
+  providerToken: string,
+  config: VerifyConfig,
+  deps: VerifyDeps,
+): Promise<void> {
+  try {
+    await deps.fetch(`${config.kmlaUrl}/auth/v1/logout?scope=local`, {
+      method: "POST",
+      headers: {
+        apikey: config.kmlaPublishableKey,
+        authorization: `Bearer ${providerToken}`,
+      },
+    });
+  } catch {
+    // 위 설명 참고.
+  }
 }
 
 /**

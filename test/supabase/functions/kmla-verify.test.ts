@@ -26,12 +26,23 @@ function token(payload: Record<string, unknown>): string {
 
 const validToken = token({ sub: KMLA_SUB, client_id: "wiki-client" });
 
-function deps(kmlaResponse?: Response | Error) {
-  const fetch = vi.fn<typeof globalThis.fetch>(() =>
-    kmlaResponse instanceof Error
-      ? Promise.reject(kmlaResponse)
-      : Promise.resolve(kmlaResponse ?? Response.json([])),
-  );
+const RPC_URL = "https://kmla.example/rest/v1/rpc/get_external_identity";
+const LOGOUT_URL = "https://kmla.example/auth/v1/logout?scope=local";
+
+/** `kmlaResponse`는 RPC 응답, `logoutResponse`는 KMLA 세션 끊기 응답. */
+function deps(
+  kmlaResponse?: Response | Error,
+  logoutResponse: Response | Error = new Response(null, { status: 204 }),
+) {
+  const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+    const answer =
+      (input instanceof Request ? input.url : input.toString()) === LOGOUT_URL
+        ? logoutResponse
+        : (kmlaResponse ?? Response.json([]));
+    return answer instanceof Error
+      ? Promise.reject(answer)
+      : Promise.resolve(answer);
+  });
   return {
     getWikiUser: vi.fn<VerifyDeps["getWikiUser"]>((jwt) =>
       Promise.resolve(
@@ -87,11 +98,42 @@ describe("kmla-verify", () => {
     expect(d.recordVerification).toHaveBeenCalledWith(WIKI_USER_ID, 42);
     expect(d.revokeVerification).not.toHaveBeenCalled();
     const [url, init] = d.fetch.mock.calls[0]!;
-    expect(url).toBe("https://kmla.example/rest/v1/rpc/get_external_identity");
+    expect(url).toBe(RPC_URL);
     expect(new Headers(init?.headers).get("authorization")).toBe(
       `Bearer ${validToken}`,
     );
   });
+
+  it.each([
+    ["a member", Response.json([{ profile_id: 42 }])],
+    ["a non-member", Response.json([])],
+    ["a KMLA outage", new Response(null, { status: 500 })],
+  ])("ends the KMLA session after checking %s", async (_, kmlaResponse) => {
+    const d = deps(kmlaResponse);
+
+    await call(request(), d);
+
+    const [url, init] = d.fetch.mock.calls.at(-1)!;
+    expect(url).toBe(LOGOUT_URL);
+    expect(new Headers(init?.headers).get("authorization")).toBe(
+      `Bearer ${validToken}`,
+    );
+  });
+
+  it.each([
+    ["fails", new Response(null, { status: 500 })],
+    ["cannot be reached", new Error("offline")],
+  ])(
+    "still reports the result when ending the KMLA session %s",
+    async (_, logoutResponse) => {
+      const d = deps(Response.json([{ profile_id: 42 }]), logoutResponse);
+
+      const { body } = await call(request(), d);
+
+      expect(body).toEqual({ verified: true });
+      expect(d.recordVerification).toHaveBeenCalledWith(WIKI_USER_ID, 42);
+    },
+  );
 
   it("revokes when KMLA returns no row (not an approved member)", async () => {
     const d = deps(Response.json([]));

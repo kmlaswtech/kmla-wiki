@@ -55,9 +55,12 @@ Supabase로 만든다. 런타임 앱 서버는 없다.
   대조한 뒤 KMLA `get_external_identity()`를 부른다. 1행이면 `record_member_verification`(14일),
   0행이나 401·403이면 `revoke_member_verification`. 판정은 `handler.ts`(Deno API 없음, Vitest가
   시험), 연결은 `index.ts`.
+- 확인이 끝나면 `kmla-verify`가 그 토큰의 KMLA 세션을 끊는다(`logout?scope=local`). KMLA OAuth
+  토큰은 DB 권한을 좁혀도 KMLA Auth API(이메일 조회, 비밀번호 변경)에서는 그 사용자로 동작하기
+  때문이다. KMLA 토큰이나 refresh token을 저장하거나 다른 곳에 쓰지 않는다.
 - custom provider는 `config.toml`로 설정할 수 없다. 로컬은 `pnpm kmla:provider`(admin API)로
-  등록하고, `pnpm db:reset` 뒤에 다시 실행한다. 로컬 위키는 KMLA **dev 원격**을 제공자로 쓴다(KMLA
-  로컬은 HS256이라 ID 토큰이 나오지 않는다).
+  등록하고, `pnpm db:reset` 뒤에 다시 실행한다. 로컬 위키는 KMLA **dev 원격**을 제공자로 쓴다(위키
+  auth 컨테이너에서 KMLA 로컬 issuer에 닿기 어렵다).
 - 개발용 이메일 로그인(seed 계정)은 로컬 `config.toml`과 `VITE_DEV_LOGIN=1`에서만 쓴다. E2E도 이
   로그인을 쓴다.
 
