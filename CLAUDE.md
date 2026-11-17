@@ -86,17 +86,36 @@ Supabase로 만든다. 런타임 앱 서버는 없다.
 
 ## CI
 
-`.github/workflows/ci.yml`이 `main` push와 PR에서 돈다(Markdown만 바뀐 경우는 건너뛴다).
+`.github/workflows/ci.yml`이 `main`·`dev` push와 PR에서 돈다(Markdown만 바뀐 경우는 건너뛴다).
 
 - `app` job: `pnpm format:check`, `pnpm verify`.
 - `db` job: 로컬 Supabase를 한 번 띄운 뒤 pgTAP, DB lint, 보안 advisor, 생성 타입 diff 검사,
   chromium E2E를 차례로 돌린다.
 
-`main`은 ruleset으로 삭제와 force push만 막는다. 직접 커밋은 허용하며, CI는 merge를 막지 않고
-결과만 알린다.
+CI는 merge를 막지 않고 결과만 알린다. 그 밖의 워크플로:
+
+- `branch-policy.yml`: `main` 대상 PR이 이 저장소의 `dev`에서 왔는지 검사한다(`source-branch`).
+  `main` ruleset이 이 검사를 필수로 건다.
+- `release-tag.yml`: `main`에 들어온 커밋에 KST 날짜 태그(`v2026.11.17`, 같은 날 두 번째부터
+  `.2`)를 붙인다.
 
 공개 리포다. 워크플로에 비밀 값을 쓰는 job을 더할 때는 fork PR에서 실행되지 않게 한다
 (`pull_request_target`으로 PR 코드를 실행하지 않는다).
+
+## 브랜치
+
+`dev`가 기본 브랜치이고 `main`은 `dev`를 묶어 올리는 곳이다. 배포가 생기면 `main`이 운영,
+`dev`가 미리보기다.
+
+- 작업 브랜치는 `dev`에서 따고, PR과 push는 `dev`로 한다. `main`에 직접 커밋하거나 작업 브랜치
+  PR을 `main`으로 열지 않는다.
+- `dev` 대상 PR은 squash merge만 된다(ruleset). squash 커밋 제목이 PR 제목이므로, PR 제목도
+  커밋 메시지 규칙을 따른다.
+- `dev`에 직접 push는 저장소 admin만 할 수 있다(ruleset 우회). 그때는 squash되지 않고 커밋이
+  그대로 들어간다.
+- `main`에는 `dev` → `main` PR로만 들어가고, merge commit으로 merge한다(ruleset). 직접 push는
+  막혀 있다. 급한 수정도 `dev`를 거친다.
+- `main`과 `dev`는 삭제와 force push가 막혀 있다. merge된 작업 브랜치는 자동으로 지워진다.
 
 ## 커밋
 
