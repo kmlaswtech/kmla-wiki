@@ -41,6 +41,25 @@ Supabase로 만든다. 런타임 앱 서버는 없다.
 
 - `VITE_*` 값은 번들에 들어가 공개된다. 비밀 키나 `service_role` 키를 두지 않는다.
 - 새 `VITE_*`를 추가하면 `.env.example`과 `app/shared/lib/env.ts`를 함께 고친다.
+- Edge Function 비밀 값은 `supabase/functions/.env`(커밋하지 않음)에 둔다. 항목은
+  `supabase/functions/.env.example`이 정본이다.
+
+## 로그인 (큼온으로 로그인)
+
+- 위키 Supabase에 KMLA Online을 custom OIDC 제공자 `custom:kmla`(scope `openid`)로 붙인다. 위키
+  계정은 KMLA 계정 하나에 하나다. 운영에서는 다른 로그인 수단(이메일, 익명)을 모두 끈다.
+- 흐름: `/login` → `signInWithOAuth` → kmla.online 로그인·`/oauth/consent` → `/auth/callback`이
+  `exchangeCodeForSession` → 받은 `provider_token`을 `kmla-verify`에 한 번 넘김 → 세션을 새로 받아
+  토큰을 지움.
+- `kmla-verify`(`supabase/functions/kmla-verify/`)는 토큰의 `sub`·`client_id`를 위키 계정과
+  대조한 뒤 KMLA `get_external_identity()`를 부른다. 1행이면 `record_member_verification`(14일),
+  0행이나 401·403이면 `revoke_member_verification`. 판정은 `handler.ts`(Deno API 없음, Vitest가
+  시험), 연결은 `index.ts`.
+- custom provider는 `config.toml`로 설정할 수 없다. 로컬은 `pnpm kmla:provider`(admin API)로
+  등록하고, `pnpm db:reset` 뒤에 다시 실행한다. 로컬 위키는 KMLA **dev 원격**을 제공자로 쓴다(KMLA
+  로컬은 HS256이라 ID 토큰이 나오지 않는다).
+- 개발용 이메일 로그인(seed 계정)은 로컬 `config.toml`과 `VITE_DEV_LOGIN=1`에서만 쓴다. E2E도 이
+  로그인을 쓴다.
 
 ## 데이터베이스와 보안
 

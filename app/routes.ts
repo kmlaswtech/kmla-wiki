@@ -14,6 +14,7 @@ import {
 export default [
   route("login", "routes/auth/login.tsx"),
   route("logout", "routes/auth/logout.tsx"),
+  route("auth/callback", "routes/auth/callback.tsx"),
   layout("routes/wiki/gate.tsx", [
     index("routes/wiki/home.tsx"),
     route("w/*", "routes/wiki/page.tsx"),
