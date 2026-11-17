@@ -577,7 +577,7 @@ function WikiHeading({
       {editHref ? (
         <Link
           to={editHref}
-          className="inline-flex shrink-0 items-center gap-1 text-xs font-normal text-muted-foreground no-underline transition-opacity hover:text-primary focus-visible:opacity-100 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-normal text-muted-foreground no-underline transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-primary focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
         >
           <Pencil className="size-3" aria-hidden />
           편집

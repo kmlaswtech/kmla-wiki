@@ -1,5 +1,5 @@
 import { Shuffle, User } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Link, NavLink } from "react-router";
 
 import { SearchBox } from "./search-box";
@@ -13,17 +13,21 @@ const NAV_LINK =
 export function SiteHeader({ status }: { status: MemberStatus }) {
   const header = useRef<HTMLElement>(null);
 
-  // 머리띠 높이를 `--site-header-height`로 알린다. `#주소` 이동 여백(app.css)과 편집기 툴바의
-  // 고정 위치가 이 값을 쓴다. 좁은 화면에서는 검색창이 둘째 줄로 내려가 높이가 바뀐다.
-  useEffect(() => {
+  // 머리띠 높이를 `--site-header-height`로 알린다(기본값은 app.css). `#주소` 이동 여백과 편집기
+  // 툴바의 고정 위치가 이 값을 쓴다. 좁은 화면에서는 검색창이 둘째 줄로 내려가 높이가 바뀐다.
+  //
+  // 레이아웃 효과로 처음 높이를 곧바로 적는다. `#주소`로 들어온 첫 화면에서 스크롤 복원
+  // (`ScrollRestoration`, 이 뒤에 도는 레이아웃 효과)이 대상으로 옮겨 가기 전에 값이 있어야 한다.
+  useLayoutEffect(() => {
     const element = header.current;
     if (!element) return;
     const root = window.document.documentElement;
-    const observer = new ResizeObserver(() => {
-      root.style.setProperty(
-        "--site-header-height",
-        `${element.getBoundingClientRect().height}px`,
-      );
+    const setHeight = (height: number) =>
+      root.style.setProperty("--site-header-height", `${height}px`);
+    setHeight(element.offsetHeight);
+    const observer = new ResizeObserver(([entry]) => {
+      const height = entry?.borderBoxSize[0]?.blockSize;
+      if (height !== undefined) setHeight(height);
     });
     observer.observe(element);
     return () => {

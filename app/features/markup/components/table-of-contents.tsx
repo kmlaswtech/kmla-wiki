@@ -32,7 +32,7 @@ export function TableOfContents({
               <span className="mr-1.5 text-primary tabular-nums">
                 {heading.number}.
               </span>
-              <span className="group-hover/toc:text-primary">
+              <span className="group-hover/toc:text-primary group-focus-visible/toc:text-primary">
                 {heading.text}
               </span>
             </a>
