@@ -529,7 +529,12 @@ function NoteText({ note }: { note: string }) {
 
 type HeadingTag = "h2" | "h3" | "h4";
 
-/** 문단 제목: 접기 단추, 번호, 제목, [편집]. */
+/**
+ * 문단 제목: 번호, 제목, 그리고 오른쪽 끝의 [편집]과 접기 단추.
+ *
+ * 단추를 제목 앞에 두면 제목 글자가 본문보다 안쪽으로 밀려 왼쪽 줄이 어긋난다. 그래서 둘 다 오른쪽
+ * 끝으로 보낸다(나무위키와 같다). [편집]은 마우스를 쓰는 화면에서는 제목에 올렸을 때만 보인다.
+ */
 function WikiHeading({
   heading,
   number,
@@ -551,29 +556,34 @@ function WikiHeading({
   return (
     <Tag
       id={withId ? heading.id : undefined}
-      className={cn("group scroll-mt-16", onClick && "cursor-pointer")}
+      className={cn(
+        "group flex items-center gap-2",
+        onClick && "cursor-pointer",
+      )}
       onClick={onClick}
     >
-      <FoldToggle label={heading.text} />
-      {number ? (
-        numberLinksToToc ? (
-          <a href={`#${TOC_ID}`} className="heading-number" title="목차로">
-            {number}.
-          </a>
-        ) : (
-          <span className="heading-number">{number}.</span>
-        )
-      ) : null}
-      {children}
+      <span className="min-w-0 flex-1">
+        {number ? (
+          numberLinksToToc ? (
+            <a href={`#${TOC_ID}`} className="heading-number" title="목차로">
+              {number}.
+            </a>
+          ) : (
+            <span className="heading-number">{number}.</span>
+          )
+        ) : null}
+        {children}
+      </span>
       {editHref ? (
         <Link
           to={editHref}
-          className="ml-2 inline-flex items-center gap-1 align-middle text-xs font-normal text-muted-foreground no-underline hover:text-primary"
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-normal text-muted-foreground no-underline transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-primary [@media(hover:hover)]:opacity-0"
         >
           <Pencil className="size-3" aria-hidden />
           편집
         </Link>
       ) : null}
+      <FoldToggle label={heading.text} />
     </Tag>
   );
 }

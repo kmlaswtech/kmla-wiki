@@ -180,6 +180,11 @@
   html {
     @apply font-sans;
     color-scheme: light;
+    /* `#주소`로 옮겨 갈 때 대상이 위의 고정 머리띠에 가리지 않게 한다. 머리띠 높이는 화면 폭에 따라
+     * 달라서(좁으면 검색창이 둘째 줄로 내려간다) 머리띠(`SiteHeader`)가 직접 재어 이 변수를 덮어쓴다.
+     * 아래 값은 재기 전의 기본값이다. 편집기 툴바의 고정 위치도 같은 변수를 쓴다. */
+    --site-header-height: 3.5rem;
+    scroll-padding-top: calc(var(--site-header-height) + 0.75rem);
 
     &.dark {
       color-scheme: dark;
@@ -201,7 +206,7 @@
 @layer components {
   .wiki-content {
     /* 한국어는 어절 단위로 끊고, 한 줄에 안 들어가는 긴 주소만 마지막 수단으로 끊는다. */
-    @apply text-base leading-7 break-words break-keep;
+    @apply text-base leading-relaxed break-words break-keep;
   }
   .wiki-content > :first-child,
   .wiki-content > [data-wiki-section]:first-child > :first-child {
@@ -229,10 +234,10 @@
   .wiki-content pre,
   .wiki-content details,
   .wiki-content .wiki-table-scroll {
-    @apply my-3;
+    @apply my-2.5;
   }
   .wiki-content h2 {
-    @apply mt-8 mb-3 border-b pb-1.5 text-2xl leading-9 font-bold;
+    @apply mt-8 mb-3 border-b border-foreground/15 pb-1.5 text-2xl leading-9 font-bold;
   }
   .wiki-content h3 {
     @apply mt-6 mb-2 text-xl leading-8 font-bold;
@@ -292,10 +297,11 @@
   }
   .wiki-content th,
   .wiki-content td {
-    @apply border px-3 py-1.5 text-left align-top;
+    /* 표는 칸 경계가 읽기의 뼈대라, 화면 전체의 옅은 테두리보다 진하게 긋는다. */
+    @apply border border-foreground/20 px-3 py-1.5 text-left align-top;
   }
   .wiki-content th {
-    @apply bg-muted font-semibold;
+    @apply bg-foreground/5 font-semibold;
   }
   .wiki-content details {
     @apply rounded-md border px-4 py-2;

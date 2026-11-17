@@ -99,7 +99,7 @@ export function SectionBody({
   );
 }
 
-/** 제목 앞의 접기 단추. 접기를 쓰지 않는 화면에서는 그리지 않는다. */
+/** 제목 오른쪽 끝의 접기 단추. 접기를 쓰지 않는 화면에서는 그리지 않는다. */
 export function FoldToggle({ label }: { label: string }) {
   const fold = use(FoldContext);
   if (!fold) return null;
@@ -110,7 +110,7 @@ export function FoldToggle({ label }: { label: string }) {
       aria-controls={fold.bodyId}
       aria-label={`${label} 문단 ${fold.open ? "접기" : "펼치기"}`}
       onClick={() => fold.setOpen(!fold.open)}
-      className="mr-1 -ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded align-middle text-muted-foreground hover:bg-muted hover:text-foreground"
+      className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
     >
       <ChevronDown
         className={cn(

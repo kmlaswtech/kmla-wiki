@@ -1,4 +1,4 @@
-import { ChevronRight, CornerDownRight, Lock } from "lucide-react";
+import { ChevronRight, CornerDownRight, Lock, Pencil } from "lucide-react";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -79,19 +79,33 @@ export function PageArticle({
         </nav>
       ) : null}
 
-      <header className="mb-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b pb-3">
-        <h1 className="flex min-w-0 items-center gap-2 text-3xl leading-10 font-bold break-keep">
-          {page.title}
-          {page.protection === "admin" ? (
-            <Lock
-              className="size-5 shrink-0 text-muted-foreground"
-              aria-label="보호된 문서"
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b pb-3">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-3xl leading-10 font-bold break-keep">
+            {page.title}
+            {page.protection === "admin" ? (
+              <Lock
+                className="size-5 shrink-0 text-muted-foreground"
+                aria-label="보호된 문서"
+              />
+            ) : null}
+          </h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {viewingOldRevision ? `r${revision.id} 저장` : "최근 수정"}{" "}
+            <UpdatedAt
+              value={viewingOldRevision ? revision.createdAt : page.updatedAt}
             />
-          ) : null}
-        </h1>
+          </p>
+        </div>
+        {/* 화면에서 가장 눈에 띄는 것은 제목이어야 한다. 버튼은 모두 차분한 외곽선으로 둔다. */}
         <div className="flex shrink-0 gap-1.5">
           {viewingOldRevision ? null : editable ? (
-            <LinkButton size="sm" to={pageHref(page.title, "edit")}>
+            <LinkButton
+              size="sm"
+              variant="outline"
+              to={pageHref(page.title, "edit")}
+            >
+              <Pencil aria-hidden />
               편집
             </LinkButton>
           ) : (
@@ -130,12 +144,28 @@ export function PageArticle({
         </div>
       </header>
 
-      <p className="mb-4 text-right text-xs text-muted-foreground">
-        {viewingOldRevision ? `r${revision.id} 저장` : "최근 수정"}{" "}
-        <UpdatedAt
-          value={viewingOldRevision ? revision.createdAt : page.updatedAt}
-        />
-      </p>
+      {/* 분류는 문서 맨 위에 둔다(나무위키와 같은 자리). */}
+      {document.categories.length > 0 ? (
+        <nav
+          aria-label="분류"
+          className="mb-4 flex flex-wrap items-center gap-1.5 rounded-md border px-3 py-2 text-sm"
+        >
+          <span className="text-muted-foreground">분류</span>
+          {document.categories.map((category) => (
+            <Badge
+              key={category}
+              variant={
+                resolved.existing.has(titleKey(category))
+                  ? "secondary"
+                  : "outline"
+              }
+              render={<Link to={pageHref(category)} />}
+            >
+              {baseName(category)}
+            </Badge>
+          ))}
+        </nav>
+      ) : null}
 
       <div className="space-y-2">
         {view.redirectedFrom ? (
@@ -157,8 +187,9 @@ export function PageArticle({
             삭제된 문서입니다. 관리자에게만 보입니다.
           </Notice>
         ) : null}
+        {/* 예전 판을 보는 것은 잘못이 아니다. 경고색 대신 안내로 알린다. */}
         {viewingOldRevision ? (
-          <Notice tone="warning">
+          <Notice>
             <span>
               예전 판(r{revision.id})을 보고 있습니다.{" "}
               <Link
@@ -218,25 +249,6 @@ export function PageArticle({
           // 하위 문서는 상위 이름을 떼고 보여 준다.
           label={(title) => title.slice(page.title.length + 1)}
         />
-      ) : null}
-
-      {document.categories.length > 0 ? (
-        <footer className="mt-8 flex flex-wrap items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
-          <span className="text-muted-foreground">분류</span>
-          {document.categories.map((category) => (
-            <Badge
-              key={category}
-              variant={
-                resolved.existing.has(titleKey(category))
-                  ? "secondary"
-                  : "outline"
-              }
-              render={<Link to={pageHref(category)} />}
-            >
-              {baseName(category)}
-            </Badge>
-          ))}
-        </footer>
       ) : null}
 
       {view.backlinks.length > 0 ? (
