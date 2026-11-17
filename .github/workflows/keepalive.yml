@@ -28,7 +28,10 @@ jobs:
               && [[ "$body" == "true" ]]; then
               echo "$name is awake." >> "$GITHUB_STEP_SUMMARY"
             else
+              # Workflow commands end at the first newline, so keep it on one line.
+              body="$(printf '%s' "$body" | tr '\r\n' '  ')"
               echo "::warning::keepalive failed for $name: $body"
+              echo "$name: keepalive failed ($body)" >> "$GITHUB_STEP_SUMMARY"
             fi
           }
           ping dev https://ipwbtdcrrkklqjesftnq.supabase.co sb_publishable_tnPKGrK5RRcJMRT_7LXUyA_Fj68zAuH

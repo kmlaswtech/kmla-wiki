@@ -70,6 +70,9 @@ Supabase로 만든다. 런타임 앱 서버는 없다.
   Postgres(grant, RLS, 제약, 트리거, 트랜잭션 RPC)가 강제한다.
 - 기본 권한을 막아 두었다(foundation migration). 새 테이블과 함수는 필요한 역할에만 명시적으로
   grant한다. 브라우저가 쓰는 테이블은 grant와 RLS를 같은 migration에 둔다.
+- anon이 부를 수 있는 것은 `public.keepalive()`(`select true`) 하나뿐이다. `keepalive.yml`이 무료
+  프로젝트 일시 정지를 막으려고 일부러 열어 두었다. 권한을 정리할 때 지우지 않는다. 다른 것은
+  anon에게 열지 않는다(`privileges.test.sql`이 검사한다).
 - `security definer` 함수는 안에서 호출자를 확인하고, `set search_path = ''`를 두고, 필요한
   역할에만 EXECUTE를 준다.
 - 실명 같은 숨길 정보는 클라이언트 grant가 없는 `private` 스키마에 둔다.
