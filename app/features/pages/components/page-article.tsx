@@ -6,7 +6,7 @@ import type { FoundPage } from "../model/types";
 import {
   ancestorTitles,
   baseName,
-  findSections,
+  emptyDoc,
   pageHref,
   parseWiki,
   TableOfContents,
@@ -43,7 +43,7 @@ export function PageArticle({
   headerActions,
 }: PageArticleProps) {
   const { page, revision, resolved } = view;
-  const body = revision?.body ?? "";
+  const body = revision?.body ?? emptyDoc();
   const viewingOldRevision = revision !== null && !revision.isCurrent;
   const editable = canEditPage(view);
 
@@ -52,12 +52,8 @@ export function PageArticle({
     [body, resolved.templates],
   );
 
-  // 문단 편집은 원문의 제목 번호로 문단을 찾는다. 끼워 넣은 틀이 제목을 더하면 화면의 번호와
-  // 원문의 번호가 어긋나므로, 둘의 개수가 같을 때만 문단 편집 링크를 건다.
-  const sectionEditable =
-    editable &&
-    !viewingOldRevision &&
-    findSections(body).length === document.headings.length;
+  // 문단 편집 링크는 이 문서 자신의 제목에만 붙는다(틀이 넣은 제목은 `sectionIndex`가 없다).
+  const sectionEditable = editable && !viewingOldRevision;
   const sectionEditHref = useCallback(
     (index: number) => `${pageHref(page.title, "edit")}?section=${index}`,
     [page.title],
@@ -99,7 +95,7 @@ export function PageArticle({
               편집
             </LinkButton>
           ) : (
-            // 고칠 수 없어도 원문은 볼 수 있다. 틀·표 문법을 원문에서 배우는 사람이 많다.
+            // 고칠 수 없어도 편집기로 열어 볼 수는 있다. 표·틀을 그대로 복사해 다른 문서에 쓸 수 있다.
             <LinkButton
               size="sm"
               variant="outline"
@@ -111,7 +107,7 @@ export function PageArticle({
               }
             >
               <Lock aria-hidden />
-              원문 보기
+              편집기로 보기
             </LinkButton>
           )}
           <LinkButton

@@ -319,4 +319,71 @@
   .wiki-content section[data-footnotes] h2 {
     @apply mt-2 border-0 text-base;
   }
+  .wiki-content section[data-footnotes] ol {
+    @apply list-none pl-0;
+  }
+  .wiki-content li > p {
+    @apply my-1;
+  }
+  .wiki-content figure.wiki-image {
+    @apply my-3;
+  }
+  /* 없는 문서로 가는 링크(편집기에서는 링크 안의 글자에 표시가 붙는다). */
+  .wiki-content .wiki-link-missing {
+    @apply text-destructive;
+  }
+  .wiki-content .wiki-template-param {
+    @apply text-primary;
+  }
+
+  /* 편집기. 본문은 문서 보기와 같은 `.wiki-content` 규칙으로 그리고, 편집에만 필요한 것을 더한다. */
+  .wiki-editor {
+    @apply min-h-[24rem] outline-none;
+    counter-reset: footnote;
+  }
+  .wiki-editor p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    @apply pointer-events-none float-left h-0 text-muted-foreground;
+  }
+  .wiki-editor a {
+    @apply cursor-text underline;
+  }
+  /* 각주 번호는 차례대로 매긴다. 문서 보기와 같은 번호다. */
+  /* `sup`은 줄 높이가 0이라(preflight), 그대로 두면 누를 자리가 납작해진다. */
+  .wiki-editor .wiki-footnote-number {
+    @apply cursor-pointer px-0.5 leading-none text-primary;
+  }
+  .wiki-editor .wiki-footnote-number::before {
+    counter-increment: footnote;
+    content: "[" counter(footnote) "]";
+  }
+  .wiki-editor .wiki-fold-edit {
+    @apply my-3 rounded-md border px-3 py-2;
+  }
+  .wiki-editor .wiki-fold-body > :first-child {
+    @apply mt-2;
+  }
+  .wiki-editor .wiki-template-edit {
+    @apply my-3 rounded-md border border-dashed px-3 py-2;
+  }
+  .wiki-editor .wiki-image-edit {
+    @apply my-3 rounded-md;
+  }
+  .wiki-editor .tableWrapper {
+    @apply my-3 overflow-x-auto;
+  }
+  .wiki-editor td,
+  .wiki-editor th {
+    @apply relative min-w-16;
+  }
+  .wiki-editor .selectedCell::after {
+    content: "";
+    @apply pointer-events-none absolute inset-0 bg-primary/15;
+  }
+  .wiki-editor .ProseMirror-selectednode {
+    @apply outline-2 outline-ring/60;
+  }
+  .wiki-editor .ProseMirror-gapcursor::after {
+    @apply border-foreground;
+  }
 }

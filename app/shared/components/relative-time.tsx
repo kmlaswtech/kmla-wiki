@@ -33,7 +33,9 @@ function subscribe(listener: () => void): () => void {
 export function RelativeTime({ value }: { value: string }) {
   const current = useSyncExternalStore(
     subscribe,
-    () => now || Date.now(),
+    // 구독 전에도 같은 값을 돌려줘야 한다. 부를 때마다 `Date.now()`를 새로 읽으면 React가 무한
+    // 다시 그리기를 경고한다.
+    () => (now ||= Date.now()),
     () => null,
   );
 

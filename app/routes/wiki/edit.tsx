@@ -1,15 +1,21 @@
-import { Copy } from "lucide-react";
 import { Link, useOutletContext } from "react-router";
-import { toast } from "sonner";
 
 import type { Route } from "./+types/edit";
 import { nonNegativeInt, titleFromParams } from "./title-param";
 import { withVerifiedMember, type MemberStatus } from "~/features/auth";
-import { EditorForm, type EditTarget } from "~/features/editor";
-import { findSections, getSection, pageHref } from "~/features/markup";
+import {
+  EditorForm,
+  ReadOnlyDocument,
+  type EditTarget,
+} from "~/features/editor";
+import {
+  emptyDoc,
+  findSections,
+  getSection,
+  pageHref,
+} from "~/features/markup";
 import { canEditPage, getPageView, type ResolvedBody } from "~/features/pages";
 import { formatDateTime } from "~/shared/lib/time";
-import { Button } from "~/shared/ui/button";
 
 type Blocked = "protected" | "deleted" | "invalid-title";
 
@@ -30,18 +36,19 @@ export async function clientLoader({
     const target: EditTarget = {
       title: view.title ?? title,
       baseRevisionId: null,
-      baseBody: "",
+      baseBody: emptyDoc(),
       sectionIndex: null,
     };
     return {
       target,
       resolved: empty,
+      images: new Map(),
       isNew: true,
       blocked: (view.validTitle ? null : "invalid-title") as Blocked | null,
     };
   }
 
-  const body = view.revision?.body ?? "";
+  const body = view.revision?.body ?? emptyDoc();
   const requested = nonNegativeInt(sectionParam);
   const sectionIndex =
     requested !== null && findSections(body)[requested] ? requested : null;
@@ -60,7 +67,14 @@ export async function clientLoader({
         ? "protected"
         : null;
 
-  return { target, resolved: view.resolved, isNew: false, blocked };
+  // 이미지 크기와 경로도 문서와 함께 왔다. 편집기가 처음부터 이미지 자리를 잡고 그린다.
+  return {
+    target,
+    resolved: view.resolved,
+    images: view.images,
+    isNew: false,
+    blocked,
+  };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -75,17 +89,13 @@ const BLOCKED_MESSAGE: Record<Blocked, string> = {
 };
 
 export default function EditRoute({ loaderData }: Route.ComponentProps) {
-  const { target, resolved, isNew, blocked } = loaderData;
+  const { target, resolved, images, isNew, blocked } = loaderData;
   const status = useOutletContext<MemberStatus>();
   const section =
     target.sectionIndex === null
       ? null
       : findSections(target.baseBody)[target.sectionIndex];
   const readOnly = Boolean(status.ban) || blocked !== null;
-  const source =
-    target.sectionIndex === null
-      ? target.baseBody
-      : (getSection(target.baseBody, target.sectionIndex) ?? "");
 
   return (
     <div>
@@ -98,9 +108,9 @@ export default function EditRoute({ loaderData }: Route.ComponentProps) {
             {isNew
               ? "새 문서"
               : section
-                ? `"${section.title}" 문단 ${readOnly ? "원문" : "편집"}`
+                ? `"${section.title}" 문단 ${readOnly ? "보기" : "편집"}`
                 : readOnly
-                  ? "원문"
+                  ? "보기"
                   : "편집"}
           </span>
         </h1>
@@ -122,9 +132,20 @@ export default function EditRoute({ loaderData }: Route.ComponentProps) {
       ) : null}
 
       {readOnly ? (
-        // 고칠 수 없어도 원문은 보여 준다. 없는 문서는 보여 줄 원문이 없다.
+        // 고칠 수 없어도 편집기 모양으로 보여 준다. 골라서 복사하면 다른 문서에 그대로 붙는다.
         isNew ? null : (
-          <RawSource body={source} />
+          <ReadOnlyDocument
+            // 편집기는 처음 받은 글로 한 번 만든다. 다른 문서·문단으로 가면 새로 만든다.
+            key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
+            doc={
+              (target.sectionIndex !== null &&
+                getSection(target.baseBody, target.sectionIndex)) ||
+              target.baseBody
+            }
+            resolved={resolved}
+            images={images}
+            ariaLabel={`${target.title} 본문`}
+          />
         )
       ) : (
         <>
@@ -134,6 +155,7 @@ export default function EditRoute({ loaderData }: Route.ComponentProps) {
             key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
             target={target}
             initialResolved={resolved}
+            initialImages={images}
           />
         </>
       )}
@@ -163,7 +185,7 @@ function EditNotice() {
         <li>저장한 글은 다른 회원이 고치고, 판 기록에 계속 남습니다.</li>
       </ul>
       <p className="mt-1.5">
-        문법과 규칙은{" "}
+        쓰는 법과 규칙은{" "}
         <Link
           to={pageHref("위키:편집 도움말")}
           target="_blank"
@@ -175,38 +197,5 @@ function EditNotice() {
         에 있습니다.
       </p>
     </aside>
-  );
-}
-
-/** 고칠 수 없는 문서의 원문. 복사해서 다른 문서에 쓸 수 있게 한다. */
-function RawSource({ body }: { body: string }) {
-  return (
-    <section aria-label="원문" className="mt-4 space-y-2">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">원문</h2>
-        <Button
-          type="button"
-          size="xs"
-          variant="outline"
-          onClick={() => {
-            navigator.clipboard.writeText(body).then(
-              () => toast.success("원문을 복사했습니다."),
-              () =>
-                toast.error("복사하지 못했습니다. 직접 선택해 복사해 주세요."),
-            );
-          }}
-        >
-          <Copy aria-hidden />
-          복사
-        </Button>
-      </div>
-      <pre className="max-h-[70vh] overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-sm leading-6 break-all whitespace-pre-wrap">
-        {body === "" ? (
-          <span className="text-muted-foreground">(빈 문서)</span>
-        ) : (
-          body
-        )}
-      </pre>
-    </section>
   );
 }

@@ -1,4 +1,4 @@
-import type { HeadingInfo } from "./plugins";
+import type { HeadingInfo } from "./parse";
 
 /** 목차를 그리는 최소 제목 수. 이보다 적으면 목차도, 본문 제목 번호도 붙이지 않는다. */
 export const MIN_TOC_HEADINGS = 3;

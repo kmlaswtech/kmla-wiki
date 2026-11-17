@@ -5,12 +5,16 @@
  * 이 브라우저에만 저장하고 서버에는 보내지 않는다.
  */
 
-const PREFIX = "wiki:draft:";
+import { isWikiDoc, type WikiDoc } from "~/features/markup";
+
+// 본문이 글자에서 문서 구조로 바뀌어 접두사를 바꿨다. 예전 형식의 임시 저장은 읽지 않는다.
+const PREFIX = "wiki:draft2:";
 /** 오래된 임시 저장은 버린다. 그 사이 문서가 많이 바뀌었을 것이다. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface Draft {
-  body: string;
+  /** 편집기의 글(문단 편집이면 그 문단)과 문서 정보. */
+  body: WikiDoc;
   summary: string;
   /** 편집을 시작한 판. 새 문서는 `null`. */
   baseRevisionId: number | null;
@@ -40,7 +44,7 @@ export function loadDraft(
   try {
     const draft = JSON.parse(raw) as Draft;
     if (
-      typeof draft.body !== "string" ||
+      !isWikiDoc(draft.body) ||
       Date.now() - draft.savedAt > MAX_AGE_MS
     ) {
       clearDraft(titleKey, sectionIndex);
@@ -80,6 +84,6 @@ export function clearAllDrafts(): void {
   if (!store) return;
   for (let index = store.length - 1; index >= 0; index--) {
     const key = store.key(index);
-    if (key?.startsWith(PREFIX)) store.removeItem(key);
+    if (key?.startsWith("wiki:draft")) store.removeItem(key);
   }
 }

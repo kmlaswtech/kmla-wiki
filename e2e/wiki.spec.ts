@@ -17,13 +17,22 @@ async function loginAsMember(page: Page, email = "alice@wiki.test") {
   await expect(page.getByRole("link", { name: "큼온 위키" })).toBeVisible();
 }
 
-/** 편집기에 글을 넣는다. 기존 내용은 지운다. */
+/** 편집기. 문서 보기와 같은 모양으로 그리는 편집 칸이다. */
+const editorOf = (page: Page) => page.locator(".wiki-editor");
+
+/**
+ * 편집기에 글을 넣는다. 기존 내용은 지운다. 줄마다 친다(빈 줄은 건너뛴다). 줄 맨 앞의 `## `는
+ * 편집기가 제목으로 바꾼다.
+ */
 async function writeBody(page: Page, body: string) {
-  const editor = page.locator(".cm-content");
-  await editor.click();
+  await editorOf(page).click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Delete");
-  await page.keyboard.insertText(body);
+  const lines = body.split("\n").filter((line) => line !== "");
+  for (const [index, line] of lines.entries()) {
+    if (index > 0) await page.keyboard.press("Enter");
+    await page.keyboard.type(line);
+  }
 }
 
 async function createPage(page: Page, name: string, body: string) {
@@ -92,11 +101,9 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
     page,
     "첫 문장.\n\n## 문단 가\n\n가 내용\n\n## 문단 나\n\n나 내용\n\n## 문단 다\n\n다 내용",
   );
-  // 미리보기가 쓴 글을 따라온다.
+  // 쓰는 대로 문서 모양이 된다.
   await expect(
-    page
-      .getByRole("region", { name: "미리보기" })
-      .getByRole("heading", { name: "문단 가" }),
+    editorOf(page).getByRole("heading", { name: "문단 가" }),
   ).toBeVisible();
   await page.getByLabel("편집 요약 (선택)").fill("처음 씀");
   await page.getByRole("button", { name: "저장" }).click();
@@ -113,8 +120,8 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
     .getByRole("heading", { name: /문단 나/ })
     .getByRole("link", { name: "편집" })
     .click();
-  await expect(page.locator(".cm-content")).toContainText("나 내용");
-  await expect(page.locator(".cm-content")).not.toContainText("가 내용");
+  await expect(editorOf(page)).toContainText("나 내용");
+  await expect(editorOf(page)).not.toContainText("가 내용");
   await writeBody(page, "## 문단 나\n\n고친 나 내용");
   // 저장 전에 바꾼 곳을 본다.
   await page.getByRole("tab", { name: "변경 사항" }).click();
@@ -158,7 +165,7 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
   await expect(rows.first()).toContainText(/r\d+ 판으로 되돌림: 시험 되돌림/);
 });
 
-test("편집기에서 이미지를 올리면 커서 자리에 들어가고 미리보기에 보인다", async ({
+test("편집기에서 이미지를 올리면 커서 자리에 들어가 바로 보인다", async ({
   page,
 }) => {
   await loginAsMember(page);
@@ -176,13 +183,15 @@ test("편집기에서 이미지를 올리면 커서 자리에 들어가고 미�
     await chooser
   ).setFiles({ name: "빨간 점.png", mimeType: "image/png", buffer: png });
 
-  await expect(page.locator(".cm-content")).toContainText(
-    /!\[빨간 점\]\(img:[0-9a-f-]{36}\)/,
-  );
   await expect(
-    page.getByRole("region", { name: "미리보기" }).getByRole("img", {
-      name: "빨간 점",
-    }),
+    editorOf(page).getByRole("img", { name: "빨간 점" }),
+  ).toBeVisible();
+  // 설명은 파일 이름에서 채워지고, 고칠 수 있다.
+  await expect(page.getByLabel("이미지 설명")).toHaveValue("빨간 점");
+
+  await page.getByRole("button", { name: "저장" }).click();
+  await expect(
+    page.locator(".wiki-content").getByRole("img", { name: "빨간 점" }),
   ).toBeVisible();
 });
 
@@ -206,36 +215,57 @@ test("특수 기능: 작성이 필요한 문서, 모든 문서", async ({ page }
   ).toBeVisible();
 });
 
-test("툴바로 문법을 넣는다", async ({ page }) => {
+test("툴바로 꾸미고 각주와 표를 넣는다", async ({ page }) => {
   await loginAsMember(page);
   await page.goto(path("툴바", "edit"));
+  const editor = editorOf(page);
 
-  await page.locator(".cm-content").click();
-  await page.getByRole("button", { name: "굵게" }).click();
-  // 예시 글자가 선택돼 있어 바로 치면 바뀐다.
-  await page.keyboard.insertText("중요");
-  await expect(page.locator(".cm-content")).toContainText("**중요**");
+  await editor.click();
+  await page.getByRole("button", { name: "굵게", exact: true }).click();
+  await page.keyboard.type("중요");
+  await expect(editor.locator("strong")).toHaveText("중요");
 
-  await page.keyboard.press("End");
-  await page.getByRole("button", { name: "각주" }).click();
-  await page.keyboard.insertText("출처");
-  await expect(page.locator(".cm-content")).toContainText("[^1]: 출처");
+  await page.getByRole("button", { name: "각주", exact: true }).click();
+  const footnote = page.getByRole("dialog");
+  await footnote.getByLabel("각주 내용").fill("출처");
+  await footnote.getByRole("button", { name: "넣기" }).click();
+  await expect(editor.getByRole("button", { name: "각주: 출처" })).toBeVisible();
 
   await page.getByRole("button", { name: "표", exact: true }).click();
-  await page.getByRole("button", { name: "넣기" }).click();
-  await expect(
-    page.getByRole("region", { name: "미리보기" }).getByRole("table"),
-  ).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "넣기" }).click();
+  await expect(editor.getByRole("table")).toBeVisible();
+
+  // 저장하면 문서 보기에도 같은 모양이다.
+  await page.getByRole("button", { name: "저장" }).click();
+  const content = page.locator(".wiki-content");
+  await expect(content.locator("strong")).toHaveText("중요");
+  await expect(content.getByRole("table")).toBeVisible();
+  await expect(content.locator("section[data-footnotes]")).toContainText("출처");
 });
 
-test("자동완성으로 문서 링크를 넣는다", async ({ page }) => {
+test("[[를 치면 링크 창이 열리고, 자동완성으로 문서를 고른다", async ({ page }) => {
   await loginAsMember(page);
   await page.goto(path("자동완성", "edit"));
 
-  await page.locator(".cm-content").click();
-  await page.keyboard.type("[[귀가/");
+  await editorOf(page).click();
+  await page.keyboard.type("[[");
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("문서 이름 또는 주소").pressSequentially("귀가/");
   await page.getByRole("option", { name: "귀가/정기 귀가" }).click();
-  await expect(page.locator(".cm-content")).toContainText("[[귀가/정기 귀가]]");
+  await dialog.getByRole("button", { name: "넣기" }).click();
+  await expect(
+    editorOf(page).locator('a[data-wiki-target="귀가/정기 귀가"]'),
+  ).toHaveText("귀가/정기 귀가");
+
+  // 후보를 고르지 않고 Enter를 치면 쓴 그대로 넣는다.
+  await page.keyboard.press("End");
+  await page.keyboard.type(" [[");
+  await dialog.getByLabel("문서 이름 또는 주소").fill("신성");
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(
+    editorOf(page).locator('a[data-wiki-target="신성"]'),
+  ).toHaveText("신성");
 });
 
 test("다른 사람이 먼저 고치면 내 글을 지키고 차이를 보여 준다", async ({
@@ -261,7 +291,7 @@ test("다른 사람이 먼저 고치면 내 글을 지키고 차이를 보여 �
 
   await page.getByRole("button", { name: "저장" }).click();
   await expect(page.getByText("다른 사람이 먼저 고쳤습니다")).toBeVisible();
-  await expect(page.locator(".cm-content")).toContainText("앨리스가 고친 내용");
+  await expect(editorOf(page)).toContainText("앨리스가 고친 내용");
   await expect(page.locator("del")).toContainText("밥이");
 
   // 확인하고 다시 저장하면 들어간다.

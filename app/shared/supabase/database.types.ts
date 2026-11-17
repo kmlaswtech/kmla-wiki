@@ -217,7 +217,8 @@ export type Database = {
       revisions: {
         Row: {
           author_pseudonym: string
-          body: string
+          body: NonNullable<Json>
+          body_text: string | null
           byte_delta: number
           byte_size: number
           created_at: string
@@ -231,7 +232,8 @@ export type Database = {
         ComputedFields: never
         Insert: {
           author_pseudonym: string
-          body: string
+          body: NonNullable<Json>
+          body_text?: never
           byte_delta: number
           byte_size: number
           created_at?: string
@@ -244,7 +246,8 @@ export type Database = {
         }
         Update: {
           author_pseudonym?: string
-          body?: string
+          body?: NonNullable<Json>
+          body_text?: never
           byte_delta?: number
           byte_size?: number
           created_at?: string
@@ -381,8 +384,8 @@ export type Database = {
         Args: { p_height: number; p_image_id: string; p_width: number }
         Returns: undefined
       }
-      resolve_body: { Args: { p_body: string }; Returns: Json }
-      resolve_images: { Args: { p_body: string }; Returns: Json }
+      resolve_body: { Args: { p_body: Json }; Returns: Json }
+      resolve_images: { Args: { p_body: Json }; Returns: Json }
       restore_page: {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
@@ -406,7 +409,7 @@ export type Database = {
       save_revision: {
         Args: {
           p_base_revision_id: number
-          p_body: string
+          p_body: Json
           p_summary?: string
           p_title: string
         }

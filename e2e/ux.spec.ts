@@ -13,12 +13,18 @@ async function loginAsMember(page: Page) {
   await expect(page.getByRole("link", { name: "큼온 위키" })).toBeVisible();
 }
 
+const editorOf = (page: Page) => page.locator(".wiki-editor");
+
+/** 편집기에 글을 넣는다. 기존 내용은 지운다. 줄마다 친다(빈 줄은 건너뛴다). */
 async function writeBody(page: Page, body: string) {
-  const editor = page.locator(".cm-content");
-  await editor.click();
+  await editorOf(page).click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Delete");
-  await page.keyboard.insertText(body);
+  const lines = body.split("\n").filter((line) => line !== "");
+  for (const [index, line] of lines.entries()) {
+    if (index > 0) await page.keyboard.press("Enter");
+    await page.keyboard.type(line);
+  }
 }
 
 async function createPage(page: Page, name: string, body: string) {
@@ -42,7 +48,7 @@ test("편집 중 글을 잃지 않는다: 취소 확인, 나가기 확인, 단�
   await expect(page).toHaveURL(/\/edit\//);
 
   // Ctrl/⌘+S로 저장한다.
-  await page.locator(".cm-content").click();
+  await editorOf(page).click();
   await page.keyboard.press("ControlOrMeta+s");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     title("편집 보호"),
@@ -62,7 +68,7 @@ test("편집 중 글을 잃지 않는다: 취소 확인, 나가기 확인, 단�
     page.getByText("저장하지 않은 글을 불러왔습니다."),
   ).toBeVisible();
   await page.getByRole("button", { name: "버리고 현재 판으로" }).click();
-  await expect(page.locator(".cm-content")).toHaveText("첫 내용");
+  await expect(editorOf(page)).toHaveText("첫 내용");
 
   // 고친 것이 없으면 묻지 않고 나간다.
   await page.getByRole("link", { name: "취소" }).click();
@@ -148,11 +154,23 @@ test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 
   page,
 }) => {
   await loginAsMember(page);
-  await createPage(
-    page,
-    "읽기",
-    "## 가\n\n가 본문[^1]\n\n### 가 아래\n\n아래 본문\n\n## 나\n\n나 본문\n\n[^1]: 각주 내용입니다",
-  );
+  await page.goto(path("읽기", "edit"));
+  await writeBody(page, "## 가\n가 본문");
+  // 각주는 툴바로 넣는다.
+  await page.getByRole("button", { name: "각주", exact: true }).click();
+  await page.getByRole("dialog").getByLabel("각주 내용").fill("각주 내용입니다");
+  await page.getByRole("dialog").getByRole("button", { name: "넣기" }).click();
+  await editorOf(page).press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("### 가 아래");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("아래 본문");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("## 나");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("나 본문");
+  await page.getByRole("button", { name: "저장" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(title("읽기"));
 
   await expect(page.getByText(/^최근 수정 /)).toBeVisible();
 

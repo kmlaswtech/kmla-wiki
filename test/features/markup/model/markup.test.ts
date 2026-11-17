@@ -1,14 +1,25 @@
-import { toHtml } from "hast-util-to-html";
 import { describe, expect, it } from "vitest";
 
-import { parseWiki } from "~/features/markup/model/parse";
-import { preprocess } from "~/features/markup/model/preprocess";
+import {
+  doc,
+  footnote,
+  heading,
+  link,
+  para,
+  param,
+  template,
+  text,
+} from "./doc-builders";
+import { REF_CASES } from "./ref-cases";
+import { MISSING_TEMPLATE, parseWiki } from "~/features/markup/model/parse";
 import { extractRefs } from "~/features/markup/model/refs";
 import {
   findSections,
   getSection,
+  isBlank,
   replaceSection,
 } from "~/features/markup/model/sections";
+import { docToText, visibleTextLength } from "~/features/markup/model/text";
 import {
   ancestorTitles,
   isValidTitle,
@@ -16,14 +27,6 @@ import {
   parseTitle,
   titleToPath,
 } from "~/features/markup/model/title";
-import { REF_CASES } from "./ref-cases";
-
-function render(body: string, templates: Record<string, string> = {}) {
-  const parsed = parseWiki(body, {
-    templates: new Map(Object.entries(templates)),
-  });
-  return { ...parsed, html: toHtml(parsed.tree) };
-}
 
 describe("title", () => {
   it("normalizes spacing, underscores and namespace separators", () => {
@@ -77,209 +80,278 @@ describe("extractRefs (same cases as the database)", () => {
   }
 });
 
-describe("preprocess", () => {
-  it("turns wiki links into markdown links with the wiki scheme", () => {
-    expect(preprocess("[[귀가|집에 가기]]").markdown).toBe(
-      `[집에 가기](wiki:${encodeURIComponent("귀가")})`,
-    );
-  });
-
-  it("collects categories and removes them from the text", () => {
-    const result = preprocess("본문\n\n[[분류:생활]] [[분류:규정]]");
-    expect(result.categories).toEqual(["분류:생활", "분류:규정"]);
-    expect(result.markdown).not.toContain("분류");
-  });
-
-  it("reports a redirect", () => {
-    expect(preprocess("#넘겨주기 [[PRISM]]").redirect).toBe("PRISM");
-    expect(preprocess("글").redirect).toBeNull();
-  });
-
-  it("leaves wiki syntax inside code alone", () => {
-    const body = "`[[코드]]`\n\n```\n{{틀:코드}}\n```";
-    expect(preprocess(body).markdown).toBe(body);
-  });
-});
-
 describe("parseWiki", () => {
-  it("renders an internal link without leaking the pipe into a table", () => {
-    const { html } = render(
-      "| 이름 | 뜻 |\n| --- | --- |\n| [[덕고관/엘리베이터|중베]] | 가운데 |",
+  it("gives top-level headings ids, numbers and section indexes", () => {
+    const { headings } = parseWiki(
+      doc(heading(2, "개요"), heading(3, "신청 방법"), heading(2, "신청 방법")),
     );
-    expect(html).toContain("<table>");
-    expect(html).toContain(
-      `href="wiki:${encodeURIComponent("덕고관/엘리베이터")}"`,
-    );
-    expect(html).toContain(">중베</a>");
-    expect(html).toContain("<td>가운데</td>");
-  });
-
-  it("renders underline, strikethrough and bold next to Korean particles", () => {
-    const { html } = render("__밑줄__ ~~취소~~ **끝.**다음");
-    expect(html).toContain("<u>밑줄</u>");
-    expect(html).toContain("<del>취소</del>");
-    expect(html).toContain("<strong>끝.</strong>다음");
-  });
-
-  it("renders a fold as details with the title as summary", () => {
-    const { html } = render(":::접기 자세한 내용\n\n숨긴 **글**\n\n:::");
-    expect(html).toContain("<details>");
-    expect(html).toContain("<summary>자세한 내용</summary>");
-    expect(html).toContain("<strong>글</strong>");
-  });
-
-  it("keeps text that only looks like a directive", () => {
-    const { html } = render("수업 시간:am 9시, 이모지 :smile: 그대로");
-    expect(html).toContain("시간:am 9시");
-    expect(html).toContain(":smile:");
-  });
-
-  it("shows raw HTML as text instead of running it", () => {
-    const { html } = render(
-      '<script>alert(1)</script>\n\n글 <b onclick="x()">굵게</b>',
-    );
-    expect(html).not.toContain("<script>");
-    expect(html).not.toContain("<b ");
-    expect(html).toContain("&#x3C;script>");
-  });
-
-  it("drops unsafe link targets and keeps safe ones", () => {
-    const { html } = render(
-      "[나쁨](javascript:alert(1)) [좋음](https://kmla.online) [메일](mailto:a@b.c)",
-    );
-    expect(html).not.toContain("javascript:");
-    expect(html).toContain('href="https://kmla.online"');
-    expect(html).toContain('href="mailto:a@b.c"');
-  });
-
-  it("turns an external image into a link and keeps an uploaded one", () => {
-    const id = "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a";
-    const { html } = render(
-      `![밖](https://example.com/a.png) ![안](img:${id})`,
-    );
-    expect(html).not.toContain('src="https://example.com/a.png"');
-    expect(html).toContain('<a href="https://example.com/a.png">밖</a>');
-    expect(html).toContain(`src="img:${id}"`);
-  });
-
-  it("gives headings ids, shifts # to the second level and numbers them", () => {
-    const { headings, html } = render("# 개요\n\n## 신청 방법\n\n## 신청 방법");
     expect(headings).toEqual([
-      { depth: 2, text: "개요", id: "개요", index: 0 },
-      { depth: 2, text: "신청 방법", id: "신청-방법", index: 1 },
-      { depth: 2, text: "신청 방법", id: "신청-방법-2", index: 2 },
+      { depth: 2, text: "개요", id: "개요", index: 0, sectionIndex: 0 },
+      { depth: 3, text: "신청 방법", id: "신청-방법", index: 1, sectionIndex: 1 },
+      {
+        depth: 2,
+        text: "신청 방법",
+        id: "신청-방법-2",
+        index: 2,
+        sectionIndex: 2,
+      },
     ]);
-    expect(html).toContain('<h2 id="개요" data-heading-index="0">개요</h2>');
-    expect(html).not.toContain("<h1");
   });
 
-  it("links a section with the same id the heading gets", () => {
-    const { html } = render("[[귀가#신청 방법]] [[#신청 방법]]");
-    expect(html).toContain(
-      `href="wiki:${encodeURIComponent("귀가")}#${encodeURI("신청-방법")}"`,
+  it("numbers footnotes in order, including those inside folds", () => {
+    const { footnotes, blocks } = parseWiki(
+      doc(
+        para(text("가"), footnote("첫째")),
+        { type: "fold", attrs: { title: "더" }, content: [para(footnote("둘째"))] },
+      ),
     );
-    // 주소는 퍼센트 인코딩되어 나간다. 브라우저가 id와 맞출 때 다시 푼다.
-    expect(html).toContain(`href="#${encodeURI("신청-방법")}"`);
+    expect(footnotes).toEqual([
+      { number: 1, note: "첫째" },
+      { number: 2, note: "둘째" },
+    ]);
+    expect(blocks[0]!.node.content![1]!.attrs).toMatchObject({ number: 1 });
   });
 
-  it("renders footnotes with Korean labels", () => {
-    const { html } = render(
-      "신성은 1시까지다.[^1]\n\n[^1]: 2025년까지는 12시 30분.",
-    );
-    expect(html).toContain("각주");
-    expect(html).toContain("2025년까지는 12시 30분.");
+  it("reads categories and a redirect from the document attributes", () => {
+    const parsed = parseWiki({
+      ...doc(para()),
+      attrs: { categories: ["생활", "분류:생활", "분류:기숙사"], redirect: "PRISM" },
+    });
+    expect(parsed.categories).toEqual(["분류:생활", "분류:기숙사"]);
+    expect(parsed.redirect).toBe("PRISM");
+  });
+
+  it("treats anything that is not a document as an empty one", () => {
+    for (const value of [null, "글", 1, { type: "paragraph" }]) {
+      expect(parseWiki(value).blocks).toEqual([
+        { node: { type: "paragraph" } },
+      ]);
+    }
   });
 
   describe("templates", () => {
+    const notice = doc(para(text("주의: "), param(1), text(" 끝")));
+
     it("includes a template body and fills its values", () => {
-      const { html } = render("{{틀:상위 문서|외출·외박}}", {
-        "틀:상위 문서": "> 상위 문서: [[{{{1}}}]]",
+      const { blocks } = parseWiki(doc(template("오래된 정보", ["값"])), {
+        templates: new Map([["틀:오래된 정보", notice]]),
       });
-      expect(html).toContain("<blockquote>");
-      expect(html).toContain(`href="wiki:${encodeURIComponent("외출·외박")}"`);
+      expect(blocks.map((block) => block.node)).toEqual([
+        para(text("주의: "), text("값"), text(" 끝")),
+      ]);
     });
 
-    it("leaves a link to a missing template", () => {
-      const { html } = render("{{틀:없는 틀}}");
-      expect(html).toContain(`href="wiki:${encodeURIComponent("틀:없는 틀")}"`);
+    it("passes its own values on to a template it calls", () => {
+      const { blocks } = parseWiki(doc(template("감싸기", ["값"])), {
+        templates: new Map([
+          ["틀:감싸기", doc(template("오래된 정보", ["{{{1}}}"]))],
+          ["틀:오래된 정보", notice],
+        ]),
+      });
+      expect(blocks.map((block) => block.node)).toEqual([
+        para(text("주의: "), text("값"), text(" 끝")),
+      ]);
+    });
+
+    it("keeps the formatting the template put on a value's slot", () => {
+      const bold = { type: "bold" };
+      const body = doc(para({ ...param(1), marks: [bold] }));
+      const { blocks } = parseWiki(doc(template("강조", ["값"])), {
+        templates: new Map([["틀:강조", body]]),
+      });
+      expect(blocks.map((block) => block.node)).toEqual([
+        para({ type: "text", text: "값", marks: [bold] }),
+      ]);
+    });
+
+    it("drops an empty value", () => {
+      const { blocks } = parseWiki(doc(template("틀:오래된 정보")), {
+        templates: new Map([["틀:오래된 정보", notice]]),
+      });
+      expect(blocks[0]!.node).toEqual(para(text("주의: "), text(" 끝")));
+    });
+
+    it("leaves a marker for a missing template", () => {
+      const { blocks } = parseWiki(doc(template("없는 틀")));
+      expect(blocks[0]!.node).toEqual({
+        type: MISSING_TEMPLATE,
+        attrs: { title: "틀:없는 틀" },
+      });
     });
 
     it("does not loop on a template that includes itself", () => {
-      const { html } = render("{{틀:돌고}}", {
-        "틀:돌고": "앞 {{틀:돌고}} 뒤",
+      const { blocks } = parseWiki(doc(template("자기")), {
+        templates: new Map([
+          ["틀:자기", doc(para(text("안")), template("자기"))],
+        ]),
       });
-      expect(html).toContain("앞 ");
-      expect(html).toContain(`href="wiki:${encodeURIComponent("틀:돌고")}"`);
+      expect(blocks.map((block) => block.node.type)).toEqual([
+        "paragraph",
+        MISSING_TEMPLATE,
+      ]);
     });
 
     it("stops at three levels of nesting", () => {
-      const { html } = render("{{틀:1}}", {
-        "틀:1": "하나 {{틀:2}}",
-        "틀:2": "둘 {{틀:3}}",
-        "틀:3": "셋 {{틀:4}}",
-        "틀:4": "넷",
-      });
-      expect(html).toContain("하나 둘 셋");
-      expect(html).not.toContain("넷");
+      const templates = new Map([
+        ["틀:1", doc(para(text("1")), template("2"))],
+        ["틀:2", doc(para(text("2")), template("3"))],
+        ["틀:3", doc(para(text("3")), template("4"))],
+        ["틀:4", doc(para(text("4")))],
+      ]);
+      const { blocks } = parseWiki(doc(template("1")), { templates });
+      expect(blocks.map((block) => block.node.type)).toEqual([
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        MISSING_TEMPLATE,
+      ]);
+    });
+
+    it("lists template headings in the contents but not as editable sections", () => {
+      const { headings } = parseWiki(
+        doc(template("머리"), heading(2, "내 문단")),
+        { templates: new Map([["틀:머리", doc(heading(2, "틀 문단"))]]) },
+      );
+      expect(headings.map((h) => [h.text, h.sectionIndex])).toEqual([
+        ["틀 문단", null],
+        ["내 문단", 0],
+      ]);
     });
 
     it("does not inherit the template's own categories", () => {
-      const { categories } = render("{{틀:정리 필요}}\n\n[[분류:생활]]", {
-        "틀:정리 필요": "> 정리가 필요합니다.\n\n[[분류:틀]]",
+      const { categories } = parseWiki(doc(template("분류 붙은 틀")), {
+        templates: new Map([
+          [
+            "틀:분류 붙은 틀",
+            { ...doc(para(text("틀"))), attrs: { categories: ["분류:틀"] } },
+          ],
+        ]),
       });
-      expect(categories).toEqual(["분류:생활"]);
+      expect(categories).toEqual([]);
     });
   });
 });
 
 describe("sections", () => {
-  const source = [
-    "머리말",
-    "",
-    "## 가",
-    "가 본문",
-    "",
-    "### 가-1",
-    "가-1 본문",
-    "",
-    "```",
-    "## 코드 안 제목 아님",
-    "```",
-    "",
-    "## 나",
-    "나 본문",
-  ].join("\n");
+  const body = doc(
+    para(text("앞글")),
+    heading(2, "가"),
+    para(text("가 본문")),
+    heading(3, "가-1"),
+    para(text("내용")),
+    heading(2, "나"),
+    para(text("나 본문")),
+  );
 
-  it("finds headings outside code and nests lower levels", () => {
-    const sections = findSections(source);
-    expect(sections.map((s) => [s.index, s.depth, s.title])).toEqual([
-      [0, 2, "가"],
-      [1, 3, "가-1"],
-      [2, 2, "나"],
+  it("finds top-level headings and nests lower levels", () => {
+    expect(
+      findSections(body).map(({ title, start, end }) => [title, start, end]),
+    ).toEqual([
+      ["가", 1, 5],
+      ["가-1", 3, 5],
+      ["나", 5, 7],
     ]);
-    expect(getSection(source, 0)).toContain("가-1 본문");
-    expect(getSection(source, 0)).not.toContain("나 본문");
-    expect(getSection(source, 1)).toContain("코드 안 제목 아님");
-    expect(getSection(source, 9)).toBeNull();
   });
 
-  it("numbers sections the same way the renderer numbers headings", () => {
-    expect(findSections(source).map((s) => s.title)).toEqual(
-      parseWiki(source).headings.map((h) => h.text),
+  it("ignores headings inside quotes and folds", () => {
+    const nested = doc(
+      { type: "blockquote", content: [heading(2, "인용")] },
+      heading(2, "진짜"),
+    );
+    expect(findSections(nested).map((section) => section.title)).toEqual([
+      "진짜",
+    ]);
+  });
+
+  it("returns one section with its subsections", () => {
+    expect(getSection(body, 0)).toEqual(
+      doc(heading(2, "가"), para(text("가 본문")), heading(3, "가-1"), para(text("내용"))),
+    );
+    expect(getSection(body, 9)).toBeNull();
+  });
+
+  it("replaces one section, keeps the rest and the document attributes", () => {
+    const withMeta = { ...body, attrs: { categories: ["분류:생활"] } };
+    const replaced = replaceSection(
+      withMeta,
+      2,
+      doc(heading(2, "나"), para(text("새 글"))),
+    );
+    expect(replaced).toEqual({
+      ...withMeta,
+      content: [...body.content.slice(0, 5), heading(2, "나"), para(text("새 글"))],
+    });
+  });
+
+  it("removes a section that was emptied", () => {
+    const replaced = replaceSection(body, 2, doc(para()));
+    expect(replaced!.content).toEqual(body.content.slice(0, 5));
+  });
+
+  it("knows a blank document", () => {
+    expect(isBlank(doc(para()))).toBe(true);
+    expect(isBlank(doc(para(text("글"))))).toBe(false);
+    expect(isBlank(doc({ type: "horizontalRule" }))).toBe(false);
+  });
+});
+
+describe("docToText", () => {
+  it("writes formatting and structure the way wiki users know it", () => {
+    const written = docToText({
+      ...doc(
+        heading(2, "개요"),
+        para(
+          { type: "text", text: "굵게", marks: [{ type: "bold" }] },
+          text(" "),
+          link("신성", "신성 시간"),
+          footnote("출처"),
+        ),
+        {
+          type: "bulletList",
+          content: [{ type: "listItem", content: [para(text("하나"))] }],
+        },
+        template("오래된 정보", ["값"]),
+      ),
+      attrs: { categories: ["분류:생활"], redirect: "" },
+    });
+    expect(written).toBe(
+      [
+        "## 개요",
+        "",
+        "**굵게** [[신성|신성 시간]][* 출처]",
+        "",
+        "- 하나",
+        "",
+        "{{틀:오래된 정보|값}}",
+        "",
+        "[[분류:생활]]",
+      ].join("\n"),
     );
   });
 
-  it("replaces one section and leaves the rest untouched", () => {
-    const replaced = replaceSection(source, 1, "### 가-1\n고친 본문\n");
-    expect(replaced).toContain(
-      "가 본문\n\n### 가-1\n고친 본문\n\n## 나\n나 본문",
+  it("tells apart images with the same description", () => {
+    const image = (id: string) => ({ type: "image", attrs: { id, alt: "급식실" } });
+    expect(docToText(doc(image("aaaaaaaa-0000-4000-8000-000000000000")))).not.toBe(
+      docToText(doc(image("bbbbbbbb-0000-4000-8000-000000000000"))),
     );
-    expect(replaced?.startsWith("머리말\n\n## 가")).toBe(true);
   });
 
-  it("replaces the last section without leaving a gap at the end", () => {
-    expect(replaceSection(source, 2, "## 나\n새 본문")).toMatch(
-      /## 나\n새 본문\n$/,
+  it("does not break on a heading level out of range", () => {
+    expect(docToText(doc({ ...heading(2, "가"), attrs: { level: -3 } }))).toBe("## 가");
+    expect(docToText(doc({ ...heading(2, "가"), attrs: { level: 1e9 } }))).toBe("#### 가");
+  });
+
+  it("starts a redirect page with the redirect line", () => {
+    expect(docToText({ ...doc(para()), attrs: { redirect: "PRISM" } })).toBe(
+      "#넘겨주기 [[PRISM]]",
     );
+  });
+
+  it("counts only visible text", () => {
+    expect(
+      visibleTextLength(
+        doc(para({ type: "text", text: "굵게", marks: [{ type: "bold" }] }), para(footnote("각주"))),
+      ),
+    ).toBe(4);
   });
 });

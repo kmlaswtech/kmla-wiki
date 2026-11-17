@@ -1,5 +1,9 @@
 import { rebaseSectionEdit } from "../model/conflict";
-import { replaceSection } from "~/features/markup";
+import {
+  emptyDoc,
+  replaceSection,
+  type WikiDoc,
+} from "~/features/markup";
 import {
   getPageView,
   saveRevision,
@@ -10,9 +14,9 @@ import { isWikiError } from "~/shared/supabase/errors";
 
 export interface EditTarget {
   title: string;
-  /** 편집을 시작한 판과 그때의 전체 본문. 새 문서는 `null`과 빈 문자열. */
+  /** 편집을 시작한 판과 그때의 전체 문서. 새 문서는 `null`과 빈 문서. */
   baseRevisionId: number | null;
-  baseBody: string;
+  baseBody: WikiDoc;
   /** 문단 편집이면 문단 번호. */
   sectionIndex: number | null;
 }
@@ -23,13 +27,13 @@ export type SaveOutcome =
    * 다른 사람이 같은 곳을 고쳤다. 내 글은 그대로 두고, 최신 판을 새 기준으로 삼아 차이를 보여 준
    * 뒤 다시 저장하게 한다.
    */
-  | { status: "conflict"; latest: { revisionId: number | null; body: string } };
+  | { status: "conflict"; latest: { revisionId: number | null; body: WikiDoc } };
 
-/** 편집기의 글(문단 편집이면 그 문단)을 전체 본문으로 만든다. 문단을 찾지 못하면 `null`. */
-export function buildFullBody(target: EditTarget, text: string): string | null {
+/** 편집기의 글(문단 편집이면 그 문단)을 전체 문서로 만든다. 문단을 찾지 못하면 `null`. */
+export function buildFullBody(target: EditTarget, edited: WikiDoc): WikiDoc | null {
   return target.sectionIndex === null
-    ? text
-    : replaceSection(target.baseBody, target.sectionIndex, text);
+    ? edited
+    : replaceSection(target.baseBody, target.sectionIndex, edited);
 }
 
 /**
@@ -40,12 +44,12 @@ export function buildFullBody(target: EditTarget, text: string): string | null {
  */
 export async function saveEdit(
   target: EditTarget,
-  text: string,
+  edited: WikiDoc,
   summary: string,
 ): Promise<SaveOutcome> {
-  const body = buildFullBody(target, text);
+  const body = buildFullBody(target, edited);
   if (body === null) {
-    // 편집을 시작한 본문에서 문단을 찾지 못하는 일은 없어야 한다. 충돌과 같게 다룬다.
+    // 편집을 시작한 문서에서 문단을 찾지 못하는 일은 없어야 한다. 충돌과 같게 다룬다.
     return { status: "conflict", latest: await loadLatest(target.title) };
   }
 
@@ -68,7 +72,7 @@ export async function saveEdit(
       baseBody: target.baseBody,
       latestBody: latest.body,
       sectionIndex: target.sectionIndex,
-      editedSection: text,
+      editedSection: edited,
     });
     if (rebase.ok) {
       try {
@@ -92,12 +96,12 @@ export async function saveEdit(
 
 async function loadLatest(
   title: string,
-): Promise<{ revisionId: number | null; body: string }> {
+): Promise<{ revisionId: number | null; body: WikiDoc }> {
   const view = await getPageView(title, { followRedirect: false });
   return view.found
     ? {
         revisionId: view.page.currentRevisionId,
-        body: view.revision?.body ?? "",
+        body: view.revision?.body ?? emptyDoc(),
       }
-    : { revisionId: null, body: "" };
+    : { revisionId: null, body: emptyDoc() };
 }

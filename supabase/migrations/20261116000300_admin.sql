@@ -295,7 +295,7 @@ declare
   v_admin_id bigint := private.require_admin();
   v_reason text := private.require_reason(p_reason);
   v_page public.pages;
-  v_body text;
+  v_body jsonb;
 begin
   select * into v_page from public.pages where id = p_page_id for update;
   if v_page.id is null then
@@ -306,7 +306,7 @@ begin
   end if;
 
   select body into v_body from public.revisions where id = v_page.current_revision_id;
-  perform private.write_revision(p_page_id, v_admin_id, coalesce(v_body, ''), v_reason, 'delete', true);
+  perform private.write_revision(p_page_id, v_admin_id, coalesce(v_body, private.empty_doc()), v_reason, 'delete', true);
   update public.pages set deleted_at = now() where id = p_page_id;
   perform private.log_admin_action('delete_page', v_reason, v_page.title);
 end;
@@ -319,7 +319,7 @@ declare
   v_admin_id bigint := private.require_admin();
   v_reason text := private.require_reason(p_reason);
   v_page public.pages;
-  v_body text;
+  v_body jsonb;
 begin
   select * into v_page from public.pages where id = p_page_id for update;
   if v_page.id is null then
@@ -331,7 +331,7 @@ begin
 
   update public.pages set deleted_at = null where id = p_page_id;
   select body into v_body from public.revisions where id = v_page.current_revision_id;
-  perform private.write_revision(p_page_id, v_admin_id, coalesce(v_body, ''), v_reason, 'restore', true);
+  perform private.write_revision(p_page_id, v_admin_id, coalesce(v_body, private.empty_doc()), v_reason, 'restore', true);
   perform private.log_admin_action('restore_page', v_reason, v_page.title);
 end;
 $$;

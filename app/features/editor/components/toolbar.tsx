@@ -1,146 +1,192 @@
+import type { Editor } from "@tiptap/core";
+import { useEditorState } from "@tiptap/react";
 import {
   Bold,
   CircleHelp,
+  Code,
   Ellipsis,
   Heading,
   Image,
+  Italic,
   Link2,
+  List,
   ListCollapse,
+  ListOrdered,
+  Minus,
+  Puzzle,
+  Quote,
+  Redo2,
   Strikethrough,
   Superscript,
   Table,
   Underline,
+  Undo2,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import {
-  addFootnote,
-  buildTable,
-  insertBlock,
-  toggleLinePrefix,
-  wrapSelection,
-} from "../model/commands";
-import type { SourceEditorHandle } from "./source-editor";
-import { pageHref } from "~/features/markup";
+import type { EditorRequest } from "./editor-ui";
+import { MARK, NODE, pageHref } from "~/features/markup";
+import { cn } from "~/shared/lib/utils";
 import { Button } from "~/shared/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "~/shared/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/shared/ui/dropdown-menu";
-import { Input } from "~/shared/ui/input";
-import { Label } from "~/shared/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/tooltip";
 
 interface ToolbarProps {
-  editor: React.RefObject<SourceEditorHandle | null>;
+  editor: Editor;
+  request: (request: EditorRequest) => void;
   /** 이미지 버튼을 눌렀을 때. 주지 않으면 버튼을 그리지 않는다. */
   onPickImage?: () => void;
+  /** 틀 문서를 고치는 중인가. 그러면 값 자리 넣기가 보인다. */
+  isTemplatePage?: boolean;
+  /** 넘겨주기 칸을 연다. */
+  onRedirect?: () => void;
+  className?: string;
 }
 
 /**
- * 편집 툴바. 버튼 8개와 더보기.
+ * 편집 툴바. 고른 글자에 바로 꾸밈이 들어간다(문법을 외울 필요가 없다).
  *
- * 기능 수를 일부러 묶어 둔다. 여기에 없는 꾸밈(글자 색·크기, 셀 병합, 정렬)은 지원하지 않는다.
- * 각 버튼이 하는 일은 `model/commands.ts`의 순수 함수이고, 여기는 그것을 편집기에 적용만 한다.
+ * 기능 수를 일부러 묶어 둔다. 여기에 없는 꾸밈(글자 색·크기, 정렬)은 지원하지 않는다.
  */
-export function Toolbar({ editor, onPickImage }: ToolbarProps) {
-  const [tableOpen, setTableOpen] = useState(false);
+export function Toolbar({
+  editor,
+  request,
+  onPickImage,
+  isTemplatePage = false,
+  onRedirect,
+  className,
+}: ToolbarProps) {
+  const state = useEditorState({
+    editor,
+    selector: ({ editor: current }) => ({
+      bold: current.isActive(MARK.bold),
+      italic: current.isActive(MARK.italic),
+      underline: current.isActive(MARK.underline),
+      strike: current.isActive(MARK.strike),
+      link: current.isActive(MARK.link) || current.isActive(MARK.wikiLink),
+      heading: ([2, 3, 4] as const).find((level) =>
+        current.isActive(NODE.heading, { level }),
+      ),
+      bulletList: current.isActive(NODE.bulletList),
+      orderedList: current.isActive(NODE.orderedList),
+      blockquote: current.isActive(NODE.blockquote),
+      inTable: current.isActive(NODE.table),
+      canUndo: current.can().undo(),
+      canRedo: current.can().redo(),
+    }),
+  });
 
-  /** 현재 문서와 선택 범위로 명령을 계산해 적용한다. */
-  const run = (
-    command: (
-      doc: string,
-      selection: { from: number; to: number },
-    ) => Parameters<SourceEditorHandle["apply"]>[0],
-  ) => {
-    const handle = editor.current;
-    if (!handle) return;
-    handle.apply(command(handle.getValue(), handle.getSelection()));
-  };
-
-  const wrap = (before: string, after: string, placeholder: string) =>
-    run((doc, selection) =>
-      wrapSelection(doc, selection, before, after, placeholder),
-    );
-
-  const block = (text: string, select?: string) =>
-    run((doc, selection) => insertBlock(doc, selection, text, select));
-
-  const heading = (prefix: string) =>
-    run((doc, selection) => toggleLinePrefix(doc, selection, prefix, "제목"));
-
-  const footnote = () => {
-    const handle = editor.current;
-    if (!handle) return;
-    const next = addFootnote(
-      handle.getValue(),
-      handle.getSelection(),
-      "각주 내용",
-    );
-    handle.replaceAll(next.doc, next.selection);
-  };
+  const chain = () => editor.chain().focus();
 
   return (
     <div
       role="toolbar"
       aria-label="편집 도구"
-      className="flex flex-wrap items-center gap-0.5 rounded-t-md border bg-muted/40 p-1"
+      className={cn(
+        "flex flex-wrap items-center gap-0.5 rounded-t-md border bg-muted/90 p-1 backdrop-blur",
+        className,
+      )}
     >
-      <ToolButton label="굵게" onClick={() => wrap("**", "**", "굵은 글자")}>
+      <ToolButton
+        label="실행 취소"
+        disabled={!state.canUndo}
+        onClick={() => chain().undo().run()}
+      >
+        <Undo2 />
+      </ToolButton>
+      <ToolButton
+        label="다시 실행"
+        disabled={!state.canRedo}
+        onClick={() => chain().redo().run()}
+      >
+        <Redo2 />
+      </ToolButton>
+      <Divider />
+
+      <ToolButton
+        label="굵게"
+        active={state.bold}
+        onClick={() => chain().toggleBold().run()}
+      >
         <Bold />
       </ToolButton>
-      <ToolButton label="밑줄" onClick={() => wrap("__", "__", "밑줄 글자")}>
+      <ToolButton
+        label="기울임"
+        active={state.italic}
+        onClick={() => chain().toggleItalic().run()}
+      >
+        <Italic />
+      </ToolButton>
+      <ToolButton
+        label="밑줄"
+        active={state.underline}
+        onClick={() => chain().toggleUnderline().run()}
+      >
         <Underline />
       </ToolButton>
-      <ToolButton label="취소선" onClick={() => wrap("~~", "~~", "지운 글자")}>
+      <ToolButton
+        label="취소선"
+        active={state.strike}
+        onClick={() => chain().toggleStrike().run()}
+      >
         <Strikethrough />
       </ToolButton>
 
-      <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="제목"
-                  />
-                }
-              />
-            }
-          >
-            <Heading />
-          </TooltipTrigger>
-          <TooltipContent>제목</TooltipContent>
-        </Tooltip>
-        <DropdownMenuContent align="start">
-          <DropdownMenuItem onClick={() => heading("## ")}>
-            큰 제목
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => heading("### ")}>
-            중간 제목
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => heading("#### ")}>
-            작은 제목
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Menu label="제목" active={state.heading !== undefined} icon={<Heading />}>
+        <DropdownMenuItem onClick={() => chain().setParagraph().run()}>
+          본문
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => chain().toggleHeading({ level: 2 }).run()}
+        >
+          <span className="text-lg font-bold">큰 제목</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => chain().toggleHeading({ level: 3 }).run()}
+        >
+          <span className="font-bold">중간 제목</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => chain().toggleHeading({ level: 4 }).run()}
+        >
+          <span className="font-semibold">작은 제목</span>
+        </DropdownMenuItem>
+      </Menu>
+      <Divider />
 
       <ToolButton
-        label="문서 링크"
-        onClick={() => wrap("[[", "]]", "문서 이름")}
+        label="글머리 목록"
+        active={state.bulletList}
+        onClick={() => chain().toggleBulletList().run()}
+      >
+        <List />
+      </ToolButton>
+      <ToolButton
+        label="번호 목록"
+        active={state.orderedList}
+        onClick={() => chain().toggleOrderedList().run()}
+      >
+        <ListOrdered />
+      </ToolButton>
+      <ToolButton
+        label="인용"
+        active={state.blockquote}
+        onClick={() => chain().toggleBlockquote().run()}
+      >
+        <Quote />
+      </ToolButton>
+      <Divider />
+
+      <ToolButton
+        label="링크"
+        active={state.link}
+        onClick={() => request({ kind: "link" })}
       >
         <Link2 />
       </ToolButton>
@@ -149,68 +195,95 @@ export function Toolbar({ editor, onPickImage }: ToolbarProps) {
           <Image />
         </ToolButton>
       ) : null}
-      <ToolButton label="각주" onClick={footnote}>
+      <ToolButton label="각주" onClick={() => request({ kind: "footnote" })}>
         <Superscript />
       </ToolButton>
-      <ToolButton label="표" onClick={() => setTableOpen(true)}>
-        <Table />
-      </ToolButton>
 
-      <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="더보기"
-                  />
+      {state.inTable ? (
+        <Menu label="표" active icon={<Table />}>
+          <DropdownMenuItem onClick={() => chain().addRowAfter().run()}>
+            아래에 줄 더하기
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().addColumnAfter().run()}>
+            오른쪽에 칸 더하기
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().deleteRow().run()}>
+            이 줄 지우기
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().deleteColumn().run()}>
+            이 칸 지우기
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().mergeOrSplit().run()}>
+            칸 합치기·나누기
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().toggleHeaderRow().run()}>
+            제목 줄 켜고 끄기
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => chain().deleteTable().run()}
+          >
+            표 지우기
+          </DropdownMenuItem>
+        </Menu>
+      ) : (
+        <ToolButton label="표" onClick={() => request({ kind: "table" })}>
+          <Table />
+        </ToolButton>
+      )}
+
+      <Menu label="더보기" icon={<Ellipsis />}>
+        <DropdownMenuItem
+          onClick={() =>
+            chain()
+              .insertContent({
+                type: NODE.fold,
+                attrs: { title: "" },
+                content: [{ type: NODE.paragraph }],
+              })
+              .run()
+          }
+        >
+          <ListCollapse />
+          접기
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => request({ kind: "template" })}>
+          <Puzzle />
+          틀 넣기
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => chain().toggleCodeBlock().run()}>
+          <Code />
+          코드 블록
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => chain().setHorizontalRule().run()}>
+          <Minus />
+          구분선
+        </DropdownMenuItem>
+        {onRedirect ? (
+          <DropdownMenuItem onClick={onRedirect}>넘겨주기</DropdownMenuItem>
+        ) : null}
+        {isTemplatePage ? (
+          <>
+            <DropdownMenuSeparator />
+            {[1, 2, 3].map((index) => (
+              <DropdownMenuItem
+                key={index}
+                onClick={() =>
+                  chain()
+                    .insertContent({
+                      type: NODE.templateParam,
+                      attrs: { index },
+                    })
+                    .run()
                 }
-              />
-            }
-          >
-            <Ellipsis />
-          </TooltipTrigger>
-          <TooltipContent>더보기</TooltipContent>
-        </Tooltip>
-        <DropdownMenuContent align="start">
-          <DropdownMenuItem
-            onClick={() => block(":::접기 제목\n접을 내용\n:::", "제목")}
-          >
-            <ListCollapse />
-            접기
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => wrap("{{틀:", "}}", "틀 이름")}>
-            틀 넣기
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => block("[[분류:분류 이름]]", "분류 이름")}
-          >
-            분류
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => wrap("[", "](https://)", "보여 줄 글자")}
-          >
-            바깥 링크
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              const handle = editor.current;
-              if (!handle) return;
-              // 넘겨주기는 본문 맨 앞에 있어야 한다.
-              handle.apply({
-                change: { from: 0, to: 0, insert: "#넘겨주기 [[문서 이름]]\n" },
-                selection: { from: 9, to: 14 },
-              });
-            }}
-          >
-            넘겨주기
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+              >
+                값 자리 {`{{{${index}}}}`}
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : null}
+      </Menu>
 
       <span className="flex-1" />
 
@@ -237,23 +310,25 @@ export function Toolbar({ editor, onPickImage }: ToolbarProps) {
         </TooltipTrigger>
         <TooltipContent>편집 도움말</TooltipContent>
       </Tooltip>
-
-      <TableDialog
-        open={tableOpen}
-        onOpenChange={setTableOpen}
-        onInsert={(rows, columns) => block(buildTable(rows, columns), "제목 1")}
-      />
     </div>
   );
+}
+
+function Divider() {
+  return <span aria-hidden className="mx-0.5 h-5 w-px bg-border" />;
 }
 
 function ToolButton({
   label,
   onClick,
+  active = false,
+  disabled = false,
   children,
 }: {
   label: string;
   onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -262,9 +337,13 @@ function ToolButton({
         render={
           <Button
             type="button"
-            variant="ghost"
+            variant={active ? "secondary" : "ghost"}
             size="icon-sm"
             aria-label={label}
+            aria-pressed={active}
+            disabled={disabled}
+            // 누르는 순간 편집기의 선택이 풀리지 않게 한다.
+            onMouseDown={(event) => event.preventDefault()}
             onClick={onClick}
           />
         }
@@ -276,69 +355,39 @@ function ToolButton({
   );
 }
 
-function clamp(value: string, min: number, max: number): number {
-  const number = Number.parseInt(value, 10);
-  return Number.isNaN(number) ? min : Math.min(Math.max(number, min), max);
-}
-
-function TableDialog({
-  open,
-  onOpenChange,
-  onInsert,
+function Menu({
+  label,
+  icon,
+  active = false,
+  children,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onInsert: (rows: number, columns: number) => void;
+  label: string;
+  icon: ReactNode;
+  active?: boolean;
+  children: ReactNode;
 }) {
-  const [rows, setRows] = useState("2");
-  const [columns, setColumns] = useState("3");
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xs">
-        <form
-          className="contents"
-          onSubmit={(event) => {
-            event.preventDefault();
-            // 대화상자는 화면에서는 따로 떠 있지만 React 트리에서는 편집 폼 안이다. 막지 않으면 이
-            // 제출이 바깥 폼까지 올라가 문서가 저장된다.
-            event.stopPropagation();
-            onOpenChange(false);
-            onInsert(clamp(rows, 1, 30), clamp(columns, 1, 10));
-          }}
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant={active ? "secondary" : "ghost"}
+                  size="icon-sm"
+                  aria-label={label}
+                />
+              }
+            />
+          }
         >
-          <DialogHeader>
-            <DialogTitle>표 넣기</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="table-rows">줄</Label>
-              <Input
-                id="table-rows"
-                type="number"
-                min={1}
-                max={30}
-                value={rows}
-                onChange={(event) => setRows(event.target.value)}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="table-columns">칸</Label>
-              <Input
-                id="table-columns"
-                type="number"
-                min={1}
-                max={10}
-                value={columns}
-                onChange={(event) => setColumns(event.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="submit">넣기</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          {icon}
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="start">{children}</DropdownMenuContent>
+    </DropdownMenu>
   );
 }

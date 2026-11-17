@@ -9,8 +9,11 @@ const CACHE_NAME = "wiki-images-v1";
 
 export interface UploadedImage {
   id: string;
-  /** 본문에 넣을 문법. */
-  markdown: string;
+  /** 본문에 넣을 기본 설명(파일 이름). */
+  alt: string;
+  path: string;
+  width: number;
+  height: number;
 }
 
 /**
@@ -53,8 +56,8 @@ export async function uploadImage(file: File): Promise<UploadedImage> {
     }),
   );
 
-  const alt = file.name.replace(/\.[^./\\]+$/, "").replace(/[[\]\n]/g, " ");
-  return { id, markdown: `![${alt}](img:${id})` };
+  const alt = file.name.replace(/\.[^./\\]+$/, "").replace(/\s+/g, " ");
+  return { id, alt, path, width, height };
 }
 
 /**

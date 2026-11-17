@@ -13,6 +13,7 @@ export const WRITE_ERROR = {
   unchanged: "WK007",
   deleted: "WK008",
   titleTaken: "WK009",
+  invalidBody: "WK012",
 } as const;
 
 const LIMIT_MESSAGE: Record<string, string> = {
@@ -35,11 +36,21 @@ const MESSAGE: Record<string, string> = {
   [WRITE_ERROR.titleTaken]: "그 제목의 문서가 이미 있습니다.",
 };
 
+const INVALID_BODY_MESSAGE: Record<string, string> = {
+  link: "바깥 링크는 http://, https://, mailto: 주소만 걸 수 있습니다.",
+};
+
 /** 사용자에게 보여 줄 문구. 모르는 오류는 일반 문구로 답한다(내부 메시지를 그대로 보이지 않는다). */
 export function describeWriteError(error: unknown): string {
   if (isWikiError(error)) {
     if (error.code === WRITE_ERROR.limit) {
       return LIMIT_MESSAGE[error.detail ?? ""] ?? LIMIT_MESSAGE.body!;
+    }
+    if (error.code === WRITE_ERROR.invalidBody) {
+      return (
+        INVALID_BODY_MESSAGE[error.detail ?? ""] ??
+        "문서 형식이 올바르지 않아 저장하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요."
+      );
     }
     const message = MESSAGE[error.code];
     if (message) return message;

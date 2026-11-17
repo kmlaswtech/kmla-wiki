@@ -3,7 +3,7 @@ import { data, Link } from "react-router";
 import type { Route } from "./+types/diff";
 import { positiveInt, titleFromParams } from "./title-param";
 import { withVerifiedMember } from "~/features/auth";
-import { pageHref } from "~/features/markup";
+import { docToText, pageHref } from "~/features/markup";
 import { DiffView, getPageView, getRevisionBodies } from "~/features/pages";
 import { RelativeTime } from "~/shared/components/relative-time";
 
@@ -84,7 +84,10 @@ export default function DiffRoute({ loaderData }: Route.ComponentProps) {
               </div>
             ))}
           </dl>
-          <DiffView before={before.body} after={after.body} />
+          <DiffView
+            before={docToText(before.body)}
+            after={docToText(after.body)}
+          />
         </>
       ) : (
         <p className="py-8 text-center text-muted-foreground">

@@ -4,14 +4,14 @@ begin;
 select * from no_plan();
 
 select login(:alice);
-select public.save_revision('기숙사', null, '[[점호]]와 [[외출]], [[귀가]]');
-select public.save_revision('귀가', null, '[[점호]] 뒤에 한다');
-select public.save_revision('귀가/정기 귀가', null, '하위 문서');
-select public.save_revision('고립', null, '아무도 링크하지 않는다. [[고립]] 자기 자신 링크는 세지 않는다');
-select public.save_revision('넘겨받음', null, '넘겨주기로만 찾아온다');
-select public.save_revision('넘겨주기', null, '#넘겨주기 [[넘겨받음]]');
-select public.save_revision('틀:안내', null, '[[없는 틀 링크]]');
-select public.save_revision('지운 문서', null, '[[지운 데서만 가리킴]]');
+select public.save_revision('기숙사', null, wiki('[[점호]]와 [[외출]], [[귀가]]'));
+select public.save_revision('귀가', null, wiki('[[점호]] 뒤에 한다'));
+select public.save_revision('귀가/정기 귀가', null, wiki('하위 문서'));
+select public.save_revision('고립', null, wiki('아무도 링크하지 않는다. [[고립]] 자기 자신 링크는 세지 않는다'));
+select public.save_revision('넘겨받음', null, wiki('넘겨주기로만 찾아온다'));
+select public.save_revision('넘겨주기', null, wiki('#넘겨주기 [[넘겨받음]]'));
+select public.save_revision('틀:안내', null, wiki('[[없는 틀 링크]]'));
+select public.save_revision('지운 문서', null, wiki('[[지운 데서만 가리킴]]'));
 select logout();
 
 select login(:admin);

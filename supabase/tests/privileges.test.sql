@@ -86,7 +86,8 @@ select set_eq(
     where nspname = 'private' and has_function_privilege('authenticated', oid, 'execute')$$,
   array[
     'can_read', 'can_edit', 'is_admin',
-    'normalize_title', 'is_valid_title', 'title_key', 'extract_refs'
+    'normalize_title', 'is_valid_title', 'title_key', 'extract_refs',
+    'empty_doc', 'doc_text', 'doc_is_empty', 'check_body'
   ],
   'authenticated can execute only the policy helpers and pure title/markup functions in private'
 );

@@ -1,86 +1,211 @@
-import type { Root as HastRoot } from "hast";
-import remarkCjkFriendly from "remark-cjk-friendly";
-import remarkCjkFriendlyGfmStrikethrough from "remark-cjk-friendly-gfm-strikethrough";
-import remarkDirective from "remark-directive";
-import remarkGfm from "remark-gfm";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
-import { unified } from "unified";
-
 import {
-  collectFootnotes,
-  collectHeadings,
-  rehypeSafeUrls,
-  rehypeSections,
-  type FootnoteMap,
-  remarkHeadings,
-  remarkHtmlAsText,
-  remarkUnderline,
-  remarkWikiDirectives,
-  type HeadingInfo,
-} from "./plugins";
-import { preprocess, type PreprocessOptions } from "./preprocess";
+  asWikiDoc,
+  NODE,
+  nodeText,
+  numberAttr,
+  stringAttr,
+  stringListAttr,
+  type WikiDoc,
+  type WikiNode,
+} from "./doc";
+import { createHeadingIdAllocator } from "./heading-id";
+import { normalizeCategories, redirectTargetOf, templateTitle } from "./refs";
+import { headingDepth } from "./sections";
+import { titleKey } from "./title";
+
+/** 틀 안의 틀은 3단계까지 끼워 넣는다. DB의 `resolve_body`가 같은 깊이까지 본문을 내려 준다. */
+const MAX_TEMPLATE_DEPTH = 3;
+
+export interface HeadingInfo {
+  /** 2~4. */
+  depth: number;
+  text: string;
+  id: string;
+  /** 목차 순서(0부터). */
+  index: number;
+  /**
+   * 이 문서 자신의 몇 번째 제목인지(문단 편집 번호). 틀이 끼워 넣은 제목은 `null`이다. 그 제목은
+   * 이 문서를 고쳐서는 바꿀 수 없다.
+   */
+  sectionIndex: number | null;
+}
+
+export interface Footnote {
+  /** 본문에 붙는 번호(1부터). */
+  number: number;
+  note: string;
+}
+
+/** 화면에 그릴 문단 하나. 맨 바깥 블록마다 하나다. */
+export interface RenderBlock {
+  node: WikiNode;
+  /** 제목 블록이면 목차 정보. */
+  heading?: HeadingInfo;
+}
 
 export interface ParsedDocument {
-  /** 화면에 그릴 트리. 원시 HTML은 들어 있지 않다. */
-  tree: HastRoot;
+  /** 틀을 끼워 넣고 각주에 번호를 붙인 맨 바깥 블록들. */
+  blocks: RenderBlock[];
   headings: HeadingInfo[];
-  /** 각주 id별 내용. 본문의 각주 번호에 미리보기로 띄운다. */
-  footnotes: FootnoteMap;
+  footnotes: Footnote[];
   categories: string[];
   /** 넘겨주기 문서면 대상 제목. */
   redirect: string | null;
 }
 
-/**
- * 파서 구성. KMLA Online과 같은 계열(unified + remark)이고 한국어 강조 규칙도 같다.
- *
- * 순서에 뜻이 있다.
- *  - 지시문 정리는 밑줄·HTML 처리보다 먼저: 되돌린 글자가 다른 규칙에 다시 걸리지 않는다.
- *  - 제목 id는 마크다운 트리에서: 목차와 문단 편집이 같은 번호를 쓴다.
- *  - 주소 거르기는 마지막: 앞 단계가 만든 링크까지 모두 본다.
- */
-function createProcessor() {
-  return (
-    unified()
-      .use(remarkParse)
-      .use(remarkGfm)
-      // 조사가 붙은 한국어에서 `**끝.**다음` 같은 강조가 풀리지 않게 한다.
-      .use(remarkCjkFriendly)
-      .use(remarkCjkFriendlyGfmStrikethrough)
-      .use(remarkDirective)
-      .use(remarkWikiDirectives)
-      .use(remarkUnderline)
-      .use(remarkHtmlAsText)
-      .use(remarkHeadings)
-      .use(remarkRehype, {
-        footnoteLabel: "각주",
-        footnoteBackLabel: "본문으로 돌아가기",
-      })
-      .use(rehypeSafeUrls)
-      .use(rehypeSections)
-  );
+export interface ParseOptions {
+  /** 끼워 넣을 틀의 본문. 키는 `titleKey(틀 제목)`. */
+  templates?: ReadonlyMap<string, WikiDoc>;
 }
 
-let processor: ReturnType<typeof createProcessor> | undefined;
+/** 그릴 때만 쓰는 노드. 틀 자리에 남기는 "없는 틀" 표시다. */
+export const MISSING_TEMPLATE = "wiki:missingTemplate";
 
-/** 위키 본문을 화면용 트리로 바꾼다. 순수 함수다(같은 입력에 같은 출력, I/O 없음). */
+interface Context {
+  templates: ReadonlyMap<string, WikiDoc>;
+  footnotes: Footnote[];
+}
+
+/**
+ * 저장된 문서를 화면에 그릴 모양으로 준비한다. 순수 함수다(같은 입력에 같은 출력, I/O 없음).
+ *
+ *  - 틀 자리에 틀 본문을 끼워 넣고 값 자리(`{{{1}}}`)를 채운다.
+ *  - 맨 바깥 제목에 id와 목차 번호를 매긴다.
+ *  - 각주에 차례대로 번호를 붙인다.
+ */
 export function parseWiki(
-  body: string,
-  options: PreprocessOptions = {},
+  value: unknown,
+  { templates = new Map() }: ParseOptions = {},
 ): ParsedDocument {
-  processor ??= createProcessor();
+  const doc = asWikiDoc(value);
+  const context: Context = { templates, footnotes: [] };
 
-  const { markdown, categories, redirect } = preprocess(body, options);
-  const mdast = processor.parse(markdown);
-  // 플러그인이 `mdast`를 그 자리에서 고치므로, 실행 뒤에 같은 트리에서 제목을 읽을 수 있다.
-  const tree = processor.runSync(mdast, markdown);
+  const blocks: RenderBlock[] = [];
+  const headings: HeadingInfo[] = [];
+  const allocate = createHeadingIdAllocator();
+  let ownHeadings = 0;
+
+  const pushTopLevel = (node: WikiNode, own: boolean) => {
+    if (node.type !== NODE.heading) {
+      blocks.push({ node });
+      return;
+    }
+    const text = nodeText(node).trim();
+    const heading: HeadingInfo = {
+      depth: headingDepth(node),
+      text,
+      id: allocate(text),
+      index: headings.length,
+      sectionIndex: own ? ownHeadings : null,
+    };
+    if (own) ownHeadings++;
+    headings.push(heading);
+    blocks.push({ node, heading });
+  };
+
+  for (const block of doc.content) {
+    if (block.type === NODE.template) {
+      // 틀이 넣은 맨 바깥 블록도 문서 흐름의 일부다(틀이 제목을 넣으면 목차에 나온다).
+      for (const node of expandTemplate(block, context, [])) {
+        pushTopLevel(node, false);
+      }
+      continue;
+    }
+    // 틀이 아닌 자리의 제목은 이 문서의 것이다. 제목 안에는 틀이 들어갈 수 없다.
+    pushTopLevel(prepare(block, context, []), true);
+  }
 
   return {
-    tree,
-    headings: collectHeadings(mdast),
-    footnotes: collectFootnotes(tree),
-    categories,
-    redirect,
+    blocks,
+    headings,
+    footnotes: context.footnotes,
+    categories: normalizeCategories(doc.attrs?.categories ?? []),
+    redirect: redirectTargetOf(doc),
   };
+}
+
+/** 노드를 복사하면서 안쪽의 틀을 펼치고 각주에 번호를 붙인다. */
+function prepare(
+  node: WikiNode,
+  context: Context,
+  stack: readonly string[],
+  values?: readonly string[],
+): WikiNode {
+  if (node.type === NODE.footnote) {
+    const number = context.footnotes.length + 1;
+    context.footnotes.push({ number, note: stringAttr(node, "note") });
+    return { ...node, attrs: { ...node.attrs, number } };
+  }
+  if (node.type === NODE.templateParam && values) {
+    const index = numberAttr(node, "index") ?? 1;
+    // 틀 작성자가 그 자리에 건 꾸밈(굵게, 링크 등)은 값에도 그대로 건다.
+    return {
+      type: NODE.text,
+      text: values[index - 1]?.trim() ?? "",
+      ...(node.marks ? { marks: node.marks } : {}),
+    };
+  }
+  if (!node.content) return node;
+
+  const content: WikiNode[] = [];
+  for (const child of node.content) {
+    if (child.type === NODE.template) {
+      content.push(...expandTemplate(child, context, stack, values));
+    } else {
+      const prepared = prepare(child, context, stack, values);
+      // 빈 값으로 채운 자리는 빈 글자 노드가 된다. 그리지 않는다.
+      if (prepared.type === NODE.text && !prepared.text) continue;
+      content.push(prepared);
+    }
+  }
+  return { ...node, content };
+}
+
+/**
+ * 틀 자리에 틀 본문을 끼워 넣는다.
+ *
+ * 틀이 없거나, 자기 자신을 다시 부르거나, 너무 깊으면 그 자리에 틀 문서 링크를 남긴다. 없는 틀은
+ * 빨간 링크가 되어 "여기 틀이 있어야 한다"는 것이 보인다.
+ */
+function expandTemplate(
+  node: WikiNode,
+  context: Context,
+  stack: readonly string[],
+  outer?: readonly string[],
+): WikiNode[] {
+  const title = templateTitle(stringAttr(node, "name"));
+  if (!title) return [];
+
+  const key = titleKey(title);
+  const body = context.templates.get(key);
+  if (
+    body === undefined ||
+    stack.includes(key) ||
+    stack.length >= MAX_TEMPLATE_DEPTH
+  ) {
+    return [{ type: MISSING_TEMPLATE, attrs: { title } }];
+  }
+
+  // 틀 안에서 다른 틀을 부를 때 값에 `{{{1}}}`을 적으면 바깥 틀이 받은 값을 넘긴다.
+  const values = stringListAttr(node, "args").map((arg) =>
+    outer ? fillValues(arg, outer) : arg,
+  );
+  const nextStack = [...stack, key];
+  const nodes: WikiNode[] = [];
+  for (const block of asWikiDoc(body).content) {
+    if (block.type === NODE.template) {
+      nodes.push(...expandTemplate(block, context, nextStack, values));
+    } else {
+      nodes.push(prepare(block, context, nextStack, values));
+    }
+  }
+  return nodes;
+}
+
+/** 값 글자 안의 `{{{번호}}}`를 바깥 틀이 받은 값으로 바꾼다. 없는 번호는 빈 글자. */
+function fillValues(arg: string, outer: readonly string[]): string {
+  return arg.replace(
+    /\{\{\{(\d+)\}\}\}/g,
+    (_, index: string) => outer[Number(index) - 1]?.trim() ?? "",
+  );
 }

@@ -1,7 +1,8 @@
 -- 이미지.
 --
 -- 흐름: 브라우저가 WebP로 바꿔 Storage에 올린다 → `register_image`로 등록한다 → 본문에
--- `![설명](img:{id})`로 넣는다. 등록하지 않은 객체는 본문에서 쓸 수 없고, 정리 대상이다.
+-- `image` 노드(`{"type":"image","attrs":{"id":…,"alt":…}}`)로 넣는다. 등록하지 않은 객체는 본문에서 쓸 수
+-- 없고, 정리 대상이다.
 --
 -- 경로에는 사용자 정보를 넣지 않는다(`{연도}/{uuid}.webp`). 이미지는 여러 문서에 쓰일 수 있어
 -- 올린 사람의 가명도 보여 주지 않는다. 누가 올렸는지는 private에만 있다(차단·훼손 대응용).
@@ -121,7 +122,7 @@ grant execute on function public.mark_image_deleted(uuid) to authenticated;
 
 -- ── 본문에 쓰인 이미지 정보 ──────────────────────────────────────────────────
 -- 본문을 그릴 때 이미지 자리를 미리 잡을 수 있게 크기와 경로를 함께 내려 준다.
-create function public.resolve_images(p_body text) returns jsonb
+create function public.resolve_images(p_body jsonb) returns jsonb
 language sql stable set search_path = ''
 as $$
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -134,5 +135,5 @@ as $$
     );
 $$;
 
-revoke all on function public.resolve_images(text) from public, anon;
-grant execute on function public.resolve_images(text) to authenticated;
+revoke all on function public.resolve_images(jsonb) from public, anon;
+grant execute on function public.resolve_images(jsonb) to authenticated;

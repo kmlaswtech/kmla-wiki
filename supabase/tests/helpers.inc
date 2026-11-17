@@ -52,3 +52,75 @@ as $$
 $$;
 
 grant execute on function public.login(uuid), public.logout() to authenticated;
+
+-- 테스트용 문서 만들기. 짧은 글로 본문 JSON을 쓴다(편집기가 내놓는 모양과 같다).
+--   * 줄마다 문단 하나. 빈 줄은 건너뛴다. 아무 글도 없으면 빈 문단 하나.
+--   * `[[대상]]`, `[[대상|보이는 글]]`은 위키 링크, `[[분류:이름]]`은 문서 분류.
+--   * 첫 줄이 `#넘겨주기 [[대상]]`이면 넘겨주기 문서.
+-- 사용: `select * from public.save_revision('신성', null, wiki('[[귀가]] 전 시간'))`
+create function public.wiki(p_text text) returns jsonb
+language plpgsql immutable
+as $$
+declare
+  v_doc jsonb := '{"type":"doc","content":[]}';
+  v_line text;
+  v_rest text;
+  v_match text[];
+  v_inline jsonb;
+  v_categories jsonb := '[]';
+begin
+  if p_text is null then
+    return null;
+  end if;
+
+  v_match := regexp_match(p_text, '^\s*#넘겨주기\s+\[\[([^]|]+)\]\]');
+  if v_match is not null then
+    return jsonb_build_object(
+      'type', 'doc', 'attrs', jsonb_build_object('redirect', v_match[1]),
+      'content', '[{"type":"paragraph"}]'::jsonb
+    );
+  end if;
+
+  for v_match in select regexp_matches(p_text, '\[\[(분류:[^]|]+)\]\]', 'g') loop
+    v_categories := v_categories || to_jsonb(v_match[1]);
+  end loop;
+  p_text := regexp_replace(p_text, '\[\[분류:[^]|]+\]\]', '', 'g');
+
+  foreach v_line in array string_to_array(p_text, E'\n') loop
+    continue when btrim(v_line) = '';
+    v_inline := '[]';
+    v_rest := v_line;
+    loop
+      v_match := regexp_match(v_rest, '^(.*?)\[\[([^]|]+)(?:\|([^]]*))?\]\](.*)$');
+      exit when v_match is null;
+      if v_match[1] <> '' then
+        v_inline := v_inline || jsonb_build_object('type', 'text', 'text', v_match[1]);
+      end if;
+      v_inline := v_inline || jsonb_build_object(
+        'type', 'text', 'text', coalesce(v_match[3], v_match[2]),
+        'marks', jsonb_build_array(jsonb_build_object(
+          'type', 'wikiLink', 'attrs', jsonb_build_object('target', v_match[2], 'section', '')
+        ))
+      );
+      v_rest := v_match[4];
+    end loop;
+    if v_rest <> '' then
+      v_inline := v_inline || jsonb_build_object('type', 'text', 'text', v_rest);
+    end if;
+    v_doc := jsonb_set(v_doc, '{content}', (v_doc -> 'content') || jsonb_build_array(
+      jsonb_build_object('type', 'paragraph', 'content', v_inline)
+    ));
+  end loop;
+
+  if jsonb_array_length(v_doc -> 'content') = 0 then
+    v_doc := jsonb_set(v_doc, '{content}', '[{"type":"paragraph"}]');
+  end if;
+  if jsonb_array_length(v_categories) > 0 then
+    v_doc := v_doc || jsonb_build_object('attrs', jsonb_build_object('categories', v_categories));
+  end if;
+  return v_doc;
+end;
+$$;
+
+revoke all on function public.wiki(text) from public, anon;
+grant execute on function public.wiki(text) to authenticated;

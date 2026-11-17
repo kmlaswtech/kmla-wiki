@@ -1,11 +1,12 @@
-import type { Namespace } from "~/features/markup";
+import type { ImageInfo } from "~/features/images";
+import type { Namespace, WikiDoc } from "~/features/markup";
 
 export type RevisionKind = "edit" | "revert" | "move" | "delete" | "restore";
 
 /** 본문을 그리는 데 필요한 것. 문서 보기와 편집 미리보기가 같은 모양을 쓴다. */
 export interface ResolvedBody {
   /** 끼워 넣을 틀의 본문. 키는 제목 키. */
-  templates: ReadonlyMap<string, string>;
+  templates: ReadonlyMap<string, WikiDoc>;
   /** 링크 대상 가운데 실제로 있는 문서의 제목 키. */
   existing: ReadonlySet<string>;
 }
@@ -39,11 +40,13 @@ export interface FoundPage extends Viewer {
   /** 볼 판. 숨겨졌거나 없는 판을 요청하면 `null`. */
   revision: {
     id: number;
-    body: string;
+    body: WikiDoc;
     createdAt: string;
     isCurrent: boolean;
   } | null;
   resolved: ResolvedBody;
+  /** 본문에 쓰인 이미지의 경로와 크기. 키는 이미지 id. 지워졌거나 등록되지 않은 이미지는 없다. */
+  images: ReadonlyMap<string, ImageInfo>;
   backlinks: Backlink[];
   /** 하위 문서 제목. */
   children: string[];
@@ -81,7 +84,7 @@ export interface RecentChange extends RevisionSummary {
 }
 
 export interface RevisionBody extends RevisionSummary {
-  body: string;
+  body: WikiDoc;
 }
 
 export interface SearchHit {

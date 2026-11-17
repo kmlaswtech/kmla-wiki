@@ -22,7 +22,7 @@ interface Fold {
 const FoldContext = createContext<Fold | null>(null);
 
 /**
- * 제목 하나와 그 아래 내용(`rehypeSections`가 묶은 것). 제목을 누르면 접고 편다.
+ * 제목 하나와 그 아래 내용(`WikiContent`가 다음 같은 단계 제목 전까지 묶은 것). 제목을 누르면 접고 편다.
  *
  * 접힌 내용은 `hidden="until-found"`로 숨긴다. 브라우저의 찾기(Ctrl+F)가 그 안의 글자를 찾으면
  * 저절로 펼쳐진다.

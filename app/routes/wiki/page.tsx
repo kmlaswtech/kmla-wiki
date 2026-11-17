@@ -6,7 +6,7 @@ import { LinkButton } from "~/shared/components/link-button";
 import { positiveInt, titleFromParams } from "./title-param";
 import { PageAdminMenu } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
-import { resolveImages, WikiImage } from "~/features/images";
+import { WikiImage } from "~/features/images";
 import { pageHref } from "~/features/markup";
 import { getPageView, PageArticle, type MissingPage } from "~/features/pages";
 
@@ -33,12 +33,7 @@ export async function clientLoader({
     }
   }
 
-  // 본문에 이미지가 있을 때만 요청이 나간다. 이미지 정보를 못 받아도 문서는 보여 준다.
-  const images = await resolveImages(
-    view.found ? (view.revision?.body ?? "") : "",
-  ).catch(() => new Map<string, never>());
-
-  return { view, images };
+  return { view };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -48,11 +43,12 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function PageRoute({ loaderData }: Route.ComponentProps) {
-  const { view, images } = loaderData;
+  const { view } = loaderData;
   const revalidator = useRevalidator();
+  const images = view.found ? view.images : null;
   const renderImage = useCallback(
     (imageId: string, alt: string) => (
-      <WikiImage info={images.get(imageId)} alt={alt} />
+      <WikiImage info={images?.get(imageId)} alt={alt} />
     ),
     [images],
   );

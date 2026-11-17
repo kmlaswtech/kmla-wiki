@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import type { Route } from "./+types/home";
 import { LinkButton } from "~/shared/components/link-button";
 import { withVerifiedMember } from "~/features/auth";
-import { resolveImages, WikiImage } from "~/features/images";
+import { WikiImage } from "~/features/images";
 import { pageHref } from "~/features/markup";
 import {
   getPageView,
@@ -21,18 +21,15 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const [view, recent] = await withVerifiedMember(request, () =>
     Promise.all([getPageView(MAIN_PAGE), listRecentChanges()]),
   );
-  // 이미지 정보를 못 받아도 대문은 보여 준다.
-  const images = await resolveImages(
-    view.found ? (view.revision?.body ?? "") : "",
-  ).catch(() => new Map<string, never>());
-  return { view, images, recent: recent.slice(0, RECENT_COUNT) };
+  return { view, recent: recent.slice(0, RECENT_COUNT) };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { view, images, recent } = loaderData;
+  const { view, recent } = loaderData;
+  const images = view.found ? view.images : null;
   const renderImage = useCallback(
     (imageId: string, alt: string) => (
-      <WikiImage info={images.get(imageId)} alt={alt} />
+      <WikiImage info={images?.get(imageId)} alt={alt} />
     ),
     [images],
   );

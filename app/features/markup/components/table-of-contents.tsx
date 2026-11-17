@@ -1,5 +1,5 @@
 import { MIN_TOC_HEADINGS, numberHeadings } from "../model/heading-number";
-import type { HeadingInfo } from "../model/plugins";
+import type { HeadingInfo } from "../model/parse";
 
 /** 목차의 id. 본문 제목 번호를 누르면 여기로 돌아온다. */
 export const TOC_ID = "toc";

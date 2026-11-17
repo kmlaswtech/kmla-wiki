@@ -85,9 +85,18 @@ select results_eq(
   'the size comes from the storage record, not from the client'
 );
 select is(
-  public.resolve_images('![지도](img:0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a) ![없음](img:1b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a)'),
+  public.resolve_images('{"type":"doc","content":[{"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":""}},{"type":"image","attrs":{"id":"1b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":""}}]}'),
   '[{"id": "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a", "path": "2026/0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a.webp", "width": 800, "height": 600}]'::jsonb,
   'a body resolves to the registered images it uses'
+);
+select lives_ok(
+  $$select public.save_revision('사진 문서', null,
+    '{"type":"doc","content":[{"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":""}}]}', '')$$,
+  'a page can show an image');
+select is(
+  public.get_page_view('사진 문서') -> 'images',
+  '[{"id": "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a", "path": "2026/0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a.webp", "width": 800, "height": 600}]'::jsonb,
+  'the page view carries the images its body uses'
 );
 select throws_ok($$select * from private.image_uploaders$$, '42501', null,
   'who uploaded an image is not readable');
@@ -115,7 +124,7 @@ select logout();
 select login(:admin);
 select lives_ok(format($$select public.mark_image_deleted(%L)$$, :img1), 'an admin marks an image deleted');
 select is(
-  public.resolve_images('![지도](img:0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a)'), '[]'::jsonb,
+  public.resolve_images('{"type":"doc","content":[{"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":""}}]}'), '[]'::jsonb,
   'a deleted image no longer resolves');
 select logout();
 

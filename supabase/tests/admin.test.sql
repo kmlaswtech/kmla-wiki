@@ -5,11 +5,11 @@ select * from no_plan();
 
 -- 준비: 밥이 두 문서를 고치고, 앨리스가 한 문서를 고친다.
 select login(:bob);
-select page_id as p1, revision_id as b1 from public.save_revision('훼손 문서 하나', null, '원래 내용') \gset
-select page_id as p2, revision_id as b2 from public.save_revision('훼손 문서 둘', null, '원래 내용') \gset
+select page_id as p1, revision_id as b1 from public.save_revision('훼손 문서 하나', null, wiki('원래 내용')) \gset
+select page_id as p2, revision_id as b2 from public.save_revision('훼손 문서 둘', null, wiki('원래 내용')) \gset
 select logout();
 select login(:alice);
-select revision_id as a1 from public.save_revision('훼손 문서 하나', :b1, '앨리스가 고침') \gset
+select revision_id as a1 from public.save_revision('훼손 문서 하나', :b1, wiki('앨리스가 고침')) \gset
 select logout();
 
 -- ── 일반 사용자는 관리 기능을 쓸 수 없다 ─────────────────────────────────────
@@ -77,7 +77,7 @@ select logout();
 
 select login(:bob);
 select throws_ok(
-  format($$select * from public.save_revision('훼손 문서 둘', %s, '차단 뒤 편집')$$, :b2), 'WK002', null,
+  format($$select * from public.save_revision('훼손 문서 둘', %s, wiki('차단 뒤 편집'))$$, :b2), 'WK002', null,
   'the ban applies on every page, not only the source page');
 select isnt_empty($$select 1 from public.pages$$, 'a banned member still reads');
 select logout();
@@ -89,7 +89,7 @@ select throws_ok(format($$select public.lift_ban(%s, '또 해제')$$, :ban1), 'W
 select logout();
 select login(:bob);
 select lives_ok(
-  format($$select * from public.save_revision('훼손 문서 둘', %s, '해제 뒤 편집')$$, :b2),
+  format($$select * from public.save_revision('훼손 문서 둘', %s, wiki('해제 뒤 편집'))$$, :b2),
   'editing works again after the ban is lifted');
 select logout();
 

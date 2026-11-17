@@ -1,6 +1,6 @@
 -- 본문에서 링크·분류·틀·이미지·넘겨주기를 뽑는 규칙.
 --
--- 화면 렌더러와 같은 사례 표를 쓴다. 여기를 고치면 `test/features/markup/model/ref-cases.ts`도
+-- 화면과 같은 사례 표를 같은 JSON으로 쓴다. 여기를 고치면 `test/features/markup/model/ref-cases.ts`도
 -- 같이 고친다.
 begin;
 \ir helpers.inc
@@ -10,38 +10,88 @@ create function pg_temp.refs(p_body text) returns text
 language sql
 as $$
   select coalesce(string_agg(ref.kind || '=' || ref.target, ' ' order by ref.kind, ref.target), '')
-  from private.extract_refs(p_body) as ref;
+  from private.extract_refs(p_body::jsonb) as ref;
 $$;
 
-select is(pg_temp.refs('그냥 글'), '', 'plain text has no references');
-select is(pg_temp.refs('[[신성]]'), 'link=신성', 'a link');
-select is(pg_temp.refs('[[덕고관/엘리베이터|중베]]'), 'link=덕고관/엘리베이터', 'a link with a label');
-select is(pg_temp.refs('[[귀가#신청 방법]]'), 'link=귀가', 'a link to a section');
-select is(pg_temp.refs('[[귀가#신청|여기]]'), 'link=귀가', 'a link to a section with a label');
-select is(pg_temp.refs('[[#문단]]'), '', 'a same-page section link is not a reference');
-select is(pg_temp.refs('[[ 정기_귀가 ]]'), 'link=정기 귀가', 'link targets are normalized like titles');
-select is(pg_temp.refs('[[신성]] 그리고 [[신성]]'), 'link=신성 link=신성', 'duplicates are left to the caller');
-select is(pg_temp.refs('[[분류:생활]]'), 'category=분류:생활', 'a category');
-select is(pg_temp.refs('[[:분류:생활]]'), 'link=분류:생활', 'a leading colon links to a category without joining it');
-select is(pg_temp.refs('{{틀:오래된 정보}}'), 'template=틀:오래된 정보', 'a template');
-select is(pg_temp.refs('{{틀:상위 문서|외출·외박}}'), 'template=틀:상위 문서', 'a template with a value');
-select is(pg_temp.refs('{{{1}}}'), '', 'a template parameter is not a template');
-select is(pg_temp.refs('{{오래된 정보}}'), '', 'a template needs the 틀: prefix');
 select is(
-  pg_temp.refs('![지도](img:0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a)'),
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"그냥 글"}]}]}'),
+  '', 'plain text');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"신성","marks":[{"type":"wikiLink","attrs":{"target":"신성","section":""}}]}]}]}'),
+  'link=신성', 'a link');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"중베","marks":[{"type":"wikiLink","attrs":{"target":"덕고관/엘리베이터","section":""}}]}]}]}'),
+  'link=덕고관/엘리베이터', 'a link with a label');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"귀가","marks":[{"type":"wikiLink","attrs":{"target":"귀가","section":"신청 방법"}}]}]}]}'),
+  'link=귀가', 'a link to a section');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"문단","marks":[{"type":"wikiLink","attrs":{"target":"","section":"문단"}}]}]}]}'),
+  '', 'a same-page section link');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":" 정기_귀가 ","marks":[{"type":"wikiLink","attrs":{"target":" 정기_귀가 ","section":""}}]}]}]}'),
+  'link=정기 귀가', 'a normalized link target');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"신성","marks":[{"type":"wikiLink","attrs":{"target":"신성","section":""}}]},{"type":"text","text":" 그리고 "},{"type":"text","text":"신성","marks":[{"type":"wikiLink","attrs":{"target":"신성","section":""}}]}]}]}'),
+  'link=신성 link=신성', 'duplicates');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"나쁜<제목>","marks":[{"type":"wikiLink","attrs":{"target":"나쁜<제목>","section":""}}]}]}]}'),
+  '', 'an invalid title');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"가","marks":[{"type":"wikiLink","attrs":{"target":"가","section":""}}]}]}]}]},{"type":"blockquote","content":[{"type":"paragraph","content":[{"type":"text","text":"나","marks":[{"type":"wikiLink","attrs":{"target":"나","section":""}}]}]}]},{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"ㄷ","marks":[{"type":"wikiLink","attrs":{"target":"다","section":""}}]}]}]}]}]}]}'),
+  'link=가 link=나 link=다', 'a link nested in a list, quote and table');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"fold","attrs":{"title":"더 보기"},"content":[{"type":"paragraph","content":[{"type":"text","text":"신성","marks":[{"type":"wikiLink","attrs":{"target":"신성","section":""}}]}]}]}]}'),
+  'link=신성', 'a link inside a fold');
+select is(
+  pg_temp.refs('{"type":"doc","content":[],"attrs":{"categories":["분류:생활","기숙사"]}}'),
+  'category=분류:기숙사 category=분류:생활', 'categories');
+select is(
+  pg_temp.refs('{"type":"doc","content":[],"attrs":{"categories":["나쁜<분류>",""]}}'),
+  '', 'an invalid category');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"template","attrs":{"name":"틀:오래된 정보","args":[]}}]}'),
+  'template=틀:오래된 정보', 'a template');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"template","attrs":{"name":"상위 문서","args":["외출·외박"]}}]}'),
+  'template=틀:상위 문서', 'a template without the prefix');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"templateParam","attrs":{"index":1}}]}]}'),
+  '', 'a template parameter');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":"지도"}}]}'),
   'image=0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a', 'an uploaded image');
-select is(pg_temp.refs('![외부](https://example.com/a.png)'), '', 'an external image is not a reference');
-select is(pg_temp.refs('#넘겨주기 [[PRISM]]'), 'link=PRISM redirect=PRISM', 'a redirect');
-select is(pg_temp.refs(E'\n  #넘겨주기 [[PRISM]]'), 'link=PRISM redirect=PRISM', 'a redirect after blank space');
-select is(pg_temp.refs(E'글\n#넘겨주기 [[PRISM]]'), 'link=PRISM', 'a redirect must be the first thing in the body');
-select is(pg_temp.refs('`[[코드]]` 와 [[진짜]]'), 'link=진짜', 'inline code is not parsed');
 select is(
-  pg_temp.refs(E'```\n[[코드]]\n{{틀:코드}}\n```\n[[진짜]]'), 'link=진짜',
-  'a fenced code block is not parsed');
-select is(pg_temp.refs('[[나쁜<제목>]]'), '', 'an invalid title is not a reference');
+  pg_temp.refs('{"type":"doc","content":[{"type":"image","attrs":{"id":"../a.png","alt":""}}]}'),
+  '', 'an image with a bad id');
 select is(
-  pg_temp.refs(E'| 이름 | 뜻 |\n| --- | --- |\n| [[덕고관/엘리베이터|중베]] | 가운데 |'),
-  'link=덕고관/엘리베이터', 'a labelled link inside a table');
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"학교","marks":[{"type":"link","attrs":{"href":"https://kmla.hs.kr"}}]}]}]}'),
+  '', 'an external link');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph"}],"attrs":{"redirect":"PRISM"}}'),
+  'link=PRISM redirect=PRISM', 'a redirect');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph"}],"attrs":{"redirect":""}}'),
+  '', 'an empty redirect');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"codeBlock","content":[{"type":"text","text":"[[코드]] {{틀:코드}}"}]},{"type":"paragraph","content":[{"type":"text","text":"[[가짜]]","marks":[{"type":"code"}]}]}]}'),
+  '', 'code is plain text');
+
+-- 저장할 때 쓰는 보조 함수.
+select is(private.doc_is_empty(wiki('')), true, 'an empty paragraph is an empty document');
+select is(private.doc_is_empty(wiki('[[분류:생활]]')), false, 'a category is content');
+select is(private.doc_is_empty('{"type":"doc","content":[{"type":"horizontalRule"}]}'), false,
+  'a block that is not a paragraph is content');
+select is(
+  private.doc_text('{"type":"doc","content":[
+    {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"제목"}]},
+    {"type":"paragraph","content":[{"type":"text","text":"굵","marks":[{"type":"bold"}]},{"type":"text","text":"게"},
+      {"type":"footnote","attrs":{"note":"각주"}}]},
+    {"type":"fold","attrs":{"title":"접기"},"content":[{"type":"paragraph","content":[{"type":"text","text":"안"}]}]}
+  ]}'),
+  E'제목\n굵게 각주\n접기\n안',
+  'visible text joins pieces of a paragraph and puts blocks on their own lines'
+);
 
 select * from finish();
 rollback;

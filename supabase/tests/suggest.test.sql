@@ -7,15 +7,15 @@ begin;
 select * from no_plan();
 
 select login(:alice);
-select public.save_revision('가', null, '정확히 맞는 문서');
-select public.save_revision('가나', null, '앞부분이 맞는 문서');
-select public.save_revision('나가', null, '가운데에 있는 문서');
-select public.save_revision('각도', null, '넓혀서 맞는 문서(가 + 받침)');
-select public.save_revision('갈매기', null, '넓혀서 맞는 문서(가 + 받침)');
-select public.save_revision('괄호(시험).', null, '정규식 기호가 든 제목');
-select public.save_revision('틀:가이드', null, '틀');
-select public.save_revision('틀:안내', null, '틀');
-select public.save_revision('지운 가', null, '지운다');
+select public.save_revision('가', null, wiki('정확히 맞는 문서'));
+select public.save_revision('가나', null, wiki('앞부분이 맞는 문서'));
+select public.save_revision('나가', null, wiki('가운데에 있는 문서'));
+select public.save_revision('각도', null, wiki('넓혀서 맞는 문서(가 + 받침)'));
+select public.save_revision('갈매기', null, wiki('넓혀서 맞는 문서(가 + 받침)'));
+select public.save_revision('괄호(시험).', null, wiki('정규식 기호가 든 제목'));
+select public.save_revision('틀:가이드', null, wiki('틀'));
+select public.save_revision('틀:안내', null, wiki('틀'));
+select public.save_revision('지운 가', null, wiki('지운다'));
 select logout();
 
 select login(:admin);

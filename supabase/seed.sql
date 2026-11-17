@@ -47,13 +47,51 @@ on conflict (kmla_profile_id) do update set verified_until = excluded.verified_u
 -- 예시 문서. 실제 저장 경로(`save_revision`)로 넣어 가명·역링크·분류가 실제와 같게 만들어진다.
 do $$
 declare
+  v_category constant jsonb := '{"categories": ["분류:생활"]}';
   v_pages constant jsonb := jsonb_build_array(
-    jsonb_build_array('틀:오래된 정보', E'> ⚠️ 이 문서의 내용은 바뀌었을 수 있습니다. 아는 사람이 고쳐 주세요.'),
-    jsonb_build_array('귀가', E'집에 가는 방법을 모은 문서입니다.[^1]\n\n## 종류\n\n- [[귀가/정기 귀가]]\n- [[외출·외박]]\n\n## 신청\n\n신청은 담임 선생님께 합니다.\n\n## 주의\n\n[[신성]] 시간과 겹치지 않게 합니다.\n\n[^1]: 2026년 기준.\n\n[[분류:생활]]'),
-    jsonb_build_array('귀가/정기 귀가', E'{{틀:오래된 정보}}\n\n귀가주에 집에 가는 것. __금요일__ 수업이 끝나면 출발합니다.\n\n[[분류:생활]]'),
-    jsonb_build_array('신성', E'**신성**은 저녁 자습 전 시간이다.\n\n[[분류:생활]]'),
-    jsonb_build_array('분류:생활', E'학교생활에 관한 문서.'),
-    jsonb_build_array('중베', E'#넘겨주기 [[덕고관/엘리베이터]]')
+    jsonb_build_array('틀:오래된 정보', private.doc_of(jsonb_build_object(
+      'type', 'blockquote',
+      'content', jsonb_build_array(private.doc_para(private.doc_text_node(
+        '⚠️ 이 문서의 내용은 바뀌었을 수 있습니다. 아는 사람이 고쳐 주세요.'
+      )))
+    ))),
+    jsonb_build_array('귀가', private.doc_of(
+      private.doc_para(
+        private.doc_text_node('집에 가는 방법을 모은 문서입니다.'),
+        jsonb_build_object('type', 'footnote', 'attrs', jsonb_build_object('note', '2026년 기준.'))
+      ),
+      private.doc_heading(2, '종류'),
+      private.doc_list(
+        private.doc_para(private.doc_link('귀가/정기 귀가')),
+        private.doc_para(private.doc_link('외출·외박'))
+      ),
+      private.doc_heading(2, '신청'),
+      private.doc_para(private.doc_text_node('신청은 담임 선생님께 합니다.')),
+      private.doc_heading(2, '주의'),
+      private.doc_para(
+        private.doc_link('신성'),
+        private.doc_text_node(' 시간과 겹치지 않게 합니다.')
+      )
+    ) || jsonb_build_object('attrs', v_category)),
+    jsonb_build_array('귀가/정기 귀가', private.doc_of(
+      jsonb_build_object('type', 'template', 'attrs', jsonb_build_object('name', '틀:오래된 정보', 'args', '[]'::jsonb)),
+      private.doc_para(
+        private.doc_text_node('귀가주에 집에 가는 것. '),
+        private.doc_text_node('금요일', 'underline'),
+        private.doc_text_node(' 수업이 끝나면 출발합니다.')
+      )
+    ) || jsonb_build_object('attrs', v_category)),
+    jsonb_build_array('신성', private.doc_of(
+      private.doc_para(
+        private.doc_text_node('신성', 'bold'),
+        private.doc_text_node('은 저녁 자습 전 시간이다.')
+      )
+    ) || jsonb_build_object('attrs', v_category)),
+    jsonb_build_array('분류:생활', private.doc_of(
+      private.doc_para(private.doc_text_node('학교생활에 관한 문서.'))
+    )),
+    jsonb_build_array('중베', private.empty_doc()
+      || jsonb_build_object('attrs', jsonb_build_object('redirect', '덕고관/엘리베이터')))
   );
   v_page jsonb;
 begin
@@ -67,7 +105,7 @@ begin
     continue when exists (
       select 1 from public.pages where title_key = lower(v_page ->> 0)
     );
-    perform public.save_revision(v_page ->> 0, null, v_page ->> 1, '예시 문서');
+    perform public.save_revision(v_page ->> 0, null, v_page -> 1, '예시 문서');
   end loop;
   perform set_config('request.jwt.claims', '', true);
 end;

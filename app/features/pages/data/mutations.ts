@@ -1,5 +1,7 @@
 import type { SavedRevision } from "../model/types";
+import type { WikiDoc } from "~/features/markup";
 import { getSupabase } from "~/shared/supabase/client";
+import type { Json } from "~/shared/supabase/database.types";
 import { unwrap, WikiError } from "~/shared/supabase/errors";
 
 interface RawSaved {
@@ -23,7 +25,7 @@ function toSaved(rows: RawSaved[]): SavedRevision {
 export async function saveRevision(input: {
   title: string;
   baseRevisionId: number | null;
-  body: string;
+  body: WikiDoc;
   summary: string;
 }): Promise<SavedRevision> {
   return toSaved(
@@ -32,7 +34,7 @@ export async function saveRevision(input: {
         p_title: input.title,
         // 생성된 타입은 NULL 가능 여부를 모른다. 새 문서는 NULL을 보내야 한다.
         p_base_revision_id: input.baseRevisionId as number,
-        p_body: input.body,
+        p_body: input.body as unknown as Json,
         p_summary: input.summary,
       }),
     ),

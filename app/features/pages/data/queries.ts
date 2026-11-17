@@ -9,17 +9,21 @@ import type {
 } from "../model/types";
 import { titleMatchPattern } from "../model/hangul-match";
 import {
+  asWikiDoc,
   parseTitle,
   searchKey,
   titleKey,
   type Namespace,
+  type WikiDoc,
 } from "~/features/markup";
+import { toImageMap, type RawImage } from "~/features/images";
 import { getSupabase } from "~/shared/supabase/client";
+import type { Json } from "~/shared/supabase/database.types";
 import { unwrap } from "~/shared/supabase/errors";
 
 // RPC가 jsonb로 돌려주는 모양. DB의 `get_page_view` · `resolve_body`와 맞춘다.
 interface RawResolved {
-  templates: { title: string; body: string }[];
+  templates: { title: string; body: unknown }[];
   existing: string[];
 }
 
@@ -47,11 +51,12 @@ interface RawPageView {
   };
   revision?: {
     id: number;
-    body: string;
+    body: unknown;
     created_at: string;
     is_current: boolean;
   } | null;
   resolved?: RawResolved;
+  images?: RawImage[];
   backlinks: RawBacklink[];
   children?: string[];
   members?: string[];
@@ -62,7 +67,7 @@ function toResolved(raw: RawResolved): ResolvedBody {
     templates: new Map(
       raw.templates.map((template) => [
         titleKey(template.title),
-        template.body,
+        asWikiDoc(template.body),
       ]),
     ),
     existing: new Set(raw.existing),
@@ -125,12 +130,13 @@ export async function getPageView(
     revision: raw.revision
       ? {
           id: raw.revision.id,
-          body: raw.revision.body,
+          body: asWikiDoc(raw.revision.body),
           createdAt: raw.revision.created_at,
           isCurrent: raw.revision.is_current,
         }
       : null,
     resolved: toResolved(raw.resolved),
+    images: toImageMap(raw.images ?? []),
     backlinks: toBacklinks(raw.backlinks),
     children: raw.children ?? [],
     members: raw.members ?? [],
@@ -139,8 +145,10 @@ export async function getPageView(
 }
 
 /** 아직 저장하지 않은 본문을 그리는 데 필요한 것(편집 미리보기). */
-export async function resolveBody(body: string): Promise<ResolvedBody> {
-  const raw = unwrap(await getSupabase().rpc("resolve_body", { p_body: body }));
+export async function resolveBody(body: WikiDoc): Promise<ResolvedBody> {
+  const raw = unwrap(
+    await getSupabase().rpc("resolve_body", { p_body: body as unknown as Json }),
+  );
   return toResolved(raw as unknown as RawResolved);
 }
 
@@ -222,7 +230,7 @@ export async function getRevisionBodies(
       .eq("page_id", pageId)
       .in("id", [...revisionIds]),
   );
-  return rows.map((row) => ({ ...toSummary(row), body: row.body }));
+  return rows.map((row) => ({ ...toSummary(row), body: asWikiDoc(row.body) }));
 }
 
 /** 판 기록에서 내가 쓴 판을 표시하기 위한, 이 문서에서의 내 가명. 편집한 적이 없으면 `null`. */

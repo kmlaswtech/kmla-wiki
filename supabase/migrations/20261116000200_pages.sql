@@ -11,6 +11,7 @@
 --   WK007  바뀐 내용이 없음
 --   WK008  삭제된 문서
 --   WK009  이미 있는 제목
+--   WK012  본문 형식이 맞지 않음(문서 JSON이 아니거나 허용하지 않는 주소)
 
 -- ── 제목 ─────────────────────────────────────────────────────────────────────
 -- 제목이 곧 주소다. 저장하기 전에 항상 이 함수를 거친다.
@@ -79,7 +80,7 @@ create table public.pages (
   parent_key text generated always as (
     case when title like '%/%' then lower(regexp_replace(title, '/[^/]*$', '')) end
   ) stored,
-  -- 본문 첫 줄이 `#넘겨주기 [[대상]]`이면 대상 제목. 본문에서 서버가 뽑는다.
+  -- 넘겨주기 문서면 대상 제목. 본문(문서 속성 `redirect`)에서 서버가 뽑는다.
   redirect_target text,
   redirect_key text generated always as (lower(redirect_target)) stored,
   current_revision_id bigint,
@@ -95,16 +96,21 @@ create index pages_parent_idx on public.pages (parent_key) where parent_key is n
 create index pages_redirect_idx on public.pages (redirect_key) where redirect_key is not null;
 
 -- ── 판 ───────────────────────────────────────────────────────────────────────
--- 판마다 본문 전체를 저장한다. 글이라 용량 부담이 작고, 판 비교와 되돌리기가 단순해진다.
+-- 판마다 본문 전체를 저장한다. 판 비교와 되돌리기가 단순해진다.
+--
+-- 본문은 편집기(Tiptap/ProseMirror)가 내놓는 문서 JSON 그대로다(`app/features/markup/model/doc.ts`).
+--   { "type": "doc", "attrs": { "categories": [...], "redirect": "..." }, "content": [블록...] }
+-- 링크·틀·이미지는 노드·마크로 따로 있어 파싱 없이 그 자리를 읽는다(`private.extract_refs`).
 create table public.revisions (
   id bigint generated always as identity primary key,
   page_id bigint not null references public.pages (id) on delete cascade,
   parent_revision_id bigint references public.revisions (id) on delete set null,
-  body text not null,
+  body jsonb not null,
   summary text not null default '',
   -- **이 문서에서의** 가명. 쓰는 순간 확정하고, 읽는 쪽은 실제 작성자를 참조하지 않는다.
   author_pseudonym text not null,
   kind text not null,
+  -- 보이는 글자(`private.doc_text`)의 바이트 수. 꾸밈만 바꾼 편집은 0이다.
   byte_size integer not null,
   byte_delta integer not null,
   created_at timestamptz not null default now(),
@@ -184,63 +190,259 @@ create policy page_refs_select on public.page_refs for select to authenticated
     and exists (select 1 from public.pages as page where page.id = page_refs.from_page_id)
   );
 
+-- ── 본문 다루기 ──────────────────────────────────────────────────────────────
+-- 빈 문서. 본문이 없는 판(삭제된 문서 등)을 읽을 때 쓴다.
+create function private.empty_doc() returns jsonb
+language sql immutable set search_path = ''
+as $$
+  select '{"type":"doc","content":[{"type":"paragraph"}]}'::jsonb;
+$$;
+
+-- 보이는 글자만 편다: 글자, 각주 내용, 접기 제목. 검색, 검색 결과 발췌, 글자 수(`byte_size`)에 쓴다.
+-- 한 문단 안의 글자 조각(꾸밈마다 나뉜다)은 그대로 잇고, 블록 사이는 줄을 바꾼다. 그래야 "신성 시간"
+-- 처럼 꾸밈 경계를 넘는 말도 찾힌다.
+create function private.doc_text(p_body jsonb) returns text
+language plpgsql immutable set search_path = ''
+as $$
+declare
+  v_type text := p_body ->> 'type';
+  v_separator text;
+  v_out text;
+  v_children text;
+begin
+  if jsonb_typeof(p_body) is distinct from 'object' then
+    return '';
+  end if;
+  case v_type
+    when 'text' then return coalesce(p_body ->> 'text', '');
+    when 'footnote' then return ' ' || coalesce(p_body -> 'attrs' ->> 'note', '');
+    when 'hardBreak' then return E'\n';
+    else null;
+  end case;
+
+  v_separator := case when v_type in ('paragraph', 'heading', 'codeBlock') then '' else E'\n' end;
+  -- 접기는 제목도 보이는 글자다.
+  v_out := case when v_type = 'fold' then nullif(p_body -> 'attrs' ->> 'title', '') end;
+  -- 자식 글자는 한 번에 잇는다. 하나씩 덧붙이면 글이 길수록 앞부분을 거듭 복사한다.
+  if jsonb_typeof(p_body -> 'content') = 'array' then
+    select string_agg(private.doc_text(child.value), v_separator order by child.position)
+    into v_children
+    from jsonb_array_elements(p_body -> 'content') with ordinality as child (value, position);
+    v_out := case when v_out is null then v_children
+                  when v_children is null then v_out
+                  else v_out || v_separator || v_children end;
+  end if;
+  return coalesce(v_out, '');
+end;
+$$;
+
+-- 판의 보이는 글자. 검색할 때마다 JSON을 다시 펴지 않게 저장할 때 한 번 펴 둔다.
+alter table public.revisions
+  add column body_text text generated always as (private.doc_text(body)) stored;
+
+-- 아무것도 없는 문서인가: 빈 문단만 있고 분류·넘겨주기도 없다. 새 문서를 빈 채로 만들지 않는다.
+create function private.doc_is_empty(p_body jsonb) returns boolean
+language sql immutable set search_path = ''
+as $$
+  select not jsonb_path_exists(
+      p_body,
+      'strict $.content[*] ? (@.type != "paragraph" || exists(@.content[*]))'
+    )
+    and coalesce(p_body -> 'attrs' ->> 'redirect', '') = ''
+    and coalesce(jsonb_array_length(p_body -> 'attrs' -> 'categories'), 0) = 0;
+$$;
+
+-- 저장할 수 있는 본문인지. 모양이 문서 JSON이고, 바깥 링크 주소가 http(s)·mailto뿐이어야 한다.
+-- 화면도 같은 주소만 링크로 그리지만(`WikiContent`), 저장 단계에서 한 번 더 막는다.
+-- 지나치게 깊은 중첩도 막는다. `doc_text`가 노드마다 재귀하므로 스택 한도 오류가 그대로 나간다.
+-- (속성이 빠진 노드는 `extract_refs`·`doc_text`가 건너뛰므로 따로 막지 않는다.)
+create function private.check_body(p_body jsonb) returns void
+language plpgsql immutable set search_path = ''
+as $$
+begin
+  -- 노드 한 겹이 JSON 두 겹(`content` 배열과 노드)이다. 편집기에서 만드는 문서는 이보다 훨씬 얕다.
+  if jsonb_path_exists(p_body, 'strict $.**{200}') then
+    raise exception 'invalid body' using errcode = 'WK012';
+  end if;
+
+  if jsonb_typeof(p_body) is distinct from 'object'
+     or p_body ->> 'type' is distinct from 'doc'
+     or jsonb_typeof(p_body -> 'content') is distinct from 'array'
+     or (p_body ? 'attrs' and jsonb_typeof(p_body -> 'attrs') <> 'object')
+     or (coalesce(p_body -> 'attrs', '{}'::jsonb) ? 'categories'
+         and jsonb_typeof(p_body -> 'attrs' -> 'categories') <> 'array')
+     or (coalesce(p_body -> 'attrs', '{}'::jsonb) ? 'redirect'
+         and jsonb_typeof(p_body -> 'attrs' -> 'redirect') <> 'string') then
+    raise exception 'invalid body' using errcode = 'WK012';
+  end if;
+
+  if jsonb_path_exists(
+    p_body,
+    'strict $.** ? (@.type == "link").attrs.href ? (!(@ like_regex "^(https?:|mailto:)" flag "i"))'
+  ) then
+    raise exception 'unsafe link' using errcode = 'WK012', detail = 'link';
+  end if;
+
+  -- 제목 단계는 편집기가 쓰는 2~4만. 화면은 범위 밖 값을 맞춰 그리지만 저장부터 막는다.
+  if jsonb_path_exists(
+    p_body,
+    'strict $.** ? (@.type == "heading").attrs.level ? (!(@ == 2 || @ == 3 || @ == 4))'
+  ) then
+    raise exception 'invalid body' using errcode = 'WK012';
+  end if;
+end;
+$$;
+
+-- SQL로 문서를 쓸 때(운영 문서 마이그레이션, seed, 테스트) 쓰는 짧은 도우미. 화면에서는 쓰지 않는다.
+--   private.doc_of(private.doc_heading(2, '제목'), private.doc_para(private.doc_text_node('글')))
+create function private.doc_text_node(p_text text, variadic p_marks text[] default '{}')
+returns jsonb
+language sql immutable set search_path = ''
+as $$
+  select case when cardinality(p_marks) = 0
+    then jsonb_build_object('type', 'text', 'text', p_text)
+    else jsonb_build_object(
+      'type', 'text', 'text', p_text,
+      'marks', (select jsonb_agg(jsonb_build_object('type', mark)) from unnest(p_marks) as mark)
+    )
+  end;
+$$;
+
+-- 위키 링크가 걸린 글자. `p_label`이 비면 제목이 보인다.
+create function private.doc_link(p_target text, p_label text default null)
+returns jsonb
+language sql immutable set search_path = ''
+as $$
+  select jsonb_build_object(
+    'type', 'text', 'text', coalesce(p_label, p_target),
+    'marks', jsonb_build_array(jsonb_build_object(
+      'type', 'wikiLink', 'attrs', jsonb_build_object('target', p_target, 'section', '')
+    ))
+  );
+$$;
+
+create function private.doc_para(variadic p_inline jsonb[]) returns jsonb
+language sql immutable set search_path = ''
+as $$
+  select jsonb_build_object('type', 'paragraph', 'content', to_jsonb(p_inline));
+$$;
+
+create function private.doc_heading(p_level integer, p_text text) returns jsonb
+language sql immutable set search_path = ''
+as $$
+  select jsonb_build_object(
+    'type', 'heading', 'attrs', jsonb_build_object('level', p_level),
+    'content', jsonb_build_array(private.doc_text_node(p_text))
+  );
+$$;
+
+-- 글머리 목록. 항목마다 문단 하나.
+create function private.doc_list(variadic p_items jsonb[]) returns jsonb
+language sql immutable set search_path = ''
+as $$
+  select jsonb_build_object('type', 'bulletList', 'content', (
+    select jsonb_agg(jsonb_build_object('type', 'listItem', 'content', jsonb_build_array(item)))
+    from unnest(p_items) as item
+  ));
+$$;
+
+create function private.doc_of(variadic p_blocks jsonb[]) returns jsonb
+language sql immutable set search_path = ''
+as $$
+  select jsonb_build_object('type', 'doc', 'content', to_jsonb(p_blocks));
+$$;
+
+revoke all on function private.doc_text_node(text, text[]) from public;
+revoke all on function private.doc_link(text, text) from public;
+revoke all on function private.doc_para(jsonb[]) from public;
+revoke all on function private.doc_heading(integer, text) from public;
+revoke all on function private.doc_list(jsonb[]) from public;
+revoke all on function private.doc_of(jsonb[]) from public;
+
+revoke all on function private.empty_doc() from public;
+revoke all on function private.doc_text(jsonb) from public;
+revoke all on function private.doc_is_empty(jsonb) from public;
+revoke all on function private.check_body(jsonb) from public;
+grant execute on function private.empty_doc() to authenticated;
+grant execute on function private.doc_text(jsonb) to authenticated;
+grant execute on function private.doc_is_empty(jsonb) to authenticated;
+grant execute on function private.check_body(jsonb) to authenticated;
+
 -- ── 본문에서 가리키는 것 뽑기 ────────────────────────────────────────────────
--- 화면 렌더러(`app/features/markup/model`)와 같은 규칙이어야 한다. 두 쪽의 테스트가 같은 사례
+-- 화면(`app/features/markup/model/refs.ts`)과 같은 규칙이어야 한다. 두 쪽의 테스트가 같은 사례
 -- 표를 쓴다(`test/features/markup/model/ref-cases.ts`, `supabase/tests/extract_refs.test.sql`).
+--
+--  * 넘겨주기: 문서 속성 `redirect`. 대상으로 가는 링크로도 센다.
+--  * 분류: 문서 속성 `categories`. `분류:`를 빼고 적었어도 같은 분류다.
+--  * 링크: `wikiLink` 마크의 `target`. 비어 있으면 같은 문서 안의 문단이라 세지 않는다.
+--  * 틀: `template` 노드의 `name`. `틀:`을 빼고 적었어도 같은 틀이다.
+--  * 이미지: `image` 노드의 `id`(uuid).
 --
 -- 클라이언트가 계산해 보내지 않는 이유: 조작된 요청으로 본문에 없는 넘겨주기나 분류를 심을 수
 -- 있기 때문이다.
-create function private.extract_refs(p_body text)
+create function private.extract_refs(p_body jsonb)
 returns table (kind text, target text)
 language plpgsql immutable set search_path = ''
 as $$
 declare
-  v_text text;
-  v_match text[];
+  v_body jsonb := coalesce(p_body, '{}'::jsonb);
+  v_raw text;
   v_title text;
 begin
-  -- 코드 블록과 인라인 코드 안의 문법은 글자일 뿐이다.
-  v_text := regexp_replace(
-    coalesce(p_body, ''),
-    '(^|\n) {0,3}(```+|~~~+)[^\n]*\n.*?\n {0,3}\2[^\n]*',
-    '\1',
-    'g'
-  );
-  v_text := regexp_replace(v_text, '`[^`\n]+`', '', 'g');
-
-  -- 넘겨주기: 본문 첫 줄.
-  v_match := regexp_match(v_text, '^\s*#(?:넘겨주기|redirect)\s+\[\[([^][|#\n]+)', 'i');
-  if v_match is not null then
-    v_title := private.normalize_title(v_match[1]);
+  if jsonb_typeof(v_body -> 'attrs' -> 'redirect') = 'string' then
+    v_title := private.normalize_title(v_body -> 'attrs' ->> 'redirect');
+    -- 넘겨주기는 대상으로 가는 링크이기도 하다(역링크에 넘겨주기 문서가 보인다).
     if private.is_valid_title(v_title) then
       kind := 'redirect';
       target := v_title;
       return next;
+      kind := 'link';
+      return next;
     end if;
   end if;
 
-  -- 내부 링크와 분류. `[[:분류:이름]]`처럼 콜론으로 시작하면 분류에 넣지 않고 링크만 건다.
-  for v_match in
-    select regexp_matches(v_text, '\[\[([^][|#\n]+)(?:#[^][|\n]*)?(?:\|[^][\n]*)?\]\]', 'g')
+  if jsonb_typeof(v_body -> 'attrs' -> 'categories') = 'array' then
+    for v_raw in
+      select item #>> '{}'
+      from jsonb_array_elements(v_body -> 'attrs' -> 'categories') as item
+      where jsonb_typeof(item) = 'string'
+    loop
+      v_title := private.normalize_title(v_raw);
+      if v_title is not null and v_title !~ '^분류:' then
+        v_title := private.normalize_title('분류:' || v_title);
+      end if;
+      if private.is_valid_title(v_title) then
+        kind := 'category';
+        target := v_title;
+        return next;
+      end if;
+    end loop;
+  end if;
+
+  for v_raw in
+    select found.value #>> '{}'
+    from jsonb_path_query(v_body, 'strict $.** ? (@.type == "wikiLink").attrs.target')
+      as found (value)
+    where jsonb_typeof(found.value) = 'string'
   loop
-    if v_match[1] ~ '^\s*:' then
-      v_title := private.normalize_title(regexp_replace(v_match[1], '^\s*:', ''));
-      kind := 'link';
-    else
-      v_title := private.normalize_title(v_match[1]);
-      kind := case when v_title like '분류:%' then 'category' else 'link' end;
-    end if;
+    v_title := private.normalize_title(v_raw);
     if private.is_valid_title(v_title) then
+      kind := 'link';
       target := v_title;
       return next;
     end if;
   end loop;
 
-  -- 틀. `{{틀:이름}}` 또는 `{{틀:이름|값}}`.
-  for v_match in
-    select regexp_matches(v_text, '\{\{\s*(틀\s*:[^{}|\n]+)(?:\|[^{}]*)?\}\}', 'g')
+  for v_raw in
+    select found.value #>> '{}'
+    from jsonb_path_query(v_body, 'strict $.** ? (@.type == "template").attrs.name')
+      as found (value)
+    where jsonb_typeof(found.value) = 'string'
   loop
-    v_title := private.normalize_title(v_match[1]);
+    v_title := private.normalize_title(v_raw);
+    if v_title is not null and v_title !~ '^틀:' then
+      v_title := private.normalize_title('틀:' || v_title);
+    end if;
     if private.is_valid_title(v_title) then
       kind := 'template';
       target := v_title;
@@ -248,23 +450,23 @@ begin
     end if;
   end loop;
 
-  -- 이미지. `![설명](img:{uuid})`.
-  for v_match in
-    select regexp_matches(
-      v_text,
-      '!\[[^]\n]*\]\(img:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)',
-      'g'
-    )
+  for v_raw in
+    select found.value #>> '{}'
+    from jsonb_path_query(v_body, 'strict $.** ? (@.type == "image").attrs.id')
+      as found (value)
+    where jsonb_typeof(found.value) = 'string'
   loop
-    kind := 'image';
-    target := v_match[1];
-    return next;
+    if v_raw ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      kind := 'image';
+      target := v_raw;
+      return next;
+    end if;
   end loop;
 end;
 $$;
 
-revoke all on function private.extract_refs(text) from public;
-grant execute on function private.extract_refs(text) to authenticated;
+revoke all on function private.extract_refs(jsonb) from public;
+grant execute on function private.extract_refs(jsonb) to authenticated;
 
 -- ── 쓰기 내부 함수 ───────────────────────────────────────────────────────────
 -- 호출자 검증: 회원 확인과 차단. 통과하면 member id를 돌려준다.
@@ -327,7 +529,7 @@ $$;
 create function private.write_revision(
   p_page_id bigint,
   p_member_id bigint,
-  p_body text,
+  p_body jsonb,
   p_summary text,
   p_kind text,
   -- 관리 조치(삭제·복구)는 가명 대신 "관리자"로 남긴다.
@@ -339,7 +541,7 @@ declare
   v_parent_id bigint;
   v_parent_size integer;
   v_revision_id bigint;
-  v_size integer := octet_length(p_body);
+  v_size integer := octet_length(private.doc_text(p_body));
 begin
   select page.current_revision_id, revision.byte_size
   into v_parent_id, v_parent_size
@@ -365,20 +567,22 @@ begin
   insert into private.revision_authors (revision_id, member_id)
   values (v_revision_id, p_member_id);
 
-  update public.pages
-     set current_revision_id = v_revision_id,
-         updated_at = now(),
-         redirect_target = (
-           select ref.target from private.extract_refs(p_body) as ref
-           where ref.kind = 'redirect' limit 1
-         )
-   where id = p_page_id;
-
+  -- 본문에서 뽑는 일은 한 번만 한다. 넘겨주기 대상과 나머지 참조를 같은 결과에서 나눈다.
   delete from public.page_refs where from_page_id = p_page_id;
+  with refs as materialized (
+    select ref.kind, ref.target from private.extract_refs(p_body) as ref
+  ),
+  updated as (
+    update public.pages
+       set current_revision_id = v_revision_id,
+           updated_at = now(),
+           redirect_target = (select refs.target from refs where refs.kind = 'redirect' limit 1)
+     where id = p_page_id
+  )
   insert into public.page_refs (from_page_id, kind, target_key)
-  select distinct p_page_id, ref.kind, lower(ref.target)
-  from private.extract_refs(p_body) as ref
-  where ref.kind <> 'redirect';
+  select distinct p_page_id, refs.kind, lower(refs.target)
+  from refs
+  where refs.kind <> 'redirect';
 
   return v_revision_id;
 end;
@@ -386,11 +590,13 @@ $$;
 
 -- 사람은 닿지 않는 안전 상한. 편집 횟수를 제한하려는 것이 아니라, 스크립트로 Free 한도(DB 500MB)를
 -- 채우는 것을 막는다. 관리자는 훼손을 한꺼번에 되돌려야 하므로 빈도 상한에서 뺀다.
-create function private.check_write_limits(p_member_id bigint, p_body text, p_summary text) returns void
+-- 본문 상한은 JSON 크기로 잰다. 꾸밈·구조 정보가 붙어 글자만 셀 때보다 몇 배 크다(글자로는
+-- 20만 자 안팎).
+create function private.check_write_limits(p_member_id bigint, p_body jsonb, p_summary text) returns void
 language plpgsql stable security definer set search_path = ''
 as $$
 begin
-  if char_length(p_body) > 200000 then
+  if octet_length(p_body::text) > 1000000 then
     raise exception 'body too long' using errcode = 'WK005', detail = 'body';
   end if;
   if char_length(coalesce(p_summary, '')) > 200 then
@@ -422,8 +628,8 @@ $$;
 
 revoke all on function private.require_editor() from public;
 revoke all on function private.pseudonym_for(bigint, bigint) from public;
-revoke all on function private.write_revision(bigint, bigint, text, text, text, boolean) from public;
-revoke all on function private.check_write_limits(bigint, text, text) from public;
+revoke all on function private.write_revision(bigint, bigint, jsonb, text, text, boolean) from public;
+revoke all on function private.check_write_limits(bigint, jsonb, text) from public;
 revoke all on function private.check_page_writable(public.pages) from public;
 
 -- ── 저장 ─────────────────────────────────────────────────────────────────────
@@ -432,7 +638,7 @@ revoke all on function private.check_page_writable(public.pages) from public;
 create function public.save_revision(
   p_title text,
   p_base_revision_id bigint,
-  p_body text,
+  p_body jsonb,
   p_summary text default ''
 )
 returns table (page_id bigint, revision_id bigint, title text)
@@ -442,12 +648,13 @@ declare
   v_member_id bigint := private.require_editor();
   v_title text := private.normalize_title(p_title);
   v_page public.pages;
-  v_body text := coalesce(p_body, '');
-  v_current_body text;
+  v_body jsonb := p_body;
+  v_current_body jsonb;
 begin
   if not private.is_valid_title(v_title) then
     raise exception 'invalid title' using errcode = 'WK004';
   end if;
+  perform private.check_body(v_body);
   perform private.check_write_limits(v_member_id, v_body, p_summary);
 
   select * into v_page from public.pages as page
@@ -458,7 +665,7 @@ begin
     if p_base_revision_id is not null then
       raise exception 'page not found' using errcode = 'WK006';
     end if;
-    if btrim(v_body) = '' then
+    if private.doc_is_empty(v_body) then
       raise exception 'nothing to save' using errcode = 'WK007';
     end if;
     begin
@@ -495,7 +702,7 @@ declare
   v_member_id bigint := private.require_editor();
   v_target public.revisions;
   v_page public.pages;
-  v_current_body text;
+  v_current_body jsonb;
   v_summary text;
 begin
   select * into v_target from public.revisions as revision where revision.id = p_revision_id;
@@ -538,7 +745,7 @@ declare
   v_new_title text := private.normalize_title(p_new_title);
   v_page public.pages;
   v_old_title text;
-  v_body text;
+  v_body jsonb;
   v_redirect_page_id bigint;
 begin
   if not private.is_valid_title(v_new_title) then
@@ -566,6 +773,7 @@ begin
   v_old_title := v_page.title;
   select revision.body into v_body
   from public.revisions as revision where revision.id = v_page.current_revision_id;
+  v_body := coalesce(v_body, private.empty_doc());
   perform private.check_write_limits(v_member_id, v_body, '');
 
   update public.pages set title = v_new_title where id = v_page.id;
@@ -581,7 +789,11 @@ begin
     insert into public.pages (title) values (v_old_title) returning id into v_redirect_page_id;
     perform private.write_revision(
       v_redirect_page_id, v_member_id,
-      format('#넘겨주기 [[%s]]', v_new_title),
+      jsonb_build_object(
+        'type', 'doc',
+        'attrs', jsonb_build_object('redirect', v_new_title),
+        'content', jsonb_build_array(jsonb_build_object('type', 'paragraph'))
+      ),
       format('%s 이동으로 생긴 넘겨주기', v_new_title), 'edit'
     );
   end if;
@@ -606,7 +818,7 @@ $$;
 
 -- 본문을 그리는 데 필요한 것: 끼워 넣을 틀의 본문(틀 안의 틀까지 3단계), 링크 대상 가운데
 -- 실제로 있는 문서, 이미지 크기. 문서 보기와 편집 미리보기가 같은 함수를 쓴다.
-create function public.resolve_body(p_body text) returns jsonb
+create function public.resolve_body(p_body jsonb) returns jsonb
 language sql stable set search_path = ''
 as $$
   with recursive body_refs as (
@@ -723,7 +935,10 @@ begin
       'created_at', v_revision.created_at,
       'is_current', v_revision.id = v_page.current_revision_id
     ) end,
-    'resolved', public.resolve_body(coalesce(v_revision.body, '')),
+    'resolved', public.resolve_body(coalesce(v_revision.body, private.empty_doc())),
+    -- 본문 이미지의 경로와 크기. `resolve_images`는 이미지 마이그레이션에서 만든다(plpgsql은
+    -- 부르는 순간에 함수를 찾으므로 여기서 써도 된다).
+    'images', public.resolve_images(coalesce(v_revision.body, private.empty_doc())),
     'backlinks', public.page_backlinks(v_page.title_key),
     'children', coalesce((
       select jsonb_agg(child.title order by child.title)
@@ -770,13 +985,19 @@ $$;
 
 -- 제목, 넘겨주기 이름, 본문 검색. 단순 부분 일치다. 문서 수백 개 규모에서는 순차 검색으로
 -- 충분하고, 한국어는 두 글자 검색어("신성")가 많아 trigram 인덱스가 듣지 않는다.
--- 넘겨주기 이름이 맞으면 대상 문서를 결과로 돌려준다.
+-- 본문은 보이는 글자(판에 저장해 둔 `body_text`)에서 찾는다. 넘겨주기 이름이 맞으면 대상 문서를 돌려준다.
 create function public.search_pages(p_query text, p_limit integer default 30)
 returns table (title text, matched_redirect text, snippet text, rank smallint)
 language sql stable set search_path = ''
 as $$
   with query as (
     select lower(btrim(regexp_replace(coalesce(p_query, ''), '[[:space:]]+', ' ', 'g'))) as needle
+  ),
+  texts as (
+    select page.id, revision.body_text as body
+    from public.pages as page
+    join public.revisions as revision on revision.id = page.current_revision_id
+    where page.deleted_at is null and page.redirect_key is null
   ),
   hits as (
     -- 제목
@@ -799,10 +1020,9 @@ as $$
     union all
     -- 본문
     select page.id, page.title, null, 4
-    from public.pages as page
-    join public.revisions as revision on revision.id = page.current_revision_id, query
-    where page.deleted_at is null and page.redirect_key is null
-      and strpos(lower(revision.body), query.needle) > 0
+    from texts
+    join public.pages as page on page.id = texts.id, query
+    where strpos(lower(texts.body), query.needle) > 0
   ),
   best as (
     select distinct on (hits.id) hits.id, hits.title, hits.matched_redirect, hits.rank
@@ -812,15 +1032,14 @@ as $$
   select
     best.title,
     best.matched_redirect,
-    -- 본문에서 맞은 곳 앞뒤. 줄바꿈은 공백으로 편다.
+    -- 본문에서 맞은 곳 앞뒤.
     (
       select regexp_replace(
-        substr(revision.body, greatest(strpos(lower(revision.body), query.needle) - 40, 1), 160),
+        substr(texts.body, greatest(strpos(lower(texts.body), query.needle) - 40, 1), 160),
         '[[:space:]]+', ' ', 'g'
       )
-      from public.pages as page
-      join public.revisions as revision on revision.id = page.current_revision_id
-      where page.id = best.id and strpos(lower(revision.body), query.needle) > 0
+      from texts
+      where texts.id = best.id and strpos(lower(texts.body), query.needle) > 0
     ),
     best.rank::smallint
   from best, query
@@ -840,21 +1059,21 @@ as $$
   limit 1;
 $$;
 
-revoke all on function public.save_revision(text, bigint, text, text) from public, anon;
+revoke all on function public.save_revision(text, bigint, jsonb, text) from public, anon;
 revoke all on function public.revert_page(bigint, text) from public, anon;
 revoke all on function public.move_page(text, text, boolean) from public, anon;
 revoke all on function public.my_pseudonym(bigint) from public, anon;
-revoke all on function public.resolve_body(text) from public, anon;
+revoke all on function public.resolve_body(jsonb) from public, anon;
 revoke all on function public.get_page_view(text, boolean, bigint) from public, anon;
 revoke all on function public.page_backlinks(text) from public, anon;
 revoke all on function public.search_pages(text, integer) from public, anon;
 revoke all on function public.random_page() from public, anon;
 
-grant execute on function public.save_revision(text, bigint, text, text) to authenticated;
+grant execute on function public.save_revision(text, bigint, jsonb, text) to authenticated;
 grant execute on function public.revert_page(bigint, text) to authenticated;
 grant execute on function public.move_page(text, text, boolean) to authenticated;
 grant execute on function public.my_pseudonym(bigint) to authenticated;
-grant execute on function public.resolve_body(text) to authenticated;
+grant execute on function public.resolve_body(jsonb) to authenticated;
 grant execute on function public.get_page_view(text, boolean, bigint) to authenticated;
 grant execute on function public.page_backlinks(text) to authenticated;
 grant execute on function public.search_pages(text, integer) to authenticated;
