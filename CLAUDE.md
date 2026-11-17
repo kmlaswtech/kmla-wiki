@@ -108,7 +108,8 @@ Supabase로 만든다. 런타임 앱 서버는 없다.
 
 ## CI
 
-`.github/workflows/ci.yml`이 `main`·`dev` push와 PR에서 돈다(Markdown만 바뀐 경우는 건너뛴다).
+`.github/workflows/ci.yml`이 PR에서 돌고(Markdown만 바뀐 경우는 건너뛴다), `main`·`dev` push에서는
+배포 워크플로가 `workflow_call`로 먼저 부른다.
 
 - `app` job: `pnpm format:check`, `pnpm verify`.
 - `db` job: 로컬 Supabase를 한 번 띄운 뒤 pgTAP, DB lint, 보안 advisor, 생성 타입 diff 검사,
@@ -121,13 +122,31 @@ CI는 merge를 막지 않고 결과만 알린다. 그 밖의 워크플로:
 - `release-tag.yml`: `main`에 들어온 커밋에 KST 날짜 태그(`v2026.11.17`, 같은 날 두 번째부터
   `.2`)를 붙인다.
 
+## 배포
+
+KMLA Online 저장소와 같은 구조다. 배포는 GitHub Actions에서만 한다. Vercel 프로젝트는 GitHub에
+연결돼 있지만 `vercel.json`이 Git 자동 배포를 꺼 두었다.
+
+| 브랜치 | 워크플로         | Supabase                          | Vercel                          |
+| ------ | ---------------- | --------------------------------- | ------------------------------- |
+| `dev`  | `deploy-dev.yml` | 위키 dev(`ipwbtdcrrkklqjesftnq`)  | Preview, `wiki-dev.kmla.online` |
+| `main` | `release.yml`    | 위키 prod(`ubzhxqmmyvwmwinuxntb`) | Production, `wiki.kmla.online`  |
+
+- 순서: CI → 최신 커밋인지 확인 → `supabase db push` → `supabase functions deploy` → Vercel 배포
+  (`scripts/release/vercel.mjs`). DB가 화면보다 먼저 나간다.
+- 비밀 값은 GitHub Environment `Development`(`dev`만)와 `Production`(`main`만)에 같은 이름으로 둔다.
+  `SUPABASE_ACCESS_TOKEN`은 그 프로젝트 하나로 범위를 좁힌 토큰이다.
+- 배포되는 것은 migration과 함수 코드뿐이다. 원격 Auth 설정(Site URL, 로그인 수단, `custom:kmla`
+  제공자)과 Edge Function 비밀 값은 각 프로젝트 대시보드에서 손으로 맞춘다.
+- `VITE_*` 값은 Vercel 프로젝트 환경 변수(Production, Preview)에 둔다.
+
 공개 리포다. 워크플로에 비밀 값을 쓰는 job을 더할 때는 fork PR에서 실행되지 않게 한다
 (`pull_request_target`으로 PR 코드를 실행하지 않는다).
 
 ## 브랜치
 
-`dev`가 기본 브랜치이고 `main`은 `dev`를 묶어 올리는 곳이다. 배포가 생기면 `main`이 운영,
-`dev`가 미리보기다.
+`dev`가 기본 브랜치이고 `main`은 `dev`를 묶어 올리는 곳이다. `main`이 운영, `dev`가
+미리보기(`wiki-dev.kmla.online`)다. merge하면 바로 배포된다(위 "배포").
 
 - 작업 브랜치는 `dev`에서 따고, PR과 push는 `dev`로 한다. `main`에 직접 커밋하거나 작업 브랜치
   PR을 `main`으로 열지 않는다.

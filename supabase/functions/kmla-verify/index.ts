@@ -26,12 +26,28 @@ const config: VerifyConfig = {
     .filter(Boolean),
 };
 
-// service_role: `record_member_verification`·`revoke_member_verification`은 이 역할만 부를 수 있다.
-const admin = createClient(
-  required("SUPABASE_URL"),
-  required("SUPABASE_SERVICE_ROLE_KEY"),
-  { auth: { persistSession: false, autoRefreshToken: false } },
-);
+/**
+ * service_role 키. `record_member_verification`·`revoke_member_verification`은 이 역할만 부를 수
+ * 있다. 원격 프로젝트는 새 API 키(`SUPABASE_SECRET_KEYS`, `{"default": "sb_secret_…"}`)를 주고,
+ * 옛 JWT 키를 끈 프로젝트에는 `SUPABASE_SERVICE_ROLE_KEY`가 없을 수 있다.
+ */
+function serviceRoleKey(): string {
+  const keys = Deno.env.get("SUPABASE_SECRET_KEYS");
+  if (keys) {
+    try {
+      const parsed: unknown = JSON.parse(keys);
+      const key = (parsed as { default?: unknown } | null)?.default;
+      if (typeof key === "string" && key) return key;
+    } catch {
+      // 아래 옛 키로 넘어간다.
+    }
+  }
+  return required("SUPABASE_SERVICE_ROLE_KEY");
+}
+
+const admin = createClient(required("SUPABASE_URL"), serviceRoleKey(), {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const deps: VerifyDeps = {
   async getWikiUser(jwt) {
