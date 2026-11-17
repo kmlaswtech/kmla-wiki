@@ -120,8 +120,8 @@ CI는 merge를 막지 않고 결과만 알린다. 그 밖의 워크플로:
 - `branch-policy.yml`: `main` 대상 PR이 이 저장소의 `dev`에서 왔는지 검사한다(`source-branch`).
   `main` ruleset이 이 검사를 필수로 건다.
 - `keepalive.yml`: 매일 위키 dev·prod Supabase의 `public.keepalive()`를 publishable key로 불러
-  무료 프로젝트가 일시 정지되지 않게 한다. 주소와 key는 공개 값이라 저장소 Variables
-  (`KEEPALIVE_{DEV,PROD}_{URL,KEY}`)에 둔다. URL 변수가 비어 있는 프로젝트는 건너뛴다.
+  무료 프로젝트가 일시 정지되지 않게 한다. 주소와 key는 공개 값이라 워크플로에 그대로 적는다. 실패는
+  경고만 남긴다.
 - `release-tag.yml`: `main`에 들어온 커밋에 KST 날짜 태그(`v2026.11.17`, 같은 날 두 번째부터
   `.2`)를 붙인다.
 

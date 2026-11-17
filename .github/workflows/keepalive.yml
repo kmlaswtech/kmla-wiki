@@ -2,11 +2,10 @@ name: Keepalive
 
 # Free Supabase projects pause after a week without activity. Once a day this
 # calls `public.keepalive()` (a `select true` only anon may execute) on the
-# wiki dev and prod projects with their publishable keys. Those keys and URLs
-# are public, so they are plain repository variables, not secrets: scheduled
-# runs start from `dev` and cannot read the `main`-only Production
-# Environment. A project whose URL variable is empty is skipped, which keeps
-# prod off until its first release has applied the migration.
+# wiki dev and prod projects. URLs and publishable keys are public (they ship
+# in the app bundle), so they sit here instead of in secrets or variables.
+# A failed call only leaves a warning: prod has no such function until its
+# first release, and a missed day does not pause anything.
 on:
   schedule:
     - cron: "17 3 * * *" # 12:17 KST, off the top of the hour
@@ -18,39 +17,19 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - project: dev
-            url: ${{ vars.KEEPALIVE_DEV_URL }}
-            key: ${{ vars.KEEPALIVE_DEV_KEY }}
-          - project: prod
-            url: ${{ vars.KEEPALIVE_PROD_URL }}
-            key: ${{ vars.KEEPALIVE_PROD_KEY }}
-    name: ping (${{ matrix.project }})
     steps:
       - name: Call keepalive()
-        env:
-          PROJECT: ${{ matrix.project }}
-          SUPABASE_URL: ${{ matrix.url }}
-          SUPABASE_KEY: ${{ matrix.key }}
         run: |
-          if [[ -z "$SUPABASE_URL" ]]; then
-            echo "Skipping $PROJECT: KEEPALIVE_${PROJECT^^}_URL is not set." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if [[ -z "$SUPABASE_KEY" ]]; then
-            echo "::error::KEEPALIVE_${PROJECT^^}_KEY is not set."
-            exit 1
-          fi
-          body="$(curl -sS --fail-with-body --retry 3 --retry-all-errors --max-time 30 \
-            -X POST "${SUPABASE_URL%/}/rest/v1/rpc/keepalive" \
-            -H "apikey: $SUPABASE_KEY" \
-            -H "content-type: application/json" \
-            -d '{}')"
-          if [[ "$body" != "true" ]]; then
-            echo "::error::Unexpected response from $PROJECT: $body"
-            exit 1
-          fi
-          echo "$PROJECT is awake." >> "$GITHUB_STEP_SUMMARY"
+          ping() {
+            local name="$1" url="$2" key="$3" body
+            if body="$(curl -sS --fail-with-body --retry 3 --max-time 30 \
+                -X POST "$url/rest/v1/rpc/keepalive" \
+                -H "apikey: $key" -H "content-type: application/json" -d '{}' 2>&1)" \
+              && [[ "$body" == "true" ]]; then
+              echo "$name is awake." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning::keepalive failed for $name: $body"
+            fi
+          }
+          ping dev https://ipwbtdcrrkklqjesftnq.supabase.co sb_publishable_tnPKGrK5RRcJMRT_7LXUyA_Fj68zAuH
+          ping prod https://ubzhxqmmyvwmwinuxntb.supabase.co sb_publishable_lqrAPTaA1fR0OG6Zs8-ZkQ_OmN5QhD9
