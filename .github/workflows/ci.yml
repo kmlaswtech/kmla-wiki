@@ -1,19 +1,22 @@
 name: CI
 
 # One Supabase stack per run (starting it is the slowest step), and
-# documentation-only changes are skipped. Fork PRs run with a read-only token
-# and no secrets; this workflow needs none.
+# documentation-only PRs are skipped. Fork PRs run with a read-only token and no
+# secrets; this workflow needs none.
+#
+# Pushes are not listed: `release.yml` (`main`) and `deploy-dev.yml` (`dev`) run
+# this workflow through `workflow_call` before they deploy, so a merge is
+# checked exactly once and no deployment can start without it.
 on:
-  push:
-    branches: [main, dev]
-    paths-ignore: ["**.md", "docs/**"]
   pull_request:
     paths-ignore: ["**.md", "docs/**"]
+  workflow_call:
   workflow_dispatch:
 
+# PR runs cancel each other; runs for a deployment never cancel halfway.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
