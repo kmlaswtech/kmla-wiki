@@ -313,6 +313,7 @@ export type Database = {
         Args: { p_reason: string; p_revision_id: number }
         Returns: undefined
       }
+      keepalive: { Args: Record<PropertyKey, never>; Returns: boolean }
       lift_ban: {
         Args: { p_ban_log_id: number; p_reason: string }
         Returns: undefined

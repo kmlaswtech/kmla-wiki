@@ -1,0 +1,38 @@
+name: Keepalive
+
+# Free Supabase projects pause after a week without activity. Once a day this
+# calls `public.keepalive()` (a `select true` only anon may execute) on the
+# wiki dev and prod projects. URLs and publishable keys are public (they ship
+# in the app bundle), so they sit here instead of in secrets or variables.
+# A failed call only leaves a warning: prod has no such function until its
+# first release, and a missed day does not pause anything.
+on:
+  schedule:
+    - cron: "17 3 * * *" # 12:17 KST, off the top of the hour
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call keepalive()
+        run: |
+          ping() {
+            local name="$1" url="$2" key="$3" body
+            if body="$(curl -sS --fail-with-body --retry 3 --max-time 30 \
+                -X POST "$url/rest/v1/rpc/keepalive" \
+                -H "apikey: $key" -H "content-type: application/json" -d '{}' 2>&1)" \
+              && [[ "$body" == "true" ]]; then
+              echo "$name is awake." >> "$GITHUB_STEP_SUMMARY"
+            else
+              # Workflow commands end at the first newline, so keep it on one line.
+              body="$(printf '%s' "$body" | tr '\r\n' '  ')"
+              echo "::warning::keepalive failed for $name: $body"
+              echo "$name: keepalive failed ($body)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }
+          ping dev https://ipwbtdcrrkklqjesftnq.supabase.co sb_publishable_tnPKGrK5RRcJMRT_7LXUyA_Fj68zAuH
+          ping prod https://ubzhxqmmyvwmwinuxntb.supabase.co sb_publishable_lqrAPTaA1fR0OG6Zs8-ZkQ_OmN5QhD9

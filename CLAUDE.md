@@ -70,6 +70,9 @@ Supabase로 만든다. 런타임 앱 서버는 없다.
   Postgres(grant, RLS, 제약, 트리거, 트랜잭션 RPC)가 강제한다.
 - 기본 권한을 막아 두었다(foundation migration). 새 테이블과 함수는 필요한 역할에만 명시적으로
   grant한다. 브라우저가 쓰는 테이블은 grant와 RLS를 같은 migration에 둔다.
+- anon이 부를 수 있는 것은 `public.keepalive()`(`select true`) 하나뿐이다. `keepalive.yml`이 무료
+  프로젝트 일시 정지를 막으려고 일부러 열어 두었다. 권한을 정리할 때 지우지 않는다. 다른 것은
+  anon에게 열지 않는다(`privileges.test.sql`이 검사한다).
 - `security definer` 함수는 안에서 호출자를 확인하고, `set search_path = ''`를 두고, 필요한
   역할에만 EXECUTE를 준다.
 - 실명 같은 숨길 정보는 클라이언트 grant가 없는 `private` 스키마에 둔다.
@@ -119,6 +122,9 @@ CI는 merge를 막지 않고 결과만 알린다. 그 밖의 워크플로:
 
 - `branch-policy.yml`: `main` 대상 PR이 이 저장소의 `dev`에서 왔는지 검사한다(`source-branch`).
   `main` ruleset이 이 검사를 필수로 건다.
+- `keepalive.yml`: 매일 위키 dev·prod Supabase의 `public.keepalive()`를 publishable key로 불러
+  무료 프로젝트가 일시 정지되지 않게 한다. 주소와 key는 공개 값이라 워크플로에 그대로 적는다. 실패는
+  경고만 남긴다.
 - `release-tag.yml`: `main`에 들어온 커밋에 KST 날짜 태그(`v2026.11.17`, 같은 날 두 번째부터
   `.2`)를 붙인다.
 

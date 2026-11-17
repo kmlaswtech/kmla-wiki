@@ -20,11 +20,17 @@ select is_empty(
   'anon has no access to any table'
 );
 
-select is_empty(
+-- 예외는 일시 정지 방지용 `keepalive()` 하나다(아무것도 읽지 않는다).
+select set_eq(
   $$select format('%I.%I', nspname, proname) from app_functions
     where has_function_privilege('anon', oid, 'execute')$$,
-  'anon cannot execute any function'
+  array['public.keepalive'],
+  'anon can execute only keepalive()'
 );
+
+set local role anon;
+select is(public.keepalive(), true, 'anon can call keepalive()');
+reset role;
 
 -- 쓰기는 전부 RPC다.
 select is_empty(
