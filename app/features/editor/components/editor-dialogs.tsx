@@ -4,7 +4,13 @@ import { useState, type ReactNode } from "react";
 
 import type { EditorRequest } from "./editor-ui";
 import { TitleInput } from "./title-input";
-import { baseName, MARK, NODE, SAFE_HREF, templateTitle } from "~/features/markup";
+import {
+  baseName,
+  MARK,
+  NODE,
+  SAFE_HREF,
+  templateTitle,
+} from "~/features/markup";
 import { Button } from "~/shared/ui/button";
 import {
   Dialog,
@@ -89,7 +95,9 @@ function DialogForm({
     >
       <DialogHeader>
         <DialogTitle>{title}</DialogTitle>
-        {description ? <DialogDescription>{description}</DialogDescription> : null}
+        {description ? (
+          <DialogDescription>{description}</DialogDescription>
+        ) : null}
       </DialogHeader>
       <div className="grid gap-3">{children}</div>
       <DialogFooter>{footer}</DialogFooter>
@@ -135,7 +143,10 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
     const [title = "", ...rest] = address.split("#");
     const mark = href
       ? { type: MARK.link, attrs: { href } }
-      : { type: MARK.wikiLink, attrs: { target: title.trim(), section: rest.join("#").trim() } };
+      : {
+          type: MARK.wikiLink,
+          attrs: { target: title.trim(), section: rest.join("#").trim() },
+        };
 
     const chain = editor.chain().focus();
     if (needsLabel) {
@@ -209,7 +220,8 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
         </div>
       ) : selectedText ? (
         <p className="text-sm text-muted-foreground">
-          고른 글자: <span className="font-medium text-foreground">{selectedText}</span>
+          고른 글자:{" "}
+          <span className="font-medium text-foreground">{selectedText}</span>
         </p>
       ) : null}
     </DialogForm>
@@ -273,7 +285,10 @@ function RemoveNodeButton({
         editor
           .chain()
           .focus()
-          .deleteRange({ from: target.pos, to: target.pos + target.node.nodeSize })
+          .deleteRange({
+            from: target.pos,
+            to: target.pos + target.node.nodeSize,
+          })
           .run();
         onDone();
       }}

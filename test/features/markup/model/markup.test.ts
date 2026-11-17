@@ -87,7 +87,13 @@ describe("parseWiki", () => {
     );
     expect(headings).toEqual([
       { depth: 2, text: "개요", id: "개요", index: 0, sectionIndex: 0 },
-      { depth: 3, text: "신청 방법", id: "신청-방법", index: 1, sectionIndex: 1 },
+      {
+        depth: 3,
+        text: "신청 방법",
+        id: "신청-방법",
+        index: 1,
+        sectionIndex: 1,
+      },
       {
         depth: 2,
         text: "신청 방법",
@@ -100,10 +106,11 @@ describe("parseWiki", () => {
 
   it("numbers footnotes in order, including those inside folds", () => {
     const { footnotes, blocks } = parseWiki(
-      doc(
-        para(text("가"), footnote("첫째")),
-        { type: "fold", attrs: { title: "더" }, content: [para(footnote("둘째"))] },
-      ),
+      doc(para(text("가"), footnote("첫째")), {
+        type: "fold",
+        attrs: { title: "더" },
+        content: [para(footnote("둘째"))],
+      }),
     );
     expect(footnotes).toEqual([
       { number: 1, note: "첫째" },
@@ -115,7 +122,10 @@ describe("parseWiki", () => {
   it("reads categories and a redirect from the document attributes", () => {
     const parsed = parseWiki({
       ...doc(para()),
-      attrs: { categories: ["생활", "분류:생활", "분류:기숙사"], redirect: "PRISM" },
+      attrs: {
+        categories: ["생활", "분류:생활", "분류:기숙사"],
+        redirect: "PRISM",
+      },
     });
     expect(parsed.categories).toEqual(["분류:생활", "분류:기숙사"]);
     expect(parsed.redirect).toBe("PRISM");
@@ -265,7 +275,12 @@ describe("sections", () => {
 
   it("returns one section with its subsections", () => {
     expect(getSection(body, 0)).toEqual(
-      doc(heading(2, "가"), para(text("가 본문")), heading(3, "가-1"), para(text("내용"))),
+      doc(
+        heading(2, "가"),
+        para(text("가 본문")),
+        heading(3, "가-1"),
+        para(text("내용")),
+      ),
     );
     expect(getSection(body, 9)).toBeNull();
   });
@@ -279,7 +294,11 @@ describe("sections", () => {
     );
     expect(replaced).toEqual({
       ...withMeta,
-      content: [...body.content.slice(0, 5), heading(2, "나"), para(text("새 글"))],
+      content: [
+        ...body.content.slice(0, 5),
+        heading(2, "나"),
+        para(text("새 글")),
+      ],
     });
   });
 
@@ -330,15 +349,22 @@ describe("docToText", () => {
   });
 
   it("tells apart images with the same description", () => {
-    const image = (id: string) => ({ type: "image", attrs: { id, alt: "급식실" } });
-    expect(docToText(doc(image("aaaaaaaa-0000-4000-8000-000000000000")))).not.toBe(
-      docToText(doc(image("bbbbbbbb-0000-4000-8000-000000000000"))),
-    );
+    const image = (id: string) => ({
+      type: "image",
+      attrs: { id, alt: "급식실" },
+    });
+    expect(
+      docToText(doc(image("aaaaaaaa-0000-4000-8000-000000000000"))),
+    ).not.toBe(docToText(doc(image("bbbbbbbb-0000-4000-8000-000000000000"))));
   });
 
   it("does not break on a heading level out of range", () => {
-    expect(docToText(doc({ ...heading(2, "가"), attrs: { level: -3 } }))).toBe("## 가");
-    expect(docToText(doc({ ...heading(2, "가"), attrs: { level: 1e9 } }))).toBe("#### 가");
+    expect(docToText(doc({ ...heading(2, "가"), attrs: { level: -3 } }))).toBe(
+      "## 가",
+    );
+    expect(docToText(doc({ ...heading(2, "가"), attrs: { level: 1e9 } }))).toBe(
+      "#### 가",
+    );
   });
 
   it("starts a redirect page with the redirect line", () => {
@@ -350,7 +376,10 @@ describe("docToText", () => {
   it("counts only visible text", () => {
     expect(
       visibleTextLength(
-        doc(para({ type: "text", text: "굵게", marks: [{ type: "bold" }] }), para(footnote("각주"))),
+        doc(
+          para({ type: "text", text: "굵게", marks: [{ type: "bold" }] }),
+          para(footnote("각주")),
+        ),
       ),
     ).toBe(4);
   });

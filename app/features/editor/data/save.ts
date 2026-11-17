@@ -1,9 +1,5 @@
 import { rebaseSectionEdit } from "../model/conflict";
-import {
-  emptyDoc,
-  replaceSection,
-  type WikiDoc,
-} from "~/features/markup";
+import { emptyDoc, replaceSection, type WikiDoc } from "~/features/markup";
 import {
   getPageView,
   saveRevision,
@@ -27,10 +23,16 @@ export type SaveOutcome =
    * 다른 사람이 같은 곳을 고쳤다. 내 글은 그대로 두고, 최신 판을 새 기준으로 삼아 차이를 보여 준
    * 뒤 다시 저장하게 한다.
    */
-  | { status: "conflict"; latest: { revisionId: number | null; body: WikiDoc } };
+  | {
+      status: "conflict";
+      latest: { revisionId: number | null; body: WikiDoc };
+    };
 
 /** 편집기의 글(문단 편집이면 그 문단)을 전체 문서로 만든다. 문단을 찾지 못하면 `null`. */
-export function buildFullBody(target: EditTarget, edited: WikiDoc): WikiDoc | null {
+export function buildFullBody(
+  target: EditTarget,
+  edited: WikiDoc,
+): WikiDoc | null {
   return target.sectionIndex === null
     ? edited
     : replaceSection(target.baseBody, target.sectionIndex, edited);

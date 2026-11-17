@@ -11,12 +11,7 @@ import { toast } from "sonner";
 
 import { buildFullBody, saveEdit, type EditTarget } from "../data/save";
 import { isLargeDeletion } from "../model/conflict";
-import {
-  joinDoc,
-  normalizeDoc,
-  splitDoc,
-  type DocMeta,
-} from "../model/doc-io";
+import { joinDoc, normalizeDoc, splitDoc, type DocMeta } from "../model/doc-io";
 import { clearDraft, loadDraft, saveDraft } from "../storage/drafts";
 import { DocMetaFields } from "./doc-meta-fields";
 import { EditorDialogs } from "./editor-dialogs";
@@ -110,11 +105,15 @@ export function EditorForm({
   const [base, setBase] = useState(target);
   const [draft] = useState(() => loadDraft(key, target.sectionIndex));
   // 임시 저장도 편집기 스키마로 한 번 읽는다. 그래야 기준 판과 키 순서까지 같은 값이 된다.
-  const [initial] = useState(() => splitDoc(normalizeDoc(draft?.body ?? editingPart(target))));
+  const [initial] = useState(() =>
+    splitDoc(normalizeDoc(draft?.body ?? editingPart(target))),
+  );
 
   const [content, setContent] = useState<WikiDoc>(initial.content);
   const [meta, setMeta] = useState<DocMeta>(initial.meta);
-  const [showRedirect, setShowRedirect] = useState(initial.meta.redirect !== "");
+  const [showRedirect, setShowRedirect] = useState(
+    initial.meta.redirect !== "",
+  );
   const [summary, setSummary] = useState(draft?.summary ?? "");
   const [resolved, setResolved] = useState(initialResolved);
   const [images, setImages] =
@@ -149,7 +148,9 @@ export function EditorForm({
 
   // 틀 본문·링크 대상·이미지 정보를 다시 받을 글. 가리키는 것(링크·틀·이미지)이 바뀔 때만 바뀐다.
   // 처음 글의 정보는 화면을 열 때 이미 받았다. 임시 저장을 불러왔으면 글이 다르므로 다시 받는다.
-  const [lookup, setLookup] = useState<WikiDoc | null>(() => (draft ? current : null));
+  const [lookup, setLookup] = useState<WikiDoc | null>(() =>
+    draft ? current : null,
+  );
   const lookupKey = useRef(draft ? null : refsKey(current));
 
   const editor = useWikiEditor({
@@ -170,7 +171,10 @@ export function EditorForm({
     () => (showsDiff ? docToText(deferredCurrent) : ""),
     [showsDiff, deferredCurrent],
   );
-  const conflictText = useMemo(() => (conflict ? docToText(conflict) : ""), [conflict]);
+  const conflictText = useMemo(
+    () => (conflict ? docToText(conflict) : ""),
+    [conflict],
+  );
   const baselineText = useMemo(
     () => (showsDiff ? docToText(baseline) : ""),
     [showsDiff, baseline],
@@ -266,7 +270,8 @@ export function EditorForm({
       () => undefined,
     );
     void resolveImages(lookup).then(
-      (next) => !cancelled && setImages((known) => new Map([...known, ...next])),
+      (next) =>
+        !cancelled && setImages((known) => new Map([...known, ...next])),
       () => undefined,
     );
     return () => {
@@ -297,7 +302,9 @@ export function EditorForm({
           .run();
       } catch (caught) {
         toast.error(
-          caught instanceof Error ? caught.message : "이미지를 올리지 못했습니다.",
+          caught instanceof Error
+            ? caught.message
+            : "이미지를 올리지 못했습니다.",
         );
       } finally {
         setUploading((count) => count - 1);

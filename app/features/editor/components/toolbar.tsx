@@ -138,7 +138,11 @@ export function Toolbar({
         <Strikethrough />
       </ToolButton>
 
-      <Menu label="제목" active={state.heading !== undefined} icon={<Heading />}>
+      <Menu
+        label="제목"
+        active={state.heading !== undefined}
+        icon={<Heading />}
+      >
         <DropdownMenuItem onClick={() => chain().setParagraph().run()}>
           본문
         </DropdownMenuItem>
@@ -249,8 +253,7 @@ export function Toolbar({
           접기
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => request({ kind: "template" })}>
-          <Puzzle />
-          틀 넣기
+          <Puzzle />틀 넣기
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => chain().toggleCodeBlock().run()}>
           <Code />

@@ -26,7 +26,8 @@ export function DocMetaFields({
   const redirectInvalid =
     meta.redirect.trim() !== "" && parseTitle(meta.redirect) === null;
 
-  const categoryInvalid = category.trim() !== "" && categoryTitle(category) === null;
+  const categoryInvalid =
+    category.trim() !== "" && categoryTitle(category) === null;
 
   /** 쓴 분류를 붙인다. 쓸 수 없는 이름이면 글자를 남겨 고치게 한다. */
   const addCategory = (name: string) => {
@@ -50,7 +51,8 @@ export function DocMetaFields({
             넘겨주기
           </label>
           <p className="text-xs text-muted-foreground">
-            이 문서를 열면 아래 문서로 바로 넘어갑니다. 다른 이름으로도 찾아오게 할 때 씁니다.
+            이 문서를 열면 아래 문서로 바로 넘어갑니다. 다른 이름으로도 찾아오게
+            할 때 씁니다.
           </p>
           <div className="flex gap-2">
             <div className="flex-1">
@@ -62,7 +64,9 @@ export function DocMetaFields({
                 submitOnEnter={false}
                 placeholder="넘겨줄 문서 이름"
                 aria-invalid={redirectInvalid || undefined}
-                aria-describedby={redirectInvalid ? "doc-redirect-error" : undefined}
+                aria-describedby={
+                  redirectInvalid ? "doc-redirect-error" : undefined
+                }
               />
             </div>
             <Button
@@ -79,8 +83,8 @@ export function DocMetaFields({
           </div>
           {redirectInvalid ? (
             <p id="doc-redirect-error" className="text-sm text-destructive">
-              쓸 수 없는 문서 이름입니다({"[ ] { } | # < >"}는 제목에 쓸 수 없습니다). 이대로
-              저장하면 넘겨주기가 빠집니다.
+              쓸 수 없는 문서 이름입니다({"[ ] { } | # < >"}는 제목에 쓸 수
+              없습니다). 이대로 저장하면 넘겨주기가 빠집니다.
             </p>
           ) : null}
         </div>
@@ -109,7 +113,9 @@ export function DocMetaFields({
                   onClick={() =>
                     onChange({
                       ...meta,
-                      categories: meta.categories.filter((item) => item !== title),
+                      categories: meta.categories.filter(
+                        (item) => item !== title,
+                      ),
                     })
                   }
                 >
@@ -133,7 +139,8 @@ export function DocMetaFields({
         />
         {categoryInvalid ? (
           <p id="doc-category-error" className="text-sm text-destructive">
-            쓸 수 없는 분류 이름입니다({"[ ] { } | # < >"}는 제목에 쓸 수 없습니다).
+            쓸 수 없는 분류 이름입니다({"[ ] { } | # < >"}는 제목에 쓸 수
+            없습니다).
           </p>
         ) : null}
       </div>

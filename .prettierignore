@@ -17,3 +17,9 @@ app/shared/supabase/database.types.ts
 큼온 위키 구현 계획서.md
 
 .claude/settings.local.json
+
+# pnpm이 쓰는 파일. pnpm 출력과 다투지 않는다.
+pnpm-lock.yaml
+
+# psql `\ir`로 불러 쓰는 SQL 조각. Prettier가 다룰 형식이 아니다.
+supabase/tests/helpers.inc

@@ -3,7 +3,11 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { editorExtensions, refreshMissingLinks } from "./extensions";
-import { EditorUiContext, type EditorRequest, type EditorUi } from "./editor-ui";
+import {
+  EditorUiContext,
+  type EditorRequest,
+  type EditorUi,
+} from "./editor-ui";
 import type { ImageInfo } from "~/features/images";
 import type { WikiDoc } from "~/features/markup";
 import type { ResolvedBody } from "~/features/pages";
@@ -132,7 +136,10 @@ export function WikiEditorContent({
   );
   return (
     <EditorUiContext value={ui}>
-      <EditorContent editor={editor} className={cn("wiki-editor-frame", className)} />
+      <EditorContent
+        editor={editor}
+        className={cn("wiki-editor-frame", className)}
+      />
     </EditorUiContext>
   );
 }

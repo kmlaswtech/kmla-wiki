@@ -30,7 +30,10 @@ export function docToText(doc: WikiDoc): string {
   if (categories.length > 0) {
     lines.push("", ...categories.map((category) => `[[${category}]]`));
   }
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** 화면에 보이는 글자의 양. 큰 삭제를 알아챌 때 쓴다(꾸밈 표기는 세지 않는다). */

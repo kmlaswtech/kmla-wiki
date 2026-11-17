@@ -147,7 +147,9 @@ export async function getPageView(
 /** 아직 저장하지 않은 본문을 그리는 데 필요한 것(편집 미리보기). */
 export async function resolveBody(body: WikiDoc): Promise<ResolvedBody> {
   const raw = unwrap(
-    await getSupabase().rpc("resolve_body", { p_body: body as unknown as Json }),
+    await getSupabase().rpc("resolve_body", {
+      p_body: body as unknown as Json,
+    }),
   );
   return toResolved(raw as unknown as RawResolved);
 }

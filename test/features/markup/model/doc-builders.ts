@@ -1,9 +1,16 @@
 import type { WikiDoc, WikiNode } from "~/features/markup";
 
 /** 테스트에서 문서 JSON을 짧게 쓰는 도우미. */
-export const text = (value: string): WikiNode => ({ type: "text", text: value });
+export const text = (value: string): WikiNode => ({
+  type: "text",
+  text: value,
+});
 
-export const link = (target: string, label = target, section = ""): WikiNode => ({
+export const link = (
+  target: string,
+  label = target,
+  section = "",
+): WikiNode => ({
   type: "text",
   text: label,
   marks: [{ type: "wikiLink", attrs: { target, section } }],
@@ -33,4 +40,7 @@ export const param = (index: number): WikiNode => ({
   attrs: { index },
 });
 
-export const doc = (...content: WikiNode[]): WikiDoc => ({ type: "doc", content });
+export const doc = (...content: WikiNode[]): WikiDoc => ({
+  type: "doc",
+  content,
+});

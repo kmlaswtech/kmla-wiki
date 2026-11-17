@@ -12,12 +12,7 @@ import {
   WikiImage,
 } from "../model/schema";
 import type { EditorRequest } from "./editor-ui";
-import {
-  FoldView,
-  FootnoteView,
-  ImageView,
-  TemplateView,
-} from "./node-views";
+import { FoldView, FootnoteView, ImageView, TemplateView } from "./node-views";
 import { MARK, parseTitle, titleKey } from "~/features/markup";
 
 export interface WikiEditorOptions {
@@ -75,9 +70,10 @@ const WikiShortcuts = Extension.create<Pick<WikiEditorOptions, "request">>({
 const missingLinksKey = new PluginKey<DecorationSet>("wikiMissingLinks");
 
 /** 링크 목록을 새로 받은 뒤 빨간 링크 표시를 다시 계산하게 한다. */
-export function refreshMissingLinks(
-  view: { state: EditorState; dispatch: (tr: EditorState["tr"]) => void },
-): void {
+export function refreshMissingLinks(view: {
+  state: EditorState;
+  dispatch: (tr: EditorState["tr"]) => void;
+}): void {
   view.dispatch(view.state.tr.setMeta(missingLinksKey, true));
 }
 
@@ -95,7 +91,9 @@ const MissingLinks = Extension.create<Pick<WikiEditorOptions, "isMissing">>({
       const decorations: Decoration[] = [];
       state.doc.descendants((node, pos) => {
         if (!node.isText) return;
-        const mark = node.marks.find((item) => item.type.name === MARK.wikiLink);
+        const mark = node.marks.find(
+          (item) => item.type.name === MARK.wikiLink,
+        );
         const title = mark ? parseTitle(String(mark.attrs.target ?? "")) : null;
         if (title && isMissing(titleKey(title))) {
           decorations.push(
@@ -127,10 +125,15 @@ const MissingLinks = Extension.create<Pick<WikiEditorOptions, "isMissing">>({
 /** 편집 화면의 확장 전부: 스키마에 노드 뷰와 지름길을 더한다. */
 export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
   const views = new Map<string, AnyExtension>([
-    [Fold.name, Fold.extend({ addNodeView: () => ReactNodeViewRenderer(FoldView) })],
+    [
+      Fold.name,
+      Fold.extend({ addNodeView: () => ReactNodeViewRenderer(FoldView) }),
+    ],
     [
       Template.name,
-      Template.extend({ addNodeView: () => ReactNodeViewRenderer(TemplateView) }),
+      Template.extend({
+        addNodeView: () => ReactNodeViewRenderer(TemplateView),
+      }),
     ],
     [
       WikiImage.name,
@@ -145,9 +148,12 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
   ]);
 
   return [
-    ...schemaExtensions().map((extension) => views.get(extension.name) ?? extension),
+    ...schemaExtensions().map(
+      (extension) => views.get(extension.name) ?? extension,
+    ),
     Placeholder.configure({
-      placeholder: "여기에 내용을 씁니다. 제목은 ## , 목록은 - 로 시작해도 됩니다.",
+      placeholder:
+        "여기에 내용을 씁니다. 제목은 ## , 목록은 - 로 시작해도 됩니다.",
     }),
     WikiShortcuts.configure({ request: options.request }),
     MissingLinks.configure({ isMissing: options.isMissing }),

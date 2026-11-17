@@ -39,7 +39,11 @@ export const REF_CASES: { name: string; body: WikiDoc; expected: string }[] = [
     body: doc(para(link("신성"), text(" 그리고 "), link("신성"))),
     expected: "link=신성 link=신성",
   },
-  { name: "an invalid title", body: doc(para(link("나쁜<제목>"))), expected: "" },
+  {
+    name: "an invalid title",
+    body: doc(para(link("나쁜<제목>"))),
+    expected: "",
+  },
   {
     name: "a link nested in a list, quote and table",
     body: doc(

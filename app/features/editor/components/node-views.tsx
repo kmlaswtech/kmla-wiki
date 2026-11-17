@@ -19,14 +19,21 @@ import {
 import { cn } from "~/shared/lib/utils";
 
 /** 접기: 제목 칸과, 그 아래 바로 고칠 수 있는 내용. 편집 중에는 늘 펼쳐 둔다. */
-export function FoldView({ node, updateAttributes, editor }: ReactNodeViewProps) {
+export function FoldView({
+  node,
+  updateAttributes,
+  editor,
+}: ReactNodeViewProps) {
   return (
     <NodeViewWrapper className="wiki-fold-edit" data-fold="">
       <div
         contentEditable={false}
         className="flex items-center gap-1.5 border-b px-1 pb-1.5"
       >
-        <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <ChevronDown
+          className="size-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
         <input
           type="text"
           value={String(node.attrs.title ?? "")}
@@ -45,7 +52,12 @@ export function FoldView({ node, updateAttributes, editor }: ReactNodeViewProps)
 /**
  * 틀: 지금 틀 본문을 펼쳐 보여 준다. 글은 틀 문서에서 고치므로 여기서는 이름과 값만 바꾼다.
  */
-export function TemplateView({ node, selected, getPos, editor }: ReactNodeViewProps) {
+export function TemplateView({
+  node,
+  selected,
+  getPos,
+  editor,
+}: ReactNodeViewProps) {
   const { resolved, images, request } = useEditorUi();
   const name = String(node.attrs.name ?? "");
   const args = (node.attrs.args as string[] | undefined) ?? [];
@@ -67,10 +79,7 @@ export function TemplateView({ node, selected, getPos, editor }: ReactNodeViewPr
 
   return (
     <NodeViewWrapper
-      className={cn(
-        "wiki-template-edit",
-        selected && "ring-2 ring-ring/60",
-      )}
+      className={cn("wiki-template-edit", selected && "ring-2 ring-ring/60")}
       data-drag-handle=""
     >
       <div
@@ -78,7 +87,9 @@ export function TemplateView({ node, selected, getPos, editor }: ReactNodeViewPr
         className="flex items-center gap-1.5 text-xs text-muted-foreground"
       >
         <Puzzle className="size-3.5" aria-hidden />
-        <span className="font-medium">틀: {title ? baseName(title) : name}</span>
+        <span className="font-medium">
+          틀: {title ? baseName(title) : name}
+        </span>
         {args.length > 0 ? (
           <span className="truncate">({args.join(", ")})</span>
         ) : null}
@@ -100,7 +111,9 @@ export function TemplateView({ node, selected, getPos, editor }: ReactNodeViewPr
         <WikiContent
           document={document}
           existing={resolved.existing}
-          renderImage={(id, alt) => <WikiImage info={images.get(id)} alt={alt} />}
+          renderImage={(id, alt) => (
+            <WikiImage info={images.get(id)} alt={alt} />
+          )}
           embedded
         />
       </div>
@@ -109,7 +122,12 @@ export function TemplateView({ node, selected, getPos, editor }: ReactNodeViewPr
 }
 
 /** 올린 이미지와 그 설명. 설명은 화면 낭독기가 읽는다. */
-export function ImageView({ node, selected, updateAttributes, editor }: ReactNodeViewProps) {
+export function ImageView({
+  node,
+  selected,
+  updateAttributes,
+  editor,
+}: ReactNodeViewProps) {
   const { images } = useEditorUi();
   const id = String(node.attrs.id ?? "");
   const alt = String(node.attrs.alt ?? "");
@@ -136,13 +154,21 @@ export function ImageView({ node, selected, updateAttributes, editor }: ReactNod
 }
 
 /** 각주 번호. 번호는 CSS가 차례대로 매긴다. 누르면 내용을 고친다. */
-export function FootnoteView({ node, selected, getPos, editor }: ReactNodeViewProps) {
+export function FootnoteView({
+  node,
+  selected,
+  getPos,
+  editor,
+}: ReactNodeViewProps) {
   const { request } = useEditorUi();
   const note = String(node.attrs.note ?? "");
   return (
     <NodeViewWrapper
       as="sup"
-      className={cn("wiki-footnote-ref", selected && "rounded-sm ring-2 ring-ring/60")}
+      className={cn(
+        "wiki-footnote-ref",
+        selected && "rounded-sm ring-2 ring-ring/60",
+      )}
     >
       <button
         type="button"

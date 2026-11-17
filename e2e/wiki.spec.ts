@@ -229,7 +229,9 @@ test("툴바로 꾸미고 각주와 표를 넣는다", async ({ page }) => {
   const footnote = page.getByRole("dialog");
   await footnote.getByLabel("각주 내용").fill("출처");
   await footnote.getByRole("button", { name: "넣기" }).click();
-  await expect(editor.getByRole("button", { name: "각주: 출처" })).toBeVisible();
+  await expect(
+    editor.getByRole("button", { name: "각주: 출처" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "표", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "넣기" }).click();
@@ -240,10 +242,14 @@ test("툴바로 꾸미고 각주와 표를 넣는다", async ({ page }) => {
   const content = page.locator(".wiki-content");
   await expect(content.locator("strong")).toHaveText("중요");
   await expect(content.getByRole("table")).toBeVisible();
-  await expect(content.locator("section[data-footnotes]")).toContainText("출처");
+  await expect(content.locator("section[data-footnotes]")).toContainText(
+    "출처",
+  );
 });
 
-test("[[를 치면 링크 창이 열리고, 자동완성으로 문서를 고른다", async ({ page }) => {
+test("[[를 치면 링크 창이 열리고, 자동완성으로 문서를 고른다", async ({
+  page,
+}) => {
   await loginAsMember(page);
   await page.goto(path("자동완성", "edit"));
 
@@ -263,9 +269,9 @@ test("[[를 치면 링크 창이 열리고, 자동완성으로 문서를 고른�
   await dialog.getByLabel("문서 이름 또는 주소").fill("신성");
   await page.keyboard.press("Enter");
   await expect(dialog).toBeHidden();
-  await expect(
-    editorOf(page).locator('a[data-wiki-target="신성"]'),
-  ).toHaveText("신성");
+  await expect(editorOf(page).locator('a[data-wiki-target="신성"]')).toHaveText(
+    "신성",
+  );
 });
 
 test("다른 사람이 먼저 고치면 내 글을 지키고 차이를 보여 준다", async ({

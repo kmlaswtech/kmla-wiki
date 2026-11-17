@@ -158,7 +158,10 @@ test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 
   await writeBody(page, "## 가\n가 본문");
   // 각주는 툴바로 넣는다.
   await page.getByRole("button", { name: "각주", exact: true }).click();
-  await page.getByRole("dialog").getByLabel("각주 내용").fill("각주 내용입니다");
+  await page
+    .getByRole("dialog")
+    .getByLabel("각주 내용")
+    .fill("각주 내용입니다");
   await page.getByRole("dialog").getByRole("button", { name: "넣기" }).click();
   await editorOf(page).press("End");
   await page.keyboard.press("Enter");
@@ -170,7 +173,9 @@ test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 
   await page.keyboard.press("Enter");
   await page.keyboard.type("나 본문");
   await page.getByRole("button", { name: "저장" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(title("읽기"));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    title("읽기"),
+  );
 
   await expect(page.getByText(/^최근 수정 /)).toBeVisible();
 

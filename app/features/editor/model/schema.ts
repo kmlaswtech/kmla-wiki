@@ -5,7 +5,12 @@ import {
   Node,
   type AnyExtension,
 } from "@tiptap/core";
-import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
+import {
+  Table,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from "@tiptap/extension-table";
 import { StarterKit } from "@tiptap/starter-kit";
 
 import {

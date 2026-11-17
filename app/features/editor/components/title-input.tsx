@@ -60,7 +60,9 @@ export function TitleInput({
           if (cancelled) return;
           setSuggestions(
             titles.map((title) =>
-              prefix && title.startsWith(prefix) ? title.slice(prefix.length) : title,
+              prefix && title.startsWith(prefix)
+                ? title.slice(prefix.length)
+                : title,
             ),
           );
           setActive(-1);
@@ -143,7 +145,9 @@ export function TitleInput({
               aria-selected={index === active}
               className={cn(
                 "cursor-pointer rounded px-2 py-1",
-                index === active ? "bg-accent text-accent-foreground" : "hover:bg-muted",
+                index === active
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-muted",
               )}
               onMouseDown={(event) => {
                 // 입력 칸의 blur보다 먼저 고른다.

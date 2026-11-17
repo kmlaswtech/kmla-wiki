@@ -61,7 +61,10 @@ export function joinDoc(content: WikiDoc, meta: DocMeta): WikiDoc {
  */
 export function normalizeDoc(doc: WikiDoc): WikiDoc {
   const { content, meta } = splitDoc(doc);
-  const known = pruneUnknown({ type: "doc", content: content.content }) as WikiDoc;
+  const known = pruneUnknown({
+    type: "doc",
+    content: content.content,
+  }) as WikiDoc;
   try {
     const node = PMNode.fromJSON(wikiSchema(), known);
     return joinDoc(node.toJSON() as WikiDoc, meta);

@@ -79,7 +79,10 @@ describe("WikiContent", () => {
   });
 
   it("marks links to missing pages and keeps links to existing ones plain", () => {
-    show(doc(para(link("신성"), text(" "), link("없는 문서", "없음"))), new Set(["신성"]));
+    show(
+      doc(para(link("신성"), text(" "), link("없는 문서", "없음"))),
+      new Set(["신성"]),
+    );
     expect(screen.getByRole("link", { name: "신성" })).not.toHaveClass(
       "wiki-link-missing",
     );
@@ -98,11 +101,16 @@ describe("WikiContent", () => {
 
   it("wraps sections and collects footnotes at the bottom", () => {
     const { container } = show(
-      doc(heading(2, "가"), para(text("본문"), footnote("출처 https://kmla.online"))),
+      doc(
+        heading(2, "가"),
+        para(text("본문"), footnote("출처 https://kmla.online")),
+      ),
       new Set(),
       true,
     );
-    expect(container.querySelector("[data-wiki-section] h2")).toHaveTextContent("가");
+    expect(container.querySelector("[data-wiki-section] h2")).toHaveTextContent(
+      "가",
+    );
     const notes = container.querySelector("section[data-footnotes]");
     expect(notes).toHaveTextContent("출처");
     expect(
@@ -114,7 +122,9 @@ describe("WikiContent", () => {
     const { container } = render(
       <MemoryRouter>
         <WikiContent
-          document={parseWiki(doc(heading(2, "가"), para(text("본문"), footnote("주석"))))}
+          document={parseWiki(
+            doc(heading(2, "가"), para(text("본문"), footnote("주석"))),
+          )}
           existing={new Set()}
           embedded
         />

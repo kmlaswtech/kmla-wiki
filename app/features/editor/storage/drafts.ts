@@ -43,10 +43,7 @@ export function loadDraft(
 
   try {
     const draft = JSON.parse(raw) as Draft;
-    if (
-      !isWikiDoc(draft.body) ||
-      Date.now() - draft.savedAt > MAX_AGE_MS
-    ) {
+    if (!isWikiDoc(draft.body) || Date.now() - draft.savedAt > MAX_AGE_MS) {
       clearDraft(titleKey, sectionIndex);
       return null;
     }
