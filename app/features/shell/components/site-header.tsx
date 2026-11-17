@@ -22,8 +22,15 @@ export function SiteHeader({ status }: { status: MemberStatus }) {
     const element = header.current;
     if (!element) return;
     const root = window.document.documentElement;
-    const setHeight = (height: number) =>
-      root.style.setProperty("--site-header-height", `${height}px`);
+    // 폭만 바뀌어도(창 크기 조절) 관찰이 불리므로, 높이가 그대로면 문서 전체에 걸린 변수를 다시
+    // 쓰지 않는다.
+    let current = -1;
+    const setHeight = (height: number) => {
+      const rounded = Math.round(height);
+      if (rounded === current) return;
+      current = rounded;
+      root.style.setProperty("--site-header-height", `${rounded}px`);
+    };
     setHeight(element.offsetHeight);
     const observer = new ResizeObserver(([entry]) => {
       const height = entry?.borderBoxSize[0]?.blockSize;

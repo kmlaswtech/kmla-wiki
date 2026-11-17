@@ -27,14 +27,12 @@ export function TableOfContents({
             {/* 번호만 링크 색으로 두어 목차 상자가 온통 파랗게 보이지 않게 한다. */}
             <a
               href={`#${encodeURI(heading.id)}`}
-              className="group/toc hover:underline"
+              className="hover:text-primary hover:underline focus-visible:text-primary"
             >
               <span className="mr-1.5 text-primary tabular-nums">
                 {heading.number}.
               </span>
-              <span className="group-hover/toc:text-primary group-focus-visible/toc:text-primary">
-                {heading.text}
-              </span>
+              {heading.text}
             </a>
           </li>
         ))}
