@@ -1,3 +1,10 @@
 onlyBuiltDependencies:
   - esbuild
   - supabase
+
+overrides:
+  # GHSA-g3hv-75wg-m249: minimatch < 11.0.1. shadcn 4.23 still pins ts-morph 26,
+  # whose @ts-morph/common 0.27 asks for ^10. It only calls `minimatch(path,
+  # pattern)`, and @ts-morph/common 0.29 already uses ^11. Remove once shadcn
+  # moves to a ts-morph that depends on minimatch 11.
+  "@ts-morph/common>minimatch": ^11.0.1
