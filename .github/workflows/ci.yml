@@ -59,8 +59,40 @@ jobs:
 
       # A fresh runner has no volume, so `start` applies every migration and
       # the seed. Services the app and tests never touch are left out.
-      - name: Start Supabase
-        run: pnpm exec supabase start -x studio,edge-runtime,imgproxy,mailpit,logflare,vector,realtime,supavisor
+      # Starting the stack is mostly waiting on image pulls, so it runs in the
+      # background while the Playwright browser installs; "Wait for Supabase"
+      # joins it before anything uses the database. The exit code goes to a
+      # file because a later step's shell cannot `wait` on this one's process
+      # (`|| code=$?` keeps `bash -e` from exiting before it is written).
+      - name: Start Supabase (background)
+        run: |
+          (
+            code=0
+            pnpm exec supabase start -x studio,edge-runtime,imgproxy,mailpit,logflare,vector,realtime,supavisor || code=$?
+            echo "$code" > "$RUNNER_TEMP/supabase-start.exit"
+          ) > "$RUNNER_TEMP/supabase-start.log" 2>&1 &
+
+      - name: Get Playwright version
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{ print $2 }')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps ${{ steps.playwright-cache.outputs.cache-hit == 'true' && '--only-shell' || '' }} chromium
+
+      - name: Wait for Supabase
+        timeout-minutes: 10
+        run: |
+          exit_file="$RUNNER_TEMP/supabase-start.exit"
+          until [[ -f "$exit_file" ]]; do sleep 2; done
+          cat "$RUNNER_TEMP/supabase-start.log"
+          exit "$(cat "$exit_file")"
 
       - name: Test database (pgTAP)
         run: pnpm test:db
@@ -89,20 +121,6 @@ jobs:
             echo "VITE_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
             echo "VITE_DEV_LOGIN=1"
           } >> "$GITHUB_ENV"
-
-      - name: Get Playwright version
-        id: playwright
-        run: echo "version=$(pnpm exec playwright --version | awk '{ print $2 }')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps ${{ steps.playwright-cache.outputs.cache-hit == 'true' && '--only-shell' || '' }} chromium
 
       # playwright.config.ts builds and serves the production output under CI.
       - name: Run E2E
