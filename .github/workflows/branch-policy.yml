@@ -1,0 +1,34 @@
+name: Branch policy
+
+# Only PRs from this repository's `dev` branch may merge into `main`. Rulesets
+# cannot restrict a PR's source branch, so this job checks it and the `main`
+# ruleset requires it (`source-branch`).
+#
+# No paths filter: the required check must also run on docs-only PRs, or it
+# would stay pending forever. It never checks out or runs PR code and uses no
+# secrets.
+on:
+  pull_request:
+    branches: [main]
+    # `edited` re-runs the check when a PR's base branch is changed.
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  source-branch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require dev as the source branch
+        # The PR author controls the branch name, so pass it through env
+        # instead of interpolating it into the script.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [[ "$HEAD_REPO" != "$BASE_REPO" || "$HEAD_REF" != "dev" ]]; then
+            echo "::error::Only PRs from $BASE_REPO:dev may merge into main (got $HEAD_REPO:$HEAD_REF). Open feature PRs against dev."
+            exit 1
+          fi
