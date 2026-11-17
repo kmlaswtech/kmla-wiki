@@ -31,6 +31,7 @@
     "db:reset": "supabase db reset",
     "db:lint": "supabase db lint --local --schema public,private --level warning --fail-on error",
     "db:advisors": "supabase db advisors --local --type security --level warn --fail-on error",
+    "kmla:provider": "node --env-file=supabase/functions/.env scripts/kmla-provider.mjs",
     "db:types": "supabase gen types typescript --local > app/shared/supabase/database.types.ts && prettier --no-semi --ignore-path \"\" --log-level warn --write app/shared/supabase/database.types.ts"
   },
   "dependencies": {
