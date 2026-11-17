@@ -1,4 +1,5 @@
 import { Shuffle, User } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Link, NavLink } from "react-router";
 
 import { SearchBox } from "./search-box";
@@ -10,8 +11,32 @@ const NAV_LINK =
 
 /** 모든 화면 위의 띠: 대문, 검색, 최근 변경, 특수 기능, 아무 문서, 내 정보. */
 export function SiteHeader({ status }: { status: MemberStatus }) {
+  const header = useRef<HTMLElement>(null);
+
+  // 머리띠 높이를 `--site-header-height`로 알린다. `#주소` 이동 여백(app.css)과 편집기 툴바의
+  // 고정 위치가 이 값을 쓴다. 좁은 화면에서는 검색창이 둘째 줄로 내려가 높이가 바뀐다.
+  useEffect(() => {
+    const element = header.current;
+    if (!element) return;
+    const root = window.document.documentElement;
+    const observer = new ResizeObserver(() => {
+      root.style.setProperty(
+        "--site-header-height",
+        `${element.getBoundingClientRect().height}px`,
+      );
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--site-header-height");
+    };
+  }, []);
+
   return (
-    <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
+    <header
+      ref={header}
+      className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur"
+    >
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
         <Link to="/" className="text-lg font-bold whitespace-nowrap">
           큼온 위키

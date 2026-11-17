@@ -451,7 +451,7 @@ export function EditorForm({
             onPickImage={() => fileInput.current?.click()}
             isTemplatePage={namespaceOf(target.title) === "template"}
             onRedirect={sectionMode ? undefined : () => setShowRedirect(true)}
-            className="sticky top-14 z-10"
+            className="sticky top-(--site-header-height,3.5rem) z-10"
           />
         ) : null}
         <input
