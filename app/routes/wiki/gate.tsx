@@ -2,7 +2,20 @@ import { Outlet, redirect, useMatches, useNavigation } from "react-router";
 
 import type { Route } from "./+types/gate";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
-import { ScrollButtons, SiteFooter, SiteHeader } from "~/features/shell";
+import { RecentChangesPanel, useRecentChangesPanel } from "~/features/pages";
+import {
+  SHELL_WIDTH,
+  ScrollButtons,
+  SiteFooter,
+  SiteHeader,
+} from "~/features/shell";
+import { cn } from "~/shared/lib/utils";
+
+/** 곁의 최근 변경을 읽는 자리(`routes.ts`, `recent-panel.ts`). */
+const RECENT_PANEL_PATH = "/_panel/recent";
+
+/** 본문과 최근 변경이 함께 쓰는 상자 모양. 폰에서는 상자 없이 꽉 채운다. */
+const BOX = "sm:rounded-lg sm:border sm:border-surface-border sm:shadow-xs";
 
 /**
  * 위키 화면 전체의 바깥 껍데기이자 단 하나의 입구 검사.
@@ -43,6 +56,8 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
     (match) => (match.handle as WikiShellHandle | undefined)?.editor,
   );
 
+  const recentChanges = useRecentChangesPanel(RECENT_PANEL_PATH);
+
   return (
     <div className="flex min-h-dvh flex-col">
       {navigation.state === "loading" ? (
@@ -60,9 +75,29 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
           에서 볼 수 있습니다.
         </p>
       ) : null}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
-        <Outlet context={loaderData} />
-      </main>
+      {/* 본문과 곁 칸은 바깥(`canvas`) 위에 뜬 상자다. 면과 테두리는 테마 토큰(`surface`,
+       * `panel`)이 정한다. 최근 변경은 넓은 화면(xl)에서 본문 곁에, 그보다 좁으면 본문 아래에 둔다. */}
+      <div className="flex-1 sm:px-4 sm:py-4">
+        <div
+          className={cn(
+            "mx-auto flex flex-col gap-4 xl:flex-row xl:items-start",
+            SHELL_WIDTH,
+          )}
+        >
+          <main className={cn("min-w-0 flex-1 bg-surface px-4 py-6", BOX)}>
+            <Outlet context={loaderData} />
+          </main>
+          <RecentChangesPanel
+            changes={recentChanges}
+            className={cn(
+              "bg-panel px-4 py-4 xl:sticky xl:top-[calc(var(--site-header-height)+1rem)] xl:w-64 xl:shrink-0",
+              BOX,
+              // 좁은 화면의 편집 화면에서는 글 아래에 목록이 붙으면 저장 단추를 찾기 어렵다.
+              editing && "max-xl:hidden",
+            )}
+          />
+        </div>
+      </div>
       <SiteFooter />
       <ScrollButtons className={editing ? "max-sm:hidden" : undefined} />
     </div>

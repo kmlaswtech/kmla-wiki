@@ -68,15 +68,19 @@ test("문서를 읽는다: 목차, 각주, 분류, 틀, 넘겨주기", async ({ 
   await expect(page.getByRole("navigation", { name: "목차" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "각주" })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "생활", exact: true }),
+    page.getByRole("main").getByRole("link", { name: "생활", exact: true }),
   ).toBeVisible();
   // 없는 문서로 가는 링크는 빨간 링크다.
-  await expect(page.getByRole("link", { name: "외출·외박" })).toHaveClass(
-    /wiki-link-missing/,
-  );
+  await expect(
+    page.getByRole("main").getByRole("link", { name: "외출·외박" }),
+  ).toHaveClass(/wiki-link-missing/);
 
   // 하위 문서: 상위 경로와 끼워 넣은 틀.
-  await page.getByRole("link", { name: "귀가/정기 귀가" }).first().click();
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: "귀가/정기 귀가" })
+    .first()
+    .click();
   await expect(
     page.getByRole("navigation", { name: "상위 문서" }),
   ).toContainText("귀가");
@@ -211,7 +215,7 @@ test("특수 기능: 작성이 필요한 문서, 모든 문서", async ({ page }
   await page.getByRole("link", { name: "모든 문서" }).click();
   await page.getByRole("link", { name: "위키", exact: true }).click();
   await expect(
-    page.getByRole("link", { name: "위키:편집 도움말" }),
+    page.getByRole("main").getByRole("link", { name: "위키:편집 도움말" }),
   ).toBeVisible();
 });
 
@@ -327,7 +331,7 @@ test("검색, 이동, 최근 변경", async ({ page }) => {
   await page.getByLabel("문서 검색").fill(`찾을말${RUN}`);
   await page.getByLabel("문서 검색").press("Enter");
   await expect(
-    page.getByRole("link", { name: title("이동 전") }),
+    page.getByRole("main").getByRole("link", { name: title("이동 전") }),
   ).toBeVisible();
 
   await page.goto(path("이동 전", "move"));
@@ -346,7 +350,10 @@ test("검색, 이동, 최근 변경", async ({ page }) => {
 
   await page.goto("/recent");
   await expect(
-    page.getByRole("link", { name: title("이동 후") }).first(),
+    page
+      .getByRole("main")
+      .getByRole("link", { name: title("이동 후") })
+      .first(),
   ).toBeVisible();
 });
 
@@ -380,7 +387,7 @@ test("관리자가 훼손에 대응한다: 다른 편집 보기, 차단, 판 숨
   await page.getByLabel("조회 사유").fill("E2E 훼손 확인");
   await page.getByRole("button", { name: "조회" }).click();
   await expect(
-    page.getByRole("link", { name: title("관리 둘") }),
+    page.getByRole("main").getByRole("link", { name: title("관리 둘") }),
   ).toBeVisible();
 
   // 예전 판 숨기기.

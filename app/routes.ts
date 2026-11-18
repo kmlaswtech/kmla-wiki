@@ -15,6 +15,8 @@ export default [
   route("login", "routes/auth/login.tsx"),
   route("logout", "routes/auth/logout.tsx"),
   route("auth/callback", "routes/auth/callback.tsx"),
+  // 화면이 없는 자리. 위키 껍데기의 곁 최근 변경이 fetcher로 읽는다.
+  route("_panel/recent", "routes/wiki/recent-panel.ts"),
   layout("routes/wiki/gate.tsx", [
     index("routes/wiki/home.tsx"),
     route("w/*", "routes/wiki/page.tsx"),
