@@ -15,9 +15,7 @@ export function TableOfContents({
     <nav
       id={TOC_ID}
       aria-label="목차"
-      // 줄 높이는 본문(`leading-relaxed`)을 물려받지 않고 따로 둔다. 모바일은 글자가 커서 본문 줄
-      // 높이를 쓰면 목차가 너무 성기다.
-      className="my-4 inline-block max-w-full rounded-lg border bg-muted/40 px-4 py-3 text-sm leading-normal"
+      className="my-4 inline-block max-w-full rounded-lg border bg-muted/40 px-4 py-3 text-sm"
     >
       <p className="mb-1 font-semibold">목차</p>
       <ol className="space-y-0.5">
