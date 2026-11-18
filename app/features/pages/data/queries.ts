@@ -220,6 +220,30 @@ export async function listRecentChanges(
   }));
 }
 
+/**
+ * 가장 최근에 바뀐 문서 `limit`개와 그 현재 판, 최신순. 문서마다 한 줄이다(곁의 최근 변경 목록).
+ *
+ * 판 id는 늘기만 하므로 현재 판 id 순서가 곧 마지막으로 바뀐 순서다. 볼 수 없는 판(숨긴 판)은
+ * 빠진다.
+ */
+export async function listRecentlyChangedPages(
+  limit: number,
+): Promise<RecentChange[]> {
+  const rows = unwrap(
+    await getSupabase()
+      .from("pages")
+      .select(
+        `title, revision:revisions!pages_current_revision_fkey(${SUMMARY_COLUMNS})`,
+      )
+      .not("current_revision_id", "is", null)
+      .order("current_revision_id", { ascending: false })
+      .limit(limit),
+  );
+  return rows.flatMap((row) =>
+    row.revision ? [{ ...toSummary(row.revision), pageTitle: row.title }] : [],
+  );
+}
+
 /** 판 비교용. 요청한 판 가운데 볼 수 있는 것만 돌려준다. */
 export async function getRevisionBodies(
   pageId: number,

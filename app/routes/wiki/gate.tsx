@@ -9,7 +9,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/gate";
-import type { clientLoader as recentLoader } from "./recent";
+import type { clientLoader as recentPanelLoader } from "./recent-panel";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
 import { RecentChangesPanel } from "~/features/pages";
 import {
@@ -20,8 +20,12 @@ import {
 } from "~/features/shell";
 import { cn } from "~/shared/lib/utils";
 
+/** 곁의 최근 변경을 읽는 자리(`routes.ts`). */
+const RECENT_PANEL_PATH = "/_panel/recent";
 /** 곁의 최근 변경을 다시 읽는 최소 간격. */
 const RECENT_REFRESH_MS = 30_000;
+/** 한 화면에 머무는 동안 다시 읽을지 살피는 간격. */
+const RECENT_POLL_MS = 60_000;
 
 /** 본문과 최근 변경이 함께 쓰는 상자. 폰에서는 상자 없이 꽉 채운다. */
 const BOX =
@@ -66,18 +70,24 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
     (match) => (match.handle as WikiShellHandle | undefined)?.editor,
   );
 
-  // 곁의 최근 변경은 최근 변경 화면의 clientLoader를 빌려 읽는다. 처음과 화면을 옮길 때 읽되,
-  // 너무 자주 읽지 않는다. 저장 같은 action 뒤에는 React Router가 알아서 다시 읽는다.
-  const recent = useFetcher<typeof recentLoader>({ key: "recent-panel" });
+  // 곁의 최근 변경은 전용 자리(`recent-panel.ts`)에서 fetcher로 읽는다. 처음과 화면을 옮길 때,
+  // 그리고 한 화면에 머무는 동안에도 잠깐씩 다시 읽되 30초보다 자주 읽지 않는다. 저장 같은 action
+  // 뒤에는 React Router가 알아서 다시 읽는다.
+  const recent = useFetcher<typeof recentPanelLoader>({ key: "recent-panel" });
   const { pathname } = useLocation();
   const lastLoad = useRef({ at: 0, pathname: "" });
   const loadRecent = recent.load;
   useEffect(() => {
-    const last = lastLoad.current;
-    if (pathname === last.pathname) return;
-    if (Date.now() - last.at < RECENT_REFRESH_MS) return;
-    lastLoad.current = { at: Date.now(), pathname };
-    void loadRecent("/recent");
+    const refresh = (path: string) => {
+      if (Date.now() - lastLoad.current.at < RECENT_REFRESH_MS) return;
+      lastLoad.current = { at: Date.now(), pathname: path };
+      void loadRecent(RECENT_PANEL_PATH);
+    };
+    if (pathname !== lastLoad.current.pathname) refresh(pathname);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh(pathname);
+    }, RECENT_POLL_MS);
+    return () => window.clearInterval(timer);
   }, [pathname, loadRecent]);
 
   return (

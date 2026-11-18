@@ -17,7 +17,7 @@ export function ThemeSelect() {
 
   return (
     <div
-      role="radiogroup"
+      role="group"
       aria-label="화면 테마"
       className="inline-flex rounded-md border p-0.5"
     >
@@ -27,8 +27,7 @@ export function ThemeSelect() {
           <button
             key={value}
             type="button"
-            role="radio"
-            aria-checked={selected}
+            aria-pressed={selected}
             onClick={() => setTheme(value)}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-sm text-muted-foreground hover:text-foreground coarse:px-3 coarse:py-2",

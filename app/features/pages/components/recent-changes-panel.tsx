@@ -1,27 +1,26 @@
 import { Link } from "react-router";
 
-import { latestChangePerPage } from "../model/recent";
 import type { RecentChange } from "../model/types";
 import { pageHref } from "~/features/markup";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { cn } from "~/shared/lib/utils";
 
-const PANEL_COUNT = 10;
+/** 곁의 최근 변경에 보일 문서 수. */
+export const RECENT_PANEL_COUNT = 10;
 
 /**
- * 화면 곁(넓은 화면) 또는 맨 아래(좁은 화면)의 최근 변경 목록. 문서마다 가장 새 판 하나만 보인다.
+ * 화면 곁(넓은 화면) 또는 맨 아래(좁은 화면)의 최근 변경 목록. 문서마다 한 줄이다.
  *
- * `changes`가 아직 없으면(처음 읽는 중) 자리만 잡아 둔다.
+ * `changes`가 `undefined`면 처음 읽는 중이고, `null`이면 읽지 못했다. 이 목록은 덤이라 읽지 못해도
+ * 본문은 그대로 두고 여기에만 알린다.
  */
 export function RecentChangesPanel({
   changes,
   className,
 }: {
-  changes: readonly RecentChange[] | undefined;
+  changes: readonly RecentChange[] | null | undefined;
   className?: string;
 }) {
-  const rows = changes ? latestChangePerPage(changes, PANEL_COUNT) : null;
-
   return (
     <section aria-labelledby="recent-panel-title" className={className}>
       <div className="mb-1 flex items-baseline justify-between border-b pb-1.5">
@@ -32,17 +31,15 @@ export function RecentChangesPanel({
           더 보기
         </Link>
       </div>
-      {rows === null ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">
-          불러오는 중…
-        </p>
-      ) : rows.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">
-          기록이 없습니다.
-        </p>
+      {changes === undefined ? (
+        <Notice>불러오는 중…</Notice>
+      ) : changes === null ? (
+        <Notice>불러오지 못했습니다.</Notice>
+      ) : changes.length === 0 ? (
+        <Notice>기록이 없습니다.</Notice>
       ) : (
         <ul className="text-sm">
-          {rows.map((change) => (
+          {changes.map((change) => (
             <li
               key={change.id}
               className={cn(
@@ -65,5 +62,11 @@ export function RecentChangesPanel({
         </ul>
       )}
     </section>
+  );
+}
+
+function Notice({ children }: { children: string }) {
+  return (
+    <p className="py-4 text-center text-sm text-muted-foreground">{children}</p>
   );
 }
