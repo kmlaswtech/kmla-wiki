@@ -125,16 +125,13 @@ export function FoldToggle({ label }: { label: string }) {
 
 /**
  * 제목 글자를 눌러도 접고 펴게 한다(나무위키와 같다). 제목 안의 링크·단추는 그대로 동작한다.
- *
- * 손가락으로 쓰는 화면에서는 끈다. 스크롤을 멈추려고 제목을 건드리기만 해도 문단이 접혀 내용이
- * 사라진 것처럼 보인다. 그때는 오른쪽 끝의 접기 단추로만 접는다.
+ * 손가락으로 쓰는 화면도 같다. 스크롤을 손가락으로 멈추는 터치는 click을 일으키지 않는다.
  */
 export function useFoldOnHeadingClick() {
   const fold = use(FoldContext);
   if (!fold) return undefined;
   return (event: React.MouseEvent<HTMLElement>) => {
     if ((event.target as HTMLElement).closest("a, button")) return;
-    if (window.matchMedia("(pointer: coarse)").matches) return;
     // 글자를 드래그해 고르는 중이면 접지 않는다.
     if (window.getSelection()?.toString()) return;
     fold.setOpen(!fold.open);

@@ -3,6 +3,8 @@
 민족사관고등학교 학교생활 위키. React Router 8 프레임워크 모드의 SPA(`ssr: false`)와
 Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바일 환경을 전부 고려한다.
 
+대화는 한국어로 한다.
+
 ## 실행 환경
 
 - 패키지 매니저는 pnpm이다(`package.json`의 `packageManager`). 명령은 `corepack pnpm …`으로 실행한다.
@@ -93,6 +95,8 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
   테스트는 node에서 돈다. DOM이 필요하면 `.tsx`로 만든다.
 - Playwright E2E는 `e2e/`에 있고 로컬 Supabase와 seed가 필요하다. 로컬에서는 dev 서버를,
   `CI=1`에서는 프로덕션 빌드를 `vite preview`로 띄운다.
+- E2E는 로컬에서 돌리지 않고 CI 결과로 확인한다. 단, `e2e/`의 테스트를 고쳤을 때는 고친 파일을
+  로컬에서 돌린다.
 - E2E는 깨지면 위키를 쓸 수 없게 되는 핵심 흐름(로그인, 읽기, 편집·저장, 검색 등)만 지킨다. 기능을
   더할 때마다 E2E를 덧붙이지 않는다. 세부 동작은 Vitest나 pgTAP로 확인하고, 화면 변경으로 기존
   E2E가 깨지면 그 부분만 고친다.
@@ -104,7 +108,8 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
 | 소스 편집 중     | `pnpm typecheck`, `pnpm lint`, 관련 Vitest 파일(`pnpm exec vitest run <file>`)           |
 | 소스 변경 마무리 | `pnpm verify`(typegen, oxlint, tsc, Vitest, build)                                       |
 | DB 변경          | `pnpm db:reset` → `pnpm test:db` → `pnpm db:lint` → `pnpm db:advisors` → `pnpm db:types` |
-| 화면 흐름 변경   | 관련 E2E 파일(`pnpm e2e <file>`)                                                         |
+| 화면 흐름 변경   | 로컬 E2E는 돌리지 않고 CI 결과를 본다                                                    |
+| E2E 테스트 수정  | 고친 E2E 파일(`pnpm e2e <file>`)                                                         |
 | 문서·설정만      | 바뀐 파일에 Prettier                                                                     |
 
 - 실행한 검사와 건너뛴 검사를 구분해 보고한다.
@@ -159,8 +164,8 @@ KMLA Online 저장소와 같은 구조다. 배포는 GitHub Actions에서만 한
 
 - 작업 브랜치는 `dev`에서 따고, PR과 push는 `dev`로 한다. `main`에 직접 커밋하거나 작업 브랜치
   PR을 `main`으로 열지 않는다.
-- `dev` 대상 PR은 squash merge만 된다(ruleset). squash 커밋 제목이 PR 제목이므로, PR 제목도
-  커밋 메시지 규칙을 따른다.
+- `dev` 대상 PR은 squash merge만 된다(ruleset). squash 커밋 제목이 PR 제목이 된다. PR 제목은
+  영어로 짧게 쓴다(예: `Fold sections on tap and tighten mobile spacing`). PR 본문은 한국어로 쓴다.
 - `dev`에 직접 push는 저장소 admin만 할 수 있다(ruleset 우회). 그때는 squash되지 않고 커밋이
   그대로 들어간다.
 - `main`에는 `dev` → `main` PR로만 들어가고, merge commit으로 merge한다(ruleset). 직접 push는

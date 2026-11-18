@@ -151,7 +151,7 @@ function NavMenu({ status }: { status: MemberStatus }) {
             type="button"
             size="icon-sm"
             variant="ghost"
-            // 옆의 검색창·검색 단추와 높이를 맞춘다(`SearchBox`).
+            // 옆의 검색창과 높이를 맞춘다(`SearchBox`).
             className="shrink-0 sm:hidden coarse:size-9"
             aria-label="둘러보기 메뉴"
           />
