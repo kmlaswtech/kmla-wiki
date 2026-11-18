@@ -358,7 +358,7 @@
     @apply coarse:px-1.5 coarse:py-2;
   }
   .wiki-content section[data-footnotes] {
-    @apply mt-10 border-t pt-2 text-sm text-muted-foreground;
+    @apply mt-8 border-t pt-2 text-sm leading-normal text-muted-foreground;
   }
   .wiki-content section[data-footnotes] h2 {
     @apply mt-2 border-0 text-base;

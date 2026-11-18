@@ -1,5 +1,5 @@
 import { Autocomplete } from "@base-ui/react/autocomplete";
-import { FileText, Search } from "lucide-react";
+import { FileText, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Form, useNavigate } from "react-router";
 
@@ -104,7 +104,7 @@ export function SearchBox({ className }: { className?: string }) {
     <Form
       action="/search"
       role="search"
-      className={cn("flex gap-1", className)}
+      className={cn("relative flex", className)}
       onSubmit={(event) => {
         if (trimmed === "") {
           event.preventDefault();
@@ -141,8 +141,13 @@ export function SearchBox({ className }: { className?: string }) {
           aria-label="문서 검색"
           placeholder="문서 검색"
           autoComplete="off"
-          // 높이는 옆의 검색 단추와 맞춘다(손가락으로 누르는 화면에서는 둘 다 한 단계 크다).
-          className="h-8 w-full min-w-0 flex-1 rounded-md border border-input bg-transparent px-2.5 py-1 text-base transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 md:text-sm dark:bg-muted coarse:h-9"
+          // 높이는 머리띠의 다른 단추와 맞춘다(손가락으로 누르는 화면에서는 한 단계 크다). 오른쪽은
+          // 안에 든 단추(지우기, 검색) 자리로 비운다. 브라우저가 붙이는 지우기(×) 단추는 자리가 제각각이라
+          // 숨기고 우리 단추를 쓴다.
+          className={cn(
+            "h-8 w-full min-w-0 flex-1 rounded-md border border-input bg-transparent py-1 pr-9 pl-2.5 text-base transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 md:text-sm dark:bg-muted coarse:h-9 [&::-webkit-search-cancel-button]:appearance-none",
+            typed !== "" && "pr-16 coarse:pr-[4.5rem]",
+          )}
         />
         <Autocomplete.Portal>
           <Autocomplete.Positioner
@@ -188,11 +193,28 @@ export function SearchBox({ className }: { className?: string }) {
           </Autocomplete.Positioner>
         </Autocomplete.Portal>
       </Autocomplete.Root>
+      {/* 지우기·검색 단추는 입력칸 오른쪽 끝 안에 둔다. 세로 가운데는 `translate`가 아니라 `my-auto`로
+          맞춘다. Button이 누를 때 `translate`를 쓴다. */}
+      {typed !== "" ? (
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          className={cn(INNER_BUTTON, "right-8 coarse:right-9")}
+          aria-label="검색어 지우기"
+          onClick={() => {
+            reset();
+            input.current?.focus();
+          }}
+        >
+          <X />
+        </Button>
+      ) : null}
       <Button
         type="submit"
         size="icon-sm"
-        variant="outline"
-        className="coarse:size-9"
+        variant="ghost"
+        className={cn(INNER_BUTTON, "right-0.5")}
         aria-label="검색"
       >
         <Search />
@@ -200,6 +222,10 @@ export function SearchBox({ className }: { className?: string }) {
     </Form>
   );
 }
+
+/** 입력칸 안에 겹쳐 놓는 단추. */
+const INNER_BUTTON =
+  "absolute inset-y-0 my-auto size-7 text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent coarse:size-8";
 
 const ITEM =
   "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground";

@@ -15,7 +15,9 @@ export function TableOfContents({
     <nav
       id={TOC_ID}
       aria-label="목차"
-      className="my-4 inline-block max-w-full rounded-lg border bg-muted/40 px-4 py-3 text-sm"
+      // 줄 높이는 본문(`leading-relaxed`)을 물려받지 않고 따로 둔다. 모바일은 글자가 커서 본문 줄
+      // 높이를 쓰면 목차가 너무 성기다.
+      className="my-4 inline-block max-w-full rounded-lg border bg-muted/40 px-4 py-3 text-sm leading-normal"
     >
       <p className="mb-1 font-semibold">목차</p>
       <ol className="space-y-0.5">
@@ -27,7 +29,7 @@ export function TableOfContents({
             {/* 번호만 링크 색으로 두어 목차 상자가 온통 파랗게 보이지 않게 한다. */}
             <a
               href={`#${encodeURI(heading.id)}`}
-              className="hover:text-primary hover:underline focus-visible:text-primary coarse:inline-block coarse:py-1.5"
+              className="hover:text-primary hover:underline focus-visible:text-primary coarse:inline-block coarse:py-0.5"
             >
               <span className="mr-1.5 text-primary tabular-nums">
                 {heading.number}.
