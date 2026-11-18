@@ -1,5 +1,5 @@
 import { Pencil } from "lucide-react";
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import {
@@ -455,8 +455,9 @@ function WikiLink({
 }
 
 /**
- * 각주 번호. 마우스를 올리면 그 자리에 내용을 띄우고, 누르면 아래 각주 목록으로 내려간다. 목록의
- * 번호를 누르면 다시 이 자리로 올라온다.
+ * 각주 번호. 마우스를 올리면 그 자리에 내용을 띄우고, 마우스나 키보드로 누르면 아래 각주 목록으로
+ * 내려간다. 목록의 번호를 누르면 다시 이 자리로 올라온다. 폰과 패드에서는 올릴 마우스가 없으므로
+ * 손가락으로 누르면 목록으로 내려가지 않고 그 자리에 내용을 띄운다.
  */
 function FootnoteRef({
   number,
@@ -468,15 +469,19 @@ function FootnoteRef({
   embedded: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  /** 지금 누르는 것이 손가락(또는 펜)인지. 누르기는 `pointerdown`이 먼저 오므로 거기서 정한다. */
+  const touchPress = useRef(false);
+  // 목록이 없는 곳(끼워 넣은 틀)이거나 손가락으로 누르면, 누르기로 미리보기를 연다.
+  const pressOpens = () => embedded || touchPress.current;
   return (
     // `data-*`는 이 글을 복사해 편집기에 붙여넣을 때 각주로 되살리는 데 쓴다.
     <sup className="wiki-footnote-ref" data-footnote="" data-note={note}>
       <Popover
         open={open}
         onOpenChange={(next, details) => {
-          // 누르기는 목록으로 내려가는 데 쓴다. 미리보기는 마우스를 올릴 때만 띄운다.
-          // 목록이 없는 곳(끼워 넣은 틀)에서는 누를 때도 띄운다.
-          if (next && details.reason === "trigger-press" && !embedded) return;
+          // 마우스와 키보드의 누르기는 목록으로 내려가는 데 쓴다.
+          if (next && details.reason === "trigger-press" && !pressOpens())
+            return;
           setOpen(next);
         }}
       >
@@ -490,8 +495,14 @@ function FootnoteRef({
               href={embedded ? undefined : `#fn-${number}`}
               id={embedded ? undefined : `fnref-${number}`}
               aria-label={`각주 ${number}`}
+              onPointerDown={(event) => {
+                touchPress.current = event.pointerType !== "mouse";
+              }}
+              onKeyDown={() => {
+                touchPress.current = false;
+              }}
               onClick={(event) => {
-                if (embedded) event.preventDefault();
+                if (pressOpens()) event.preventDefault();
                 else setOpen(false);
               }}
             />
