@@ -206,11 +206,10 @@
   html {
     @apply font-sans;
     color-scheme: light;
-    /* `#주소`로 옮겨 갈 때 대상이 위의 고정 머리띠에 가리지 않게 한다. 머리띠 높이는 화면 폭에 따라
-     * 달라서(좁으면 검색창이 둘째 줄로 내려간다) 머리띠(`SiteHeader`)가 직접 재어 이 변수를 덮어쓴다.
-     * 아래 값은 재기 전의 기본값이다. 편집기 툴바의 고정 위치도 같은 변수를 쓴다. */
+    /* 고정 머리띠의 높이. 화면 폭에 따라 달라서(좁으면 검색창이 둘째 줄로 내려간다) 머리띠
+     * (`SiteHeader`)가 직접 재어 이 변수를 덮어쓴다. 아래 값은 재기 전의 기본값이다. `#주소` 이동
+     * 여백과 편집기 툴바의 고정 위치가 이 변수를 쓴다. */
     --site-header-height: 3.5rem;
-    scroll-padding-top: calc(var(--site-header-height) + 0.75rem);
 
     &.dark {
       color-scheme: dark;
@@ -218,6 +217,13 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* `#주소`로 옮겨 갈 때 대상(제목, 각주, 목차)이 위의 고정 머리띠에 가리지 않게 한다.
+   * `html`의 `scroll-padding-top`으로 주면 안 된다. 머리띠는 늘 그 여백 안에 있어서, 검색창에
+   * 글자를 칠 때마다 브라우저가 입력칸을 여백 아래로 꺼내려고 문서를 조금씩 올린다. */
+  .wiki-content [id],
+  #toc {
+    scroll-margin-top: calc(var(--site-header-height) + 0.75rem);
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
@@ -266,7 +272,7 @@
     @apply mt-8 mb-3 border-b border-foreground/15 pb-1.5 text-2xl leading-9 font-bold;
   }
   .wiki-content h3 {
-    @apply mt-6 mb-2 text-xl leading-8 font-bold;
+    @apply mt-6 mb-2 border-b border-foreground/15 pb-1.5 text-xl leading-8 font-bold;
   }
   .wiki-content h4,
   .wiki-content h5,
@@ -419,7 +425,7 @@
     @apply pointer-events-none absolute inset-0 bg-primary/15;
   }
   .wiki-editor .ProseMirror-selectednode {
-    @apply outline-2 outline-ring/60;
+    @apply outline-1 outline-ring/60;
   }
   .wiki-editor .ProseMirror-gapcursor::after {
     @apply border-foreground;
