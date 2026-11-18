@@ -164,6 +164,7 @@ export function PageArticle({
                   type="button"
                   size="icon-sm"
                   variant="outline"
+                  // 옆의 `sm` 버튼과 높이를 맞춘다.
                   className="sm:hidden coarse:size-9"
                   aria-label="문서 메뉴"
                 />
@@ -173,14 +174,12 @@ export function PageArticle({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-auto min-w-32">
               <DropdownMenuItem
-                className="coarse:py-2.5"
                 render={<Link to={pageHref(page.title, "history")} />}
               >
                 기록
               </DropdownMenuItem>
               {editable ? (
                 <DropdownMenuItem
-                  className="coarse:py-2.5"
                   render={<Link to={pageHref(page.title, "move")} />}
                 >
                   이동

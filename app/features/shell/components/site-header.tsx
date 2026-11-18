@@ -5,6 +5,7 @@ import {
   ShieldAlert,
   Shuffle,
   User,
+  type LucideIcon,
 } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { Link, NavLink } from "react-router";
@@ -17,7 +18,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/shared/ui/dropdown-menu";
 
@@ -95,45 +95,44 @@ export function SiteHeader({
           aria-label="둘러보기"
           className="flex items-center gap-0.5 max-sm:hidden"
         >
-          <NavLink
-            to="/recent"
-            className={({ isActive }) =>
-              cn(NAV_LINK, isActive && "text-foreground")
-            }
-          >
-            최근 변경
-          </NavLink>
-          <NavLink
-            to="/special"
-            className={({ isActive }) =>
-              cn(NAV_LINK, isActive && "text-foreground")
-            }
-          >
-            특수 기능
-          </NavLink>
-          <Link to="/random" className={NAV_LINK} aria-label="아무 문서로">
-            <Shuffle className="size-4" aria-hidden />
-          </Link>
-          {status.isAdmin ? (
+          {navItems(status).map(({ to, label, icon: Icon, iconOnWide }) => (
             <NavLink
-              to="/admin"
+              key={to}
+              to={to}
+              aria-label={iconOnWide ? label : undefined}
               className={({ isActive }) =>
                 cn(NAV_LINK, isActive && "text-foreground")
               }
             >
-              관리
+              {iconOnWide ? <Icon className="size-4" aria-hidden /> : label}
             </NavLink>
-          ) : null}
-          <Link to="/me" className={NAV_LINK} aria-label="내 정보">
-            <User className="size-4" aria-hidden />
-          </Link>
+          ))}
         </nav>
       </div>
     </header>
   );
 }
 
-const MENU_ITEM = "coarse:py-2.5";
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  /** 넓은 화면의 머리띠에서는 아이콘만 보인다. */
+  iconOnWide?: boolean;
+}
+
+/** 둘러보기 항목. 넓은 화면의 머리띠와 좁은 화면의 `☰` 메뉴가 함께 쓴다. */
+function navItems(status: MemberStatus): NavItem[] {
+  return [
+    { to: "/recent", label: "최근 변경", icon: History },
+    { to: "/special", label: "특수 기능", icon: LayoutList },
+    { to: "/random", label: "아무 문서", icon: Shuffle, iconOnWide: true },
+    ...(status.isAdmin
+      ? [{ to: "/admin", label: "관리", icon: ShieldAlert }]
+      : []),
+    { to: "/me", label: "내 정보", icon: User, iconOnWide: true },
+  ];
+}
 
 /** 좁은 화면의 둘러보기 메뉴. 넓은 화면에서는 같은 항목을 머리띠에 펼쳐 둔다. */
 function NavMenu({ status }: { status: MemberStatus }) {
@@ -145,6 +144,7 @@ function NavMenu({ status }: { status: MemberStatus }) {
             type="button"
             size="icon-sm"
             variant="ghost"
+            // 옆의 검색창·검색 단추와 높이를 맞춘다(`SearchBox`).
             className="shrink-0 sm:hidden coarse:size-9"
             aria-label="둘러보기 메뉴"
           />
@@ -153,28 +153,12 @@ function NavMenu({ status }: { status: MemberStatus }) {
         <Menu aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-40">
-        <DropdownMenuItem className={MENU_ITEM} render={<Link to="/recent" />}>
-          <History aria-hidden />
-          최근 변경
-        </DropdownMenuItem>
-        <DropdownMenuItem className={MENU_ITEM} render={<Link to="/special" />}>
-          <LayoutList aria-hidden />
-          특수 기능
-        </DropdownMenuItem>
-        <DropdownMenuItem className={MENU_ITEM} render={<Link to="/random" />}>
-          <Shuffle aria-hidden />
-          아무 문서
-        </DropdownMenuItem>
-        {status.isAdmin ? (
-          <DropdownMenuItem className={MENU_ITEM} render={<Link to="/admin" />}>
-            <ShieldAlert aria-hidden />
-            관리
+        {navItems(status).map(({ to, label, icon: Icon }) => (
+          <DropdownMenuItem key={to} render={<Link to={to} />}>
+            <Icon aria-hidden />
+            {label}
           </DropdownMenuItem>
-        ) : null}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className={MENU_ITEM} render={<Link to="/me" />}>
-          <User aria-hidden />내 정보
-        </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
