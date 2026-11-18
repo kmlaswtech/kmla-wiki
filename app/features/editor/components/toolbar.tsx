@@ -298,7 +298,6 @@ export function Toolbar({
             <Button
               variant="ghost"
               size="icon-sm"
-              className={TOUCH}
               nativeButton={false}
               aria-label="편집 도움말 (새 탭)"
               render={
@@ -319,9 +318,6 @@ export function Toolbar({
     </div>
   );
 }
-
-/** 손가락으로 누르는 화면에서는 단추를 키운다. */
-const TOUCH = "coarse:size-10";
 
 function Divider() {
   return <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
@@ -348,7 +344,6 @@ function ToolButton({
             type="button"
             variant={active ? "secondary" : "ghost"}
             size="icon-sm"
-            className={TOUCH}
             aria-label={label}
             aria-pressed={active}
             disabled={disabled}
@@ -387,7 +382,6 @@ function Menu({
                   type="button"
                   variant={active ? "secondary" : "ghost"}
                   size="icon-sm"
-                  className={TOUCH}
                   aria-label={label}
                 />
               }

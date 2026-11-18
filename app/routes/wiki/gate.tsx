@@ -1,4 +1,4 @@
-import { Outlet, redirect, useLocation, useNavigation } from "react-router";
+import { Outlet, redirect, useMatches, useNavigation } from "react-router";
 
 import type { Route } from "./+types/gate";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
@@ -29,11 +29,19 @@ export function shouldRevalidate() {
   return false;
 }
 
+/** 안쪽 화면이 `handle`로 껍데기에 알리는 것. */
+export interface WikiShellHandle {
+  /** 글을 쓰는 화면이다. */
+  editor?: boolean;
+}
+
 export default function WikiLayout({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   // 편집 화면에서는 폰의 머리띠를 위에 붙이지 않고(툴바와 키보드에 자리를 내준다), 폰에서는 맨
   // 위·아래로 단추를 두지 않는다(편집 요약 칸과 저장 단추를 가린다).
-  const editing = /^\/edit(\/|$)/.test(useLocation().pathname);
+  const editing = useMatches().some(
+    (match) => (match.handle as WikiShellHandle | undefined)?.editor,
+  );
 
   return (
     <div className="min-h-dvh">

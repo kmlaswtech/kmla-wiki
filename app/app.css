@@ -342,9 +342,14 @@
     @apply h-auto max-w-full rounded-md;
   }
   /* 각주. 본문 번호와 아래 목록. */
-  /* 각주 번호는 위첨자라 작다. 손가락으로 누를 때는 둘레를 넓힌다(인라인이라 줄 간격은 그대로다). */
   .wiki-content sup a {
-    @apply px-0.5 no-underline coarse:px-1.5 coarse:py-2;
+    @apply px-0.5 no-underline;
+  }
+  /* 각주 번호는 위첨자라 작다. 손가락으로 누를 때는 둘레를 넓힌다(인라인이라 줄 간격은 그대로다).
+   * 문서 보기와 편집기가 같은 크기를 쓴다. */
+  .wiki-content sup a,
+  .wiki-editor .wiki-footnote-number {
+    @apply coarse:px-1.5 coarse:py-2;
   }
   .wiki-content section[data-footnotes] {
     @apply mt-10 border-t pt-2 text-sm text-muted-foreground;
@@ -384,7 +389,7 @@
   /* 각주 번호는 차례대로 매긴다. 문서 보기와 같은 번호다. */
   /* `sup`은 줄 높이가 0이라(preflight), 그대로 두면 누를 자리가 납작해진다. */
   .wiki-editor .wiki-footnote-number {
-    @apply cursor-pointer px-0.5 leading-none text-primary coarse:px-1.5 coarse:py-2;
+    @apply cursor-pointer px-0.5 leading-none text-primary;
   }
   .wiki-editor .wiki-footnote-number::before {
     counter-increment: footnote;
