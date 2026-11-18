@@ -141,7 +141,8 @@ export function SearchBox({ className }: { className?: string }) {
           aria-label="문서 검색"
           placeholder="문서 검색"
           autoComplete="off"
-          className="h-8 w-full min-w-0 flex-1 rounded-md border border-input bg-transparent px-2.5 py-1 text-base transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 md:text-sm dark:bg-muted"
+          // 높이는 옆의 검색 단추와 맞춘다(손가락으로 누르는 화면에서는 둘 다 한 단계 크다).
+          className="h-8 w-full min-w-0 flex-1 rounded-md border border-input bg-transparent px-2.5 py-1 text-base transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 md:text-sm dark:bg-muted coarse:h-9"
         />
         <Autocomplete.Portal>
           <Autocomplete.Positioner
@@ -186,7 +187,13 @@ export function SearchBox({ className }: { className?: string }) {
           </Autocomplete.Positioner>
         </Autocomplete.Portal>
       </Autocomplete.Root>
-      <Button type="submit" size="icon-sm" variant="outline" aria-label="검색">
+      <Button
+        type="submit"
+        size="icon-sm"
+        variant="outline"
+        className="coarse:size-9"
+        aria-label="검색"
+      >
         <Search />
       </Button>
     </Form>
