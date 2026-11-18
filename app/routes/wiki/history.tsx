@@ -167,7 +167,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
                       checked={compareFrom === revision.id}
                       disabled={disabled}
                       onChange={() => setCompareFrom(revision.id)}
-                      className="size-4 accent-primary"
+                      className="size-4 accent-primary coarse:size-5"
                     />
                     <input
                       type="radio"
@@ -176,7 +176,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
                       checked={compareTo === revision.id}
                       disabled={disabled}
                       onChange={() => setCompareTo(revision.id)}
-                      className="size-4 accent-primary"
+                      className="size-4 accent-primary coarse:size-5"
                     />
                   </span>
                 );

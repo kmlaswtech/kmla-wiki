@@ -109,7 +109,7 @@ export function DocMetaFields({
                 <button
                   type="button"
                   aria-label={`${baseName(title)} 분류 빼기`}
-                  className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground coarse:p-1.5"
                   onClick={() =>
                     onChange({
                       ...meta,

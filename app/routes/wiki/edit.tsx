@@ -1,6 +1,7 @@
 import { Link, useOutletContext } from "react-router";
 
 import type { Route } from "./+types/edit";
+import type { WikiShellHandle } from "./gate";
 import { nonNegativeInt, titleFromParams } from "./title-param";
 import { withVerifiedMember, type MemberStatus } from "~/features/auth";
 import {
@@ -76,6 +77,9 @@ export async function clientLoader({
     blocked,
   };
 }
+
+/** 바깥 껍데기(`gate.tsx`)에 편집 화면임을 알린다. 폰에서 머리띠와 맨 위·아래로 단추를 비킨다. */
+export const handle: WikiShellHandle = { editor: true };
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [{ title: `${loaderData?.target.title ?? ""} 편집 - 큼온 위키` }];

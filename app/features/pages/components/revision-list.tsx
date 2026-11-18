@@ -51,7 +51,7 @@ export function RevisionList<Row extends RevisionSummary>({
             )}
           >
             {leading?.(revision)}
-            <span className="w-20 shrink-0 text-muted-foreground">
+            <span className="shrink-0 text-muted-foreground sm:w-20">
               <RelativeTime value={revision.createdAt} />
             </span>
 
@@ -95,7 +95,8 @@ export function RevisionList<Row extends RevisionSummary>({
             {kind ? <Badge variant="outline">{kind}</Badge> : null}
             {revision.hiddenAt ? <Badge variant="outline">숨김</Badge> : null}
 
-            <span className="min-w-0 flex-1 basis-40 break-words text-muted-foreground">
+            {/* 폰에서는 요약을 둘째 줄 전체로 보낸다. 그대로 두면 시간 칸 밑으로 들어가 시간의 일부처럼 읽힌다. */}
+            <span className="min-w-0 flex-1 basis-40 break-words text-muted-foreground max-sm:order-last max-sm:basis-full">
               {revision.summary}
             </span>
 
