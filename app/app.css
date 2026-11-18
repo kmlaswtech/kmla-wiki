@@ -152,7 +152,8 @@
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.625rem;
+  /* 위키는 글 읽는 화면이라 둥근 모서리를 작게 둔다(lg 6px, md 5px, sm 4px). */
+  --radius: 0.375rem;
   --sidebar: var(--background);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
@@ -257,9 +258,12 @@
   .wiki-content .heading-number {
     @apply mr-1.5 text-primary tabular-nums no-underline;
   }
-  /* 접힌 문단의 제목은 흐리게 해서 접혀 있음을 알린다. */
+  /* 접힌 문단의 제목은 흐리게 해서 접혀 있음을 알린다. 번호의 파랑도 함께 죽인다. */
   .wiki-content [data-collapsed] > :is(h2, h3, h4, h5, h6) {
-    @apply text-muted-foreground;
+    @apply text-muted-foreground/60;
+  }
+  .wiki-content [data-collapsed] > :is(h2, h3, h4, h5, h6) .heading-number {
+    @apply text-primary/45;
   }
   /* 각주 미리보기. 본문 규칙을 쓰되 상자 안에 맞게 여백을 줄인다. */
   .wiki-content.wiki-footnote {

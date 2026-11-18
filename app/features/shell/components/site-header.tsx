@@ -11,6 +11,7 @@ import { useLayoutEffect, useRef } from "react";
 import { Link, NavLink } from "react-router";
 
 import { SearchBox } from "./search-box";
+import { SHELL_WIDTH } from "./shell-width";
 import type { MemberStatus } from "~/features/auth";
 import { cn } from "~/shared/lib/utils";
 import { Button } from "~/shared/ui/button";
@@ -82,7 +83,12 @@ export function SiteHeader({
       )}
     >
       {/* 폰에서도 한 줄이다. 검색창은 늘 보이게 두고, 둘러보기 메뉴만 `☰` 하나로 접는다. */}
-      <div className="mx-auto flex max-w-5xl items-center gap-x-2 px-4 py-2 sm:gap-x-3">
+      <div
+        className={cn(
+          "mx-auto flex items-center gap-x-2 px-4 py-2 sm:gap-x-3",
+          SHELL_WIDTH,
+        )}
+      >
         <Link to="/" className="text-lg font-bold whitespace-nowrap">
           큼온 위키
         </Link>

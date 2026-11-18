@@ -1,8 +1,31 @@
-import { Outlet, redirect, useMatches, useNavigation } from "react-router";
+import { useEffect, useRef } from "react";
+import {
+  Outlet,
+  redirect,
+  useFetcher,
+  useLocation,
+  useMatches,
+  useNavigation,
+} from "react-router";
 
 import type { Route } from "./+types/gate";
+import type { clientLoader as recentLoader } from "./recent";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
-import { ScrollButtons, SiteFooter, SiteHeader } from "~/features/shell";
+import { RecentChangesPanel } from "~/features/pages";
+import {
+  SHELL_WIDTH,
+  ScrollButtons,
+  SiteFooter,
+  SiteHeader,
+} from "~/features/shell";
+import { cn } from "~/shared/lib/utils";
+
+/** 곁의 최근 변경을 다시 읽는 최소 간격. */
+const RECENT_REFRESH_MS = 30_000;
+
+/** 본문과 최근 변경이 함께 쓰는 상자. 폰에서는 상자 없이 꽉 채운다. */
+const BOX =
+  "bg-background sm:rounded-lg sm:border sm:shadow-xs dark:border-transparent dark:shadow-none";
 
 /**
  * 위키 화면 전체의 바깥 껍데기이자 단 하나의 입구 검사.
@@ -43,6 +66,20 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
     (match) => (match.handle as WikiShellHandle | undefined)?.editor,
   );
 
+  // 곁의 최근 변경은 최근 변경 화면의 clientLoader를 빌려 읽는다. 처음과 화면을 옮길 때 읽되,
+  // 너무 자주 읽지 않는다. 저장 같은 action 뒤에는 React Router가 알아서 다시 읽는다.
+  const recent = useFetcher<typeof recentLoader>({ key: "recent-panel" });
+  const { pathname } = useLocation();
+  const lastLoad = useRef({ at: 0, pathname: "" });
+  const loadRecent = recent.load;
+  useEffect(() => {
+    const last = lastLoad.current;
+    if (pathname === last.pathname) return;
+    if (Date.now() - last.at < RECENT_REFRESH_MS) return;
+    lastLoad.current = { at: Date.now(), pathname };
+    void loadRecent("/recent");
+  }, [pathname, loadRecent]);
+
   return (
     <div className="flex min-h-dvh flex-col">
       {navigation.state === "loading" ? (
@@ -61,11 +98,30 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
         </p>
       ) : null}
       {/* 라이트에서는 본문을 연회색 바깥 위의 흰 상자로 띄운다. 폰에서는 상자 없이 꽉 채운다.
-       * 다크는 바깥과 본문이 같은 바탕이라 테두리도 지운다. */}
+       * 다크는 바깥과 본문이 같은 바탕이라 테두리도 지운다.
+       * 최근 변경은 넓은 화면(xl)에서 본문 곁에, 그보다 좁으면 본문 아래에 둔다. */}
       <div className="flex-1 sm:px-4 sm:py-4">
-        <main className="mx-auto w-full max-w-5xl bg-background px-4 py-6 sm:rounded-lg sm:border sm:shadow-xs dark:border-transparent dark:shadow-none">
-          <Outlet context={loaderData} />
-        </main>
+        <div
+          className={cn(
+            "mx-auto flex flex-col gap-4 xl:flex-row xl:items-start",
+            SHELL_WIDTH,
+          )}
+        >
+          <main className={cn("min-w-0 flex-1 px-4 py-6", BOX)}>
+            <Outlet context={loaderData} />
+          </main>
+          <RecentChangesPanel
+            changes={recent.data?.changes}
+            className={cn(
+              "px-4 py-4 xl:sticky xl:top-[calc(var(--site-header-height)+1rem)] xl:w-64 xl:shrink-0",
+              BOX,
+              // 다크는 본문 상자를 띄우지 않으므로, 곁 칸만 카드 면으로 올려 본문과 나눈다.
+              "dark:bg-card",
+              // 좁은 화면의 편집 화면에서는 글 아래에 목록이 붙으면 저장 단추를 찾기 어렵다.
+              editing && "max-xl:hidden",
+            )}
+          />
+        </div>
       </div>
       <SiteFooter />
       <ScrollButtons className={editing ? "max-sm:hidden" : undefined} />
