@@ -63,8 +63,9 @@ function DialogContent({
         // 첫 tabbable(닫기 버튼)에 포커스 링이 붙지 않게 팝업 자신으로 보낸다. `false`로 끄면 inert 트랩 안에 갈 곳이 없다.
         ref={popupRef}
         initialFocus={popupRef}
+        // 폰·패드에서는 화면 위쪽에 붙인다. 가운데에 두면 입력란을 누를 때 올라오는 키보드가 아래 단추를 가린다.
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 overflow-y-auto rounded-xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none max-sm:top-4 max-sm:translate-y-0 sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 coarse:sm:top-16 coarse:sm:translate-y-0",
           className,
         )}
         {...props}

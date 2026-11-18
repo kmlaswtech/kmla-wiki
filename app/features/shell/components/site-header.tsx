@@ -7,14 +7,26 @@ import type { MemberStatus } from "~/features/auth";
 import { cn } from "~/shared/lib/utils";
 
 const NAV_LINK =
-  "rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground";
+  "rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground coarse:px-2.5 coarse:py-2";
 
-/** 모든 화면 위의 띠: 대문, 검색, 최근 변경, 특수 기능, 아무 문서, 내 정보. */
-export function SiteHeader({ status }: { status: MemberStatus }) {
+/**
+ * 모든 화면 위의 띠: 대문, 검색, 최근 변경, 특수 기능, 아무 문서, 내 정보.
+ *
+ * `stickyOnNarrow`를 끄면 좁은 화면에서는 위에 붙지 않고 본문과 함께 올라간다. 편집 화면이 쓴다.
+ * 폰에서는 머리띠가 두 줄이라, 편집기 툴바와 키보드까지 겹치면 글을 쓸 자리가 거의 남지 않는다.
+ */
+export function SiteHeader({
+  status,
+  stickyOnNarrow = true,
+}: {
+  status: MemberStatus;
+  stickyOnNarrow?: boolean;
+}) {
   const header = useRef<HTMLElement>(null);
 
   // 머리띠 높이를 `--site-header-height`로 알린다(기본값은 app.css). `#주소` 이동 여백과 편집기
   // 툴바의 고정 위치가 이 값을 쓴다. 좁은 화면에서는 검색창이 둘째 줄로 내려가 높이가 바뀐다.
+  // 위에 붙지 않을 때는 가리는 것이 없으므로 0이다.
   //
   // 레이아웃 효과로 처음 높이를 곧바로 적는다. `#주소`로 들어온 첫 화면에서 스크롤 복원
   // (`ScrollRestoration`, 이 뒤에 도는 레이아웃 효과)이 대상으로 옮겨 가기 전에 값이 있어야 한다.
@@ -26,7 +38,10 @@ export function SiteHeader({ status }: { status: MemberStatus }) {
     // 쓰지 않는다.
     let current = -1;
     const setHeight = (height: number) => {
-      const rounded = Math.round(height);
+      const pinned =
+        stickyOnNarrow ||
+        window.getComputedStyle(element).position === "sticky";
+      const rounded = pinned ? Math.round(height) : 0;
       if (rounded === current) return;
       current = rounded;
       root.style.setProperty("--site-header-height", `${rounded}px`);
@@ -41,12 +56,15 @@ export function SiteHeader({ status }: { status: MemberStatus }) {
       observer.disconnect();
       root.style.removeProperty("--site-header-height");
     };
-  }, []);
+  }, [stickyOnNarrow]);
 
   return (
     <header
       ref={header}
-      className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur"
+      className={cn(
+        "sticky top-0 z-20 border-b bg-background/95 backdrop-blur",
+        !stickyOnNarrow && "max-sm:static",
+      )}
     >
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
         <Link to="/" className="text-lg font-bold whitespace-nowrap">

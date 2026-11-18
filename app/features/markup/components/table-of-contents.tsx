@@ -27,7 +27,7 @@ export function TableOfContents({
             {/* 번호만 링크 색으로 두어 목차 상자가 온통 파랗게 보이지 않게 한다. */}
             <a
               href={`#${encodeURI(heading.id)}`}
-              className="hover:text-primary hover:underline focus-visible:text-primary"
+              className="hover:text-primary hover:underline focus-visible:text-primary coarse:inline-block coarse:py-1.5"
             >
               <span className="mr-1.5 text-primary tabular-nums">
                 {heading.number}.

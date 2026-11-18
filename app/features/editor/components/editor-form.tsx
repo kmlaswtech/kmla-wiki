@@ -524,7 +524,8 @@ export function EditorForm({
         </p>
       ) : null}
 
-      <div className="flex items-center gap-2">
+      {/* 폰에는 저장 단축키가 없다. 아래로 끝까지 내리지 않아도 저장할 수 있게 화면 아래에 붙인다. */}
+      <div className="flex items-center gap-2 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-4 max-sm:border-t max-sm:bg-background/95 max-sm:px-4 max-sm:py-2 max-sm:backdrop-blur">
         <Button type="submit" disabled={!canSave}>
           {saving ? <Spinner /> : null}
           저장

@@ -90,6 +90,8 @@ export function Toolbar({
       aria-label="편집 도구"
       className={cn(
         "flex flex-wrap items-center gap-0.5 rounded-t-md border bg-muted/90 p-1 backdrop-blur",
+        // 폰에서는 한 줄로 두고 옆으로 민다. 두 줄로 접으면 키보드가 뜬 화면에서 글 쓸 자리를 더 먹는다.
+        "max-sm:[scrollbar-width:none] max-sm:flex-nowrap max-sm:overflow-x-auto",
         className,
       )}
     >
@@ -296,6 +298,7 @@ export function Toolbar({
             <Button
               variant="ghost"
               size="icon-sm"
+              className={TOUCH}
               nativeButton={false}
               aria-label="편집 도움말 (새 탭)"
               render={
@@ -317,8 +320,11 @@ export function Toolbar({
   );
 }
 
+/** 손가락으로 누르는 화면에서는 단추를 키운다. */
+const TOUCH = "coarse:size-10";
+
 function Divider() {
-  return <span aria-hidden className="mx-0.5 h-5 w-px bg-border" />;
+  return <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
 }
 
 function ToolButton({
@@ -342,6 +348,7 @@ function ToolButton({
             type="button"
             variant={active ? "secondary" : "ghost"}
             size="icon-sm"
+            className={TOUCH}
             aria-label={label}
             aria-pressed={active}
             disabled={disabled}
@@ -380,6 +387,7 @@ function Menu({
                   type="button"
                   variant={active ? "secondary" : "ghost"}
                   size="icon-sm"
+                  className={TOUCH}
                   aria-label={label}
                 />
               }

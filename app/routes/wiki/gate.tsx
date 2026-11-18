@@ -1,4 +1,4 @@
-import { Outlet, redirect, useNavigation } from "react-router";
+import { Outlet, redirect, useLocation, useNavigation } from "react-router";
 
 import type { Route } from "./+types/gate";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
@@ -31,6 +31,9 @@ export function shouldRevalidate() {
 
 export default function WikiLayout({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
+  // 편집 화면에서는 폰의 머리띠를 위에 붙이지 않고(툴바와 키보드에 자리를 내준다), 맨 위·아래로
+  // 단추를 두지 않는다(편집 요약 칸과 저장 단추를 가린다).
+  const editing = useLocation().pathname.startsWith("/edit/");
 
   return (
     <div className="min-h-dvh">
@@ -39,7 +42,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
           <div className="h-full w-1/3 animate-navigation-progress bg-primary" />
         </div>
       ) : null}
-      <SiteHeader status={loaderData} />
+      <SiteHeader status={loaderData} stickyOnNarrow={!editing} />
       {loaderData.ban ? (
         <p className="border-b bg-destructive/10 px-4 py-2 text-center text-sm">
           편집이 차단된 상태입니다. 열람은 그대로 할 수 있습니다. 자세한 내용은{" "}
@@ -52,7 +55,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
       <main className="mx-auto max-w-5xl px-4 py-6">
         <Outlet context={loaderData} />
       </main>
-      <ScrollButtons />
+      {editing ? null : <ScrollButtons />}
     </div>
   );
 }

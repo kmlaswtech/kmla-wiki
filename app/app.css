@@ -7,6 +7,8 @@
 
 /* 색·글꼴 토큰은 KMLA Online의 app.css에서 가져왔다. 두 사이트가 같은 서비스로 보이게 한다. */
 @custom-variant dark (&:is(.dark *));
+/* 손가락으로 누르는 화면(폰, 패드). 폭이 넓은 패드도 여기에 든다. 누를 자리를 키우는 데 쓴다. */
+@custom-variant coarse (@media (pointer: coarse));
 
 @theme {
   --font-sans:
@@ -77,13 +79,24 @@
 }
 
 /* Pretendard 한글은 모바일에서 Tailwind 기본 xs(12px)와 sm(14px)이 작게 읽힌다.
- * 글꼴 토큰만 한 단계 미만으로 키워 셸 치수와 컨트롤 크기는 그대로 유지한다. */
-@media (max-width: 767px) {
+ * 글꼴 토큰만 한 단계 미만으로 키워 셸 치수와 컨트롤 크기는 그대로 유지한다. 폭이 넓어도 손가락으로
+ * 쓰는 패드는 같은 거리에서 읽으므로 함께 키운다. */
+@media (max-width: 767px), (pointer: coarse) {
   :root {
     --text-xs: 13px;
     --text-xs--line-height: 16px;
     --text-sm: 15px;
     --text-sm--line-height: 20px;
+  }
+}
+
+/* iOS Safari는 16px보다 작은 입력란에 포커스가 가면 화면을 확대한다. 손가락으로 쓰는 화면에서는
+ * 입력란 글자를 16px 밑으로 내리지 않는다. 레이어 밖에 두어 `text-sm` 같은 유틸리티보다 앞선다. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="file"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
   }
 }
 
@@ -316,8 +329,9 @@
     @apply h-auto max-w-full rounded-md;
   }
   /* 각주. 본문 번호와 아래 목록. */
+  /* 각주 번호는 위첨자라 작다. 손가락으로 누를 때는 둘레를 넓힌다(인라인이라 줄 간격은 그대로다). */
   .wiki-content sup a {
-    @apply px-0.5 no-underline;
+    @apply px-0.5 no-underline coarse:px-1.5 coarse:py-2;
   }
   .wiki-content section[data-footnotes] {
     @apply mt-10 border-t pt-2 text-sm text-muted-foreground;
@@ -357,7 +371,7 @@
   /* 각주 번호는 차례대로 매긴다. 문서 보기와 같은 번호다. */
   /* `sup`은 줄 높이가 0이라(preflight), 그대로 두면 누를 자리가 납작해진다. */
   .wiki-editor .wiki-footnote-number {
-    @apply cursor-pointer px-0.5 leading-none text-primary;
+    @apply cursor-pointer px-0.5 leading-none text-primary coarse:px-1.5 coarse:py-2;
   }
   .wiki-editor .wiki-footnote-number::before {
     counter-increment: footnote;
