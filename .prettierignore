@@ -14,7 +14,6 @@ app/shared/supabase/database.types.ts
 
 # 운영자가 직접 쓰는 문서. 표 정렬을 건드리지 않는다.
 큼온 위키 설계 문서
-큼온 위키 구현 계획서.md
 
 .claude/settings.local.json
 
