@@ -206,8 +206,8 @@
   html {
     @apply font-sans;
     color-scheme: light;
-    /* `#주소`로 옮겨 갈 때 대상이 위의 고정 머리띠에 가리지 않게 한다. 머리띠 높이는 화면 폭에 따라
-     * 달라서(좁으면 검색창이 둘째 줄로 내려간다) 머리띠(`SiteHeader`)가 직접 재어 이 변수를 덮어쓴다.
+    /* `#주소`로 옮겨 갈 때 대상이 위의 고정 머리띠에 가리지 않게 한다. 머리띠 높이는 화면에 따라
+     * 달라서(손가락으로 쓰는 화면은 단추가 크다) 머리띠(`SiteHeader`)가 직접 재어 이 변수를 덮어쓴다.
      * 아래 값은 재기 전의 기본값이다. 편집기 툴바의 고정 위치도 같은 변수를 쓴다. */
     --site-header-height: 3.5rem;
     scroll-padding-top: calc(var(--site-header-height) + 0.75rem);

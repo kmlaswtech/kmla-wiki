@@ -1,4 +1,10 @@
-import { ChevronRight, CornerDownRight, Lock, Pencil } from "lucide-react";
+import {
+  ChevronRight,
+  CornerDownRight,
+  Ellipsis,
+  Lock,
+  Pencil,
+} from "lucide-react";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -17,6 +23,13 @@ import { LinkButton } from "~/shared/components/link-button";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { formatDateTime } from "~/shared/lib/time";
 import { Badge } from "~/shared/ui/badge";
+import { Button } from "~/shared/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "~/shared/ui/dropdown-menu";
 
 interface PageArticleProps {
   view: FoundPage;
@@ -79,9 +92,11 @@ export function PageArticle({
         </nav>
       ) : null}
 
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b pb-3">
-        <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-3xl leading-10 font-bold break-keep">
+      {/* 버튼은 제목 옆에 둔다. 폰에서도 제목 아래에 버튼 줄이 따로 생기지 않게, 좁은 화면에서는
+       * `편집`과 `⋯`만 남기고 나머지를 메뉴에 넣는다. */}
+      <header className="mb-4 flex items-start justify-between gap-3 border-b pb-3 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="flex items-center gap-2 text-3xl leading-10 font-bold break-words break-keep">
             {page.title}
             {page.protection === "admin" ? (
               <Lock
@@ -121,12 +136,13 @@ export function PageArticle({
               }
             >
               <Lock aria-hidden />
-              편집기로 보기
+              <span className="max-sm:sr-only">편집기로 보기</span>
             </LinkButton>
           )}
           <LinkButton
             size="sm"
             variant="outline"
+            className="max-sm:hidden"
             to={pageHref(page.title, "history")}
           >
             기록
@@ -135,11 +151,43 @@ export function PageArticle({
             <LinkButton
               size="sm"
               variant="outline"
+              className="max-sm:hidden"
               to={pageHref(page.title, "move")}
             >
               이동
             </LinkButton>
           ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="outline"
+                  className="sm:hidden coarse:size-9"
+                  aria-label="문서 메뉴"
+                />
+              }
+            >
+              <Ellipsis aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-auto min-w-32">
+              <DropdownMenuItem
+                className="coarse:py-2.5"
+                render={<Link to={pageHref(page.title, "history")} />}
+              >
+                기록
+              </DropdownMenuItem>
+              {editable ? (
+                <DropdownMenuItem
+                  className="coarse:py-2.5"
+                  render={<Link to={pageHref(page.title, "move")} />}
+                >
+                  이동
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {headerActions}
         </div>
       </header>

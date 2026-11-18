@@ -1,10 +1,25 @@
-import { Shuffle, User } from "lucide-react";
+import {
+  History,
+  LayoutList,
+  Menu,
+  ShieldAlert,
+  Shuffle,
+  User,
+} from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { Link, NavLink } from "react-router";
 
 import { SearchBox } from "./search-box";
 import type { MemberStatus } from "~/features/auth";
 import { cn } from "~/shared/lib/utils";
+import { Button } from "~/shared/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/shared/ui/dropdown-menu";
 
 const NAV_LINK =
   "rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground coarse:px-2.5 coarse:py-2";
@@ -13,7 +28,7 @@ const NAV_LINK =
  * 모든 화면 위의 띠: 대문, 검색, 최근 변경, 특수 기능, 아무 문서, 내 정보.
  *
  * `stickyOnNarrow`를 끄면 좁은 화면에서는 위에 붙지 않고 본문과 함께 올라간다. 편집 화면이 쓴다.
- * 폰에서는 머리띠가 두 줄이라, 편집기 툴바와 키보드까지 겹치면 글을 쓸 자리가 거의 남지 않는다.
+ * 폰에서는 편집기 툴바와 키보드까지 겹치면 글을 쓸 자리가 거의 남지 않는다.
  */
 export function SiteHeader({
   status,
@@ -25,8 +40,8 @@ export function SiteHeader({
   const header = useRef<HTMLElement>(null);
 
   // 머리띠 높이를 `--site-header-height`로 알린다(기본값은 app.css). `#주소` 이동 여백과 편집기
-  // 툴바의 고정 위치가 이 값을 쓴다. 좁은 화면에서는 검색창이 둘째 줄로 내려가 높이가 바뀐다.
-  // 위에 붙지 않을 때는 가리는 것이 없으므로 0이다.
+  // 툴바의 고정 위치가 이 값을 쓴다. 손가락으로 쓰는 화면에서는 단추가 커져 높이가 달라진다. 위에
+  // 붙지 않을 때는 가리는 것이 없으므로 0이다.
   //
   // 레이아웃 효과로 처음 높이를 곧바로 적는다. `#주소`로 들어온 첫 화면에서 스크롤 복원
   // (`ScrollRestoration`, 이 뒤에 도는 레이아웃 효과)이 대상으로 옮겨 가기 전에 값이 있어야 한다.
@@ -66,16 +81,19 @@ export function SiteHeader({
         !stickyOnNarrow && "max-sm:static",
       )}
     >
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
+      {/* 폰에서도 한 줄이다. 검색창은 늘 보이게 두고, 둘러보기 메뉴만 `☰` 하나로 접는다. */}
+      <div className="mx-auto flex max-w-5xl items-center gap-x-2 px-4 py-2 sm:gap-x-3">
         <Link to="/" className="text-lg font-bold whitespace-nowrap">
           큼온 위키
         </Link>
 
-        <SearchBox className="order-last w-full sm:order-none sm:w-auto sm:flex-1" />
+        <SearchBox className="min-w-0 flex-1" />
+
+        <NavMenu status={status} />
 
         <nav
           aria-label="둘러보기"
-          className="ml-auto flex items-center gap-0.5"
+          className="flex items-center gap-0.5 max-sm:hidden"
         >
           <NavLink
             to="/recent"
@@ -112,5 +130,52 @@ export function SiteHeader({
         </nav>
       </div>
     </header>
+  );
+}
+
+const MENU_ITEM = "coarse:py-2.5";
+
+/** 좁은 화면의 둘러보기 메뉴. 넓은 화면에서는 같은 항목을 머리띠에 펼쳐 둔다. */
+function NavMenu({ status }: { status: MemberStatus }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            className="shrink-0 sm:hidden coarse:size-9"
+            aria-label="둘러보기 메뉴"
+          />
+        }
+      >
+        <Menu aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-auto min-w-40">
+        <DropdownMenuItem className={MENU_ITEM} render={<Link to="/recent" />}>
+          <History aria-hidden />
+          최근 변경
+        </DropdownMenuItem>
+        <DropdownMenuItem className={MENU_ITEM} render={<Link to="/special" />}>
+          <LayoutList aria-hidden />
+          특수 기능
+        </DropdownMenuItem>
+        <DropdownMenuItem className={MENU_ITEM} render={<Link to="/random" />}>
+          <Shuffle aria-hidden />
+          아무 문서
+        </DropdownMenuItem>
+        {status.isAdmin ? (
+          <DropdownMenuItem className={MENU_ITEM} render={<Link to="/admin" />}>
+            <ShieldAlert aria-hidden />
+            관리
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className={MENU_ITEM} render={<Link to="/me" />}>
+          <User aria-hidden />내 정보
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -2,7 +2,7 @@ import { Outlet, redirect, useMatches, useNavigation } from "react-router";
 
 import type { Route } from "./+types/gate";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
-import { ScrollButtons, SiteHeader } from "~/features/shell";
+import { ScrollButtons, SiteFooter, SiteHeader } from "~/features/shell";
 
 /**
  * 위키 화면 전체의 바깥 껍데기이자 단 하나의 입구 검사.
@@ -44,7 +44,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
   );
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       {navigation.state === "loading" ? (
         <div className="fixed inset-x-0 top-0 z-30 h-0.5 overflow-hidden">
           <div className="h-full w-1/3 animate-navigation-progress bg-primary" />
@@ -60,9 +60,10 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
           에서 볼 수 있습니다.
         </p>
       ) : null}
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
         <Outlet context={loaderData} />
       </main>
+      <SiteFooter />
       <ScrollButtons className={editing ? "max-sm:hidden" : undefined} />
     </div>
   );
