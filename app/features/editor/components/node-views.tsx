@@ -79,7 +79,7 @@ export function TemplateView({
 
   return (
     <NodeViewWrapper
-      className={cn("wiki-template-edit", selected && "ring-2 ring-ring/60")}
+      className={cn("wiki-template-edit", selected && "ring-1 ring-ring/60")}
       data-drag-handle=""
     >
       <div
@@ -134,7 +134,7 @@ export function ImageView({
 
   return (
     <NodeViewWrapper
-      className={cn("wiki-image-edit", selected && "ring-2 ring-ring/60")}
+      className={cn("wiki-image-edit", selected && "ring-1 ring-ring/60")}
       data-drag-handle=""
     >
       <div contentEditable={false}>
@@ -167,7 +167,7 @@ export function FootnoteView({
       as="sup"
       className={cn(
         "wiki-footnote-ref",
-        selected && "rounded-sm ring-2 ring-ring/60",
+        selected && "rounded-sm ring-1 ring-ring/60",
       )}
     >
       <button

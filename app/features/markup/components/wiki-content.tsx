@@ -1,5 +1,5 @@
 import { Pencil } from "lucide-react";
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import {
@@ -454,7 +454,10 @@ function WikiLink({
   );
 }
 
-/** 각주 번호. 아래 목록으로 내려가는 대신 그 자리에 내용을 띄운다. */
+/**
+ * 각주 번호. 마우스를 올리면 그 자리에 내용을 띄우고, 누르면 아래 각주 목록으로 내려간다. 목록의
+ * 번호를 누르면 다시 이 자리로 올라온다.
+ */
 function FootnoteRef({
   number,
   note,
@@ -464,10 +467,19 @@ function FootnoteRef({
   note: string;
   embedded: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   return (
     // `data-*`는 이 글을 복사해 편집기에 붙여넣을 때 각주로 되살리는 데 쓴다.
     <sup className="wiki-footnote-ref" data-footnote="" data-note={note}>
-      <Popover>
+      <Popover
+        open={open}
+        onOpenChange={(next, details) => {
+          // 누르기는 목록으로 내려가는 데 쓴다. 미리보기는 마우스를 올릴 때만 띄운다.
+          // 목록이 없는 곳(끼워 넣은 틀)에서는 누를 때도 띄운다.
+          if (next && details.reason === "trigger-press" && !embedded) return;
+          setOpen(next);
+        }}
+      >
         <PopoverTrigger
           openOnHover
           delay={150}
@@ -478,7 +490,10 @@ function FootnoteRef({
               href={embedded ? undefined : `#fn-${number}`}
               id={embedded ? undefined : `fnref-${number}`}
               aria-label={`각주 ${number}`}
-              onClick={(event) => event.preventDefault()}
+              onClick={(event) => {
+                if (embedded) event.preventDefault();
+                else setOpen(false);
+              }}
             />
           }
         >
@@ -486,16 +501,9 @@ function FootnoteRef({
         </PopoverTrigger>
         <PopoverContent side="top" className="wiki-content wiki-footnote">
           <p>
+            <span className="mr-1 text-primary tabular-nums">[{number}]</span>
             <NoteText note={note} />
           </p>
-          {embedded ? null : (
-            <a
-              href={`#fn-${number}`}
-              className="mt-2 block text-xs text-muted-foreground"
-            >
-              각주 목록으로
-            </a>
-          )}
         </PopoverContent>
       </Popover>
     </sup>
