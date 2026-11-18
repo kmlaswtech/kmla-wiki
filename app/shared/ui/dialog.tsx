@@ -65,7 +65,7 @@ function DialogContent({
         initialFocus={popupRef}
         // 폰·패드에서는 화면 위쪽에 붙인다. 가운데에 두면 입력란을 누를 때 올라오는 키보드가 아래 단추를 가린다.
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 overflow-y-auto rounded-xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none max-sm:top-4 max-sm:translate-y-0 sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 coarse:sm:top-16 coarse:sm:translate-y-0",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 overflow-y-auto rounded-xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none max-sm:top-4 max-sm:translate-y-0 sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 coarse:sm:top-16 coarse:sm:max-h-[calc(100dvh-5rem)] coarse:sm:translate-y-0",
           className,
         )}
         {...props}

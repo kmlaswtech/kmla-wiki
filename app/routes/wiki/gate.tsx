@@ -31,9 +31,9 @@ export function shouldRevalidate() {
 
 export default function WikiLayout({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
-  // 편집 화면에서는 폰의 머리띠를 위에 붙이지 않고(툴바와 키보드에 자리를 내준다), 맨 위·아래로
-  // 단추를 두지 않는다(편집 요약 칸과 저장 단추를 가린다).
-  const editing = useLocation().pathname.startsWith("/edit/");
+  // 편집 화면에서는 폰의 머리띠를 위에 붙이지 않고(툴바와 키보드에 자리를 내준다), 폰에서는 맨
+  // 위·아래로 단추를 두지 않는다(편집 요약 칸과 저장 단추를 가린다).
+  const editing = /^\/edit(\/|$)/.test(useLocation().pathname);
 
   return (
     <div className="min-h-dvh">
@@ -55,7 +55,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
       <main className="mx-auto max-w-5xl px-4 py-6">
         <Outlet context={loaderData} />
       </main>
-      {editing ? null : <ScrollButtons />}
+      <ScrollButtons className={editing ? "max-sm:hidden" : undefined} />
     </div>
   );
 }
