@@ -1,4 +1,7 @@
-import { listRecentlyChangedPages, RECENT_PANEL_COUNT } from "~/features/pages";
+import { listRecentlyChangedPages } from "~/features/pages";
+
+/** 곁의 최근 변경에 보일 문서 수. */
+const RECENT_PANEL_COUNT = 10;
 
 /**
  * 곁의 최근 변경이 fetcher로 읽는 자리. 화면은 없다(`gate.tsx`).

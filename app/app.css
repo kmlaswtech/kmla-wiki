@@ -70,6 +70,9 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-border: var(--surface-border);
+  --color-panel: var(--panel);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -121,6 +124,10 @@
      않게 muted·border를 shadcn 기본값보다 한 단계 진하게 둔다. */
   --canvas: oklch(0.968 0.003 260);
   --background: oklch(1 0 0);
+  /* 바깥 위에 뜬 상자(본문, 곁 칸)와 그 테두리. 곁 칸(`panel`)은 본문 상자와 같은 면이다. */
+  --surface: var(--background);
+  --surface-border: var(--border);
+  --panel: var(--surface);
   /* 순흑은 순백 위에서 거칠다. 대비는 15:1 남짓으로 충분하다. */
   --foreground: oklch(0.25 0.006 260);
   --card: oklch(1 0 0);
@@ -167,8 +174,12 @@
 .dark {
   /* Facebook-style charcoal stack: page, raised card, then filled controls, each a visible step apart. */
   --background: #18191a;
-  /* 다크는 본문 상자를 따로 띄우지 않는다. 바깥과 본문이 같은 바탕이다. */
+  /* 다크는 본문 상자를 따로 띄우지 않는다. 바깥과 본문이 같은 바탕이고 테두리도 없다. 곁 칸만
+     카드 면으로 올려 본문과 나눈다. */
   --canvas: var(--background);
+  --surface: var(--background);
+  --surface-border: transparent;
+  --panel: var(--card);
   --foreground: #e4e6eb;
   --card: #242526;
   --profile-cover: var(--muted);
@@ -314,7 +325,7 @@
   }
   /* 인용은 안내 상자로도 쓴다(틀:오래된 정보 등). */
   .wiki-content blockquote {
-    @apply rounded-r-md border-l-4 border-primary/40 bg-muted/70 px-4 py-2 dark:bg-muted/50;
+    @apply rounded-r-md border-l-4 border-primary/40 bg-muted/60 px-4 py-2;
   }
   .wiki-content blockquote > :first-child {
     @apply mt-0;

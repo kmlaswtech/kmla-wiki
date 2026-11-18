@@ -4,9 +4,10 @@ import type { RecentChange } from "../model/types";
 import { pageHref } from "~/features/markup";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { cn } from "~/shared/lib/utils";
+import { PendingRegion, Skeleton } from "~/shared/ui/skeleton";
 
-/** 곁의 최근 변경에 보일 문서 수. */
-export const RECENT_PANEL_COUNT = 10;
+/** 읽는 동안 자리를 잡아 두는 줄 수. 실제 목록(10줄)보다 적게 두어 너무 길어 보이지 않게 한다. */
+const PENDING_ROWS = 6;
 
 /**
  * 화면 곁(넓은 화면) 또는 맨 아래(좁은 화면)의 최근 변경 목록. 문서마다 한 줄이다.
@@ -32,7 +33,11 @@ export function RecentChangesPanel({
         </Link>
       </div>
       {changes === undefined ? (
-        <Notice>불러오는 중…</Notice>
+        <PendingRegion label="최근 변경을" className="space-y-2 py-1.5">
+          {Array.from({ length: PENDING_ROWS }, (_, index) => (
+            <Skeleton key={index} className="h-4" />
+          ))}
+        </PendingRegion>
       ) : changes === null ? (
         <Notice>불러오지 못했습니다.</Notice>
       ) : changes.length === 0 ? (

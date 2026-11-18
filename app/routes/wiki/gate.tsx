@@ -1,17 +1,8 @@
-import { useEffect, useRef } from "react";
-import {
-  Outlet,
-  redirect,
-  useFetcher,
-  useLocation,
-  useMatches,
-  useNavigation,
-} from "react-router";
+import { Outlet, redirect, useMatches, useNavigation } from "react-router";
 
 import type { Route } from "./+types/gate";
-import type { clientLoader as recentPanelLoader } from "./recent-panel";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
-import { RecentChangesPanel } from "~/features/pages";
+import { RecentChangesPanel, useRecentChangesPanel } from "~/features/pages";
 import {
   SHELL_WIDTH,
   ScrollButtons,
@@ -20,16 +11,11 @@ import {
 } from "~/features/shell";
 import { cn } from "~/shared/lib/utils";
 
-/** 곁의 최근 변경을 읽는 자리(`routes.ts`). */
+/** 곁의 최근 변경을 읽는 자리(`routes.ts`, `recent-panel.ts`). */
 const RECENT_PANEL_PATH = "/_panel/recent";
-/** 곁의 최근 변경을 다시 읽는 최소 간격. */
-const RECENT_REFRESH_MS = 30_000;
-/** 한 화면에 머무는 동안 다시 읽을지 살피는 간격. */
-const RECENT_POLL_MS = 60_000;
 
-/** 본문과 최근 변경이 함께 쓰는 상자. 폰에서는 상자 없이 꽉 채운다. */
-const BOX =
-  "bg-background sm:rounded-lg sm:border sm:shadow-xs dark:border-transparent dark:shadow-none";
+/** 본문과 최근 변경이 함께 쓰는 상자 모양. 폰에서는 상자 없이 꽉 채운다. */
+const BOX = "sm:rounded-lg sm:border sm:border-surface-border sm:shadow-xs";
 
 /**
  * 위키 화면 전체의 바깥 껍데기이자 단 하나의 입구 검사.
@@ -70,25 +56,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
     (match) => (match.handle as WikiShellHandle | undefined)?.editor,
   );
 
-  // 곁의 최근 변경은 전용 자리(`recent-panel.ts`)에서 fetcher로 읽는다. 처음과 화면을 옮길 때,
-  // 그리고 한 화면에 머무는 동안에도 잠깐씩 다시 읽되 30초보다 자주 읽지 않는다. 저장 같은 action
-  // 뒤에는 React Router가 알아서 다시 읽는다.
-  const recent = useFetcher<typeof recentPanelLoader>({ key: "recent-panel" });
-  const { pathname } = useLocation();
-  const lastLoad = useRef({ at: 0, pathname: "" });
-  const loadRecent = recent.load;
-  useEffect(() => {
-    const refresh = (path: string) => {
-      if (Date.now() - lastLoad.current.at < RECENT_REFRESH_MS) return;
-      lastLoad.current = { at: Date.now(), pathname: path };
-      void loadRecent(RECENT_PANEL_PATH);
-    };
-    if (pathname !== lastLoad.current.pathname) refresh(pathname);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") refresh(pathname);
-    }, RECENT_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [pathname, loadRecent]);
+  const recentChanges = useRecentChangesPanel(RECENT_PANEL_PATH);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -107,9 +75,8 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
           에서 볼 수 있습니다.
         </p>
       ) : null}
-      {/* 라이트에서는 본문을 연회색 바깥 위의 흰 상자로 띄운다. 폰에서는 상자 없이 꽉 채운다.
-       * 다크는 바깥과 본문이 같은 바탕이라 테두리도 지운다.
-       * 최근 변경은 넓은 화면(xl)에서 본문 곁에, 그보다 좁으면 본문 아래에 둔다. */}
+      {/* 본문과 곁 칸은 바깥(`canvas`) 위에 뜬 상자다. 면과 테두리는 테마 토큰(`surface`,
+       * `panel`)이 정한다. 최근 변경은 넓은 화면(xl)에서 본문 곁에, 그보다 좁으면 본문 아래에 둔다. */}
       <div className="flex-1 sm:px-4 sm:py-4">
         <div
           className={cn(
@@ -117,16 +84,14 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
             SHELL_WIDTH,
           )}
         >
-          <main className={cn("min-w-0 flex-1 px-4 py-6", BOX)}>
+          <main className={cn("min-w-0 flex-1 bg-surface px-4 py-6", BOX)}>
             <Outlet context={loaderData} />
           </main>
           <RecentChangesPanel
-            changes={recent.data?.changes}
+            changes={recentChanges}
             className={cn(
-              "px-4 py-4 xl:sticky xl:top-[calc(var(--site-header-height)+1rem)] xl:w-64 xl:shrink-0",
+              "bg-panel px-4 py-4 xl:sticky xl:top-[calc(var(--site-header-height)+1rem)] xl:w-64 xl:shrink-0",
               BOX,
-              // 다크는 본문 상자를 띄우지 않으므로, 곁 칸만 카드 면으로 올려 본문과 나눈다.
-              "dark:bg-card",
               // 좁은 화면의 편집 화면에서는 글 아래에 목록이 붙으면 저장 단추를 찾기 어렵다.
               editing && "max-xl:hidden",
             )}

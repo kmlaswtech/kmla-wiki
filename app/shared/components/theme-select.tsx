@@ -1,7 +1,7 @@
 import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 
-import { cn } from "~/shared/lib/utils";
+import { Button } from "~/shared/ui/button";
 
 const OPTIONS: { value: string; label: string; icon: LucideIcon }[] = [
   { value: "system", label: "기기 설정", icon: Monitor },
@@ -11,32 +11,27 @@ const OPTIONS: { value: string; label: string; icon: LucideIcon }[] = [
 
 /**
  * 화면 테마 고르기. 고른 값은 `next-themes`가 이 브라우저에 저장한다(기기마다 따로다).
+ * 편집기 툴바의 켜고 끄는 단추와 같은 모양이다(눌린 것은 `secondary`).
  */
 export function ThemeSelect() {
   const { theme = "system", setTheme } = useTheme();
 
   return (
-    <div
-      role="group"
-      aria-label="화면 테마"
-      className="inline-flex rounded-md border p-0.5"
-    >
+    <div role="group" aria-label="화면 테마" className="inline-flex gap-1">
       {OPTIONS.map(({ value, label, icon: Icon }) => {
         const selected = theme === value;
         return (
-          <button
+          <Button
             key={value}
             type="button"
+            size="sm"
+            variant={selected ? "secondary" : "ghost"}
             aria-pressed={selected}
             onClick={() => setTheme(value)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-sm text-muted-foreground hover:text-foreground coarse:px-3 coarse:py-2",
-              selected && "bg-muted font-medium text-foreground",
-            )}
           >
-            <Icon className="size-4" aria-hidden />
+            <Icon aria-hidden />
             {label}
-          </button>
+          </Button>
         );
       })}
     </div>

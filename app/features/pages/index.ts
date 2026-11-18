@@ -1,9 +1,7 @@
 export { DiffView } from "./components/diff-view";
 export { canEditPage, PageArticle } from "./components/page-article";
-export {
-  RECENT_PANEL_COUNT,
-  RecentChangesPanel,
-} from "./components/recent-changes-panel";
+export { RecentChangesPanel } from "./components/recent-changes-panel";
+export { useRecentChangesPanel } from "./components/use-recent-changes-panel";
 export { RevisionList } from "./components/revision-list";
 export { movePage, revertPage, saveRevision } from "./data/mutations";
 export {
