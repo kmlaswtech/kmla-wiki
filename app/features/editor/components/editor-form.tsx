@@ -473,7 +473,7 @@ export function EditorForm({
           resolved={resolved}
           images={images}
           request={setRequest}
-          className="rounded-b-md border border-t-0 bg-background px-4 py-3 focus-within:ring-2 focus-within:ring-ring/50"
+          className="rounded-b-md border border-t-0 bg-background px-4 py-3 focus-within:ring-1 focus-within:ring-ring/50"
         />
         {uploading > 0 ? (
           <p

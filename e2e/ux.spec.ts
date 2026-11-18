@@ -150,7 +150,7 @@ test("검색창: 정규식 기호가 든 제목도 글자 그대로 찾는다", 
   await expect(option).toBeHidden();
 });
 
-test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 미리보기", async ({
+test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 미리보기와 이동", async ({
   page,
 }) => {
   await loginAsMember(page);
@@ -193,11 +193,18 @@ test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 
   await page.getByRole("button", { name: "가 문단 펼치기" }).click();
   await expect(page.getByText("아래 본문")).toBeVisible();
 
-  // 각주 번호를 누르면 그 자리에 내용이 뜨고, 아래로 내려가지 않는다.
+  // 각주 번호에 마우스를 올리면 그 자리에 내용이 뜬다.
   await page.goto(path("읽기"));
-  await page.getByRole("button", { name: "각주 1" }).click();
+  const footnote = page.getByRole("button", { name: "각주 1" });
+  await footnote.hover();
   await expect(
     page.locator("[data-slot=popover-content]").getByText("각주 내용입니다"),
   ).toBeVisible();
   await expect(page).not.toHaveURL(/#/);
+
+  // 마우스로 누르면 아래 각주 목록으로 가고, 목록의 번호를 누르면 본문으로 돌아온다.
+  await footnote.click();
+  await expect(page).toHaveURL(/#fn-1$/);
+  await page.getByRole("link", { name: "본문으로 돌아가기" }).click();
+  await expect(page).toHaveURL(/#fnref-1$/);
 });
