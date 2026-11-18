@@ -100,7 +100,7 @@ test("검색창: 후보를 골라 바로 가고, 정확한 제목은 Enter로 �
   await page.getByRole("option", { name: /전체 검색/ }).click();
   await expect(page).toHaveURL(/\/search\?q=/);
   await expect(
-    page.getByRole("link", { name: title("검색 대상") }),
+    page.getByRole("main").getByRole("link", { name: title("검색 대상") }),
   ).toBeVisible();
 });
 
