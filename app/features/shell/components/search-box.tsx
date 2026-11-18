@@ -150,7 +150,8 @@ export function SearchBox({ className }: { className?: string }) {
             sideOffset={4}
             align="start"
           >
-            <Autocomplete.Popup className="w-(--anchor-width) max-w-(--available-width) overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-md">
+            {/* 폰에서는 입력칸이 머리띠 한 줄에 들어가 좁다. 후보 제목이 잘리지 않게 최소 폭을 둔다. */}
+            <Autocomplete.Popup className="w-(--anchor-width) max-w-(--available-width) min-w-[min(20rem,var(--available-width))] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-md">
               <Autocomplete.List className="max-h-[min(var(--available-height),22rem)] overflow-y-auto overscroll-contain p-1">
                 {(item: Suggestion) =>
                   item.kind === "page" ? (

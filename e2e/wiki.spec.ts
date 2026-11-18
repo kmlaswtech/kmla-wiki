@@ -135,7 +135,7 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
   await expect(page.locator(".wiki-content")).toContainText("다 내용");
 
   // 기록: 두 판, 내 판 표시, 가명.
-  await page.getByRole("link", { name: "기록" }).click();
+  await page.getByRole("link", { name: "기록", exact: true }).click();
   const rows = page
     .getByRole("listitem")
     .filter({ hasText: /익명#[0-9A-F]{6}/ });
@@ -161,7 +161,7 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
   await expect(page.locator(".wiki-content")).toContainText("나 내용");
   await expect(page.locator(".wiki-content")).not.toContainText("고친 나 내용");
 
-  await page.getByRole("link", { name: "기록" }).click();
+  await page.getByRole("link", { name: "기록", exact: true }).click();
   await expect(rows.first()).toContainText(/r\d+ 판으로 되돌림: 시험 되돌림/);
 });
 
@@ -307,7 +307,7 @@ test("다른 사람이 먼저 고치면 내 글을 지키고 차이를 보여 �
   );
 
   // 두 사람의 가명은 다르다.
-  await page.getByRole("link", { name: "기록" }).click();
+  await page.getByRole("link", { name: "기록", exact: true }).click();
   const rows = page
     .getByRole("listitem")
     .filter({ hasText: /익명#[0-9A-F]{6}/ });

@@ -43,7 +43,8 @@ export function PageAdminMenu({ page, onDone }: PageAdminMenuProps) {
           }
         >
           <ShieldAlert />
-          관리
+          {/* 좁은 화면에서는 아이콘만 둔다(이름은 `aria-label`). */}
+          <span className="max-sm:hidden">관리</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => setOpen("protect")}>
