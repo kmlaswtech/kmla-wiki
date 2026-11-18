@@ -60,9 +60,13 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
           에서 볼 수 있습니다.
         </p>
       ) : null}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
-        <Outlet context={loaderData} />
-      </main>
+      {/* 라이트에서는 본문을 연회색 바깥 위의 흰 상자로 띄운다. 폰에서는 상자 없이 꽉 채운다.
+       * 다크는 바깥과 본문이 같은 바탕이라 테두리도 지운다. */}
+      <div className="flex-1 sm:px-4 sm:py-4">
+        <main className="mx-auto w-full max-w-5xl bg-background px-4 py-6 sm:rounded-lg sm:border sm:shadow-xs dark:border-transparent dark:shadow-none">
+          <Outlet context={loaderData} />
+        </main>
+      </div>
       <SiteFooter />
       <ScrollButtons className={editing ? "max-sm:hidden" : undefined} />
     </div>

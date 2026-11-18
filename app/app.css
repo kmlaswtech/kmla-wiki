@@ -69,6 +69,7 @@
   --color-profile-cover: var(--profile-cover);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-canvas: var(--canvas);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -115,50 +116,58 @@
 
 :root,
 .light {
+  /* 다크처럼 면을 층으로 나눈다. 바깥(`canvas`)은 연회색, 본문 상자·카드·팝오버는 흰색이다.
+     회색은 파랑 쪽으로 아주 살짝 기울여 링크 파랑과 온도를 맞춘다. 흰 바탕에서 면과 선이 사라지지
+     않게 muted·border를 shadcn 기본값보다 한 단계 진하게 둔다. */
+  --canvas: oklch(0.968 0.003 260);
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* 순흑은 순백 위에서 거칠다. 대비는 15:1 남짓으로 충분하다. */
+  --foreground: oklch(0.25 0.006 260);
   --card: oklch(1 0 0);
   --profile-cover: #f3f4f7;
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover-foreground: var(--foreground);
   --tooltip: var(--foreground);
   --tooltip-foreground: var(--background);
-  --primary: oklch(0.546 0.245 262.881);
-  --primary-foreground: oklch(0.97 0.014 254.604);
+  /* 링크·제목 번호에 두루 쓰이므로 채도를 낮춘 파랑이다(흰 바탕 5.6:1). */
+  --primary: oklch(0.52 0.16 255);
+  --primary-foreground: oklch(1 0 0);
   --action: var(--primary);
   --action-foreground: var(--primary-foreground);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.52 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.99 0.01 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --scrollbar-thumb: oklch(0.708 0 0);
-  --ring: oklch(0.546 0.245 262.881);
+  --secondary: oklch(0.948 0.004 260);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.948 0.004 260);
+  --muted-foreground: oklch(0.5 0.012 260);
+  --accent: oklch(0.948 0.004 260);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.55 0.2 27);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.875 0.006 260);
+  --input: oklch(0.85 0.006 260);
+  --scrollbar-thumb: oklch(0.72 0.006 260);
+  --ring: var(--primary);
   --chart-1: oklch(0.809 0.105 251.813);
   --chart-2: oklch(0.623 0.214 259.815);
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
   --radius: 0.625rem;
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.546 0.245 262.881);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 .dark {
   /* Facebook-style charcoal stack: page, raised card, then filled controls, each a visible step apart. */
   --background: #18191a;
+  /* 다크는 본문 상자를 따로 띄우지 않는다. 바깥과 본문이 같은 바탕이다. */
+  --canvas: var(--background);
   --foreground: #e4e6eb;
   --card: #242526;
   --profile-cover: var(--muted);
@@ -216,7 +225,7 @@
     }
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-canvas text-foreground;
   }
   /* `#주소`로 옮겨 갈 때 대상(제목, 각주, 목차)이 위의 고정 머리띠에 가리지 않게 한다.
    * `html`의 `scroll-padding-top`으로 주면 안 된다. 머리띠는 늘 그 여백 안에 있어서, 검색창에
@@ -301,7 +310,7 @@
   }
   /* 인용은 안내 상자로도 쓴다(틀:오래된 정보 등). */
   .wiki-content blockquote {
-    @apply rounded-r-md border-l-4 border-primary/40 bg-muted/50 px-4 py-2;
+    @apply rounded-r-md border-l-4 border-primary/40 bg-muted/70 px-4 py-2 dark:bg-muted/50;
   }
   .wiki-content blockquote > :first-child {
     @apply mt-0;
