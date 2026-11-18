@@ -22,8 +22,9 @@ import {
   DropdownMenuTrigger,
 } from "~/shared/ui/dropdown-menu";
 
+// 높이를 고정해 글자 링크와 아이콘 링크의 hover 면 높이를 맞춘다(패딩으로 주면 아이콘 쪽이 4px 낮다).
 const NAV_LINK =
-  "rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground coarse:px-2.5 coarse:py-2";
+  "inline-flex h-7 items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground coarse:h-9 coarse:px-2.5";
 
 /**
  * 모든 화면 위의 띠: 대문, 검색, 최근 변경, 특수 기능, 아무 문서, 내 정보.
@@ -85,7 +86,7 @@ export function SiteHeader({
       {/* 폰에서도 한 줄이다. 검색창은 늘 보이게 두고, 둘러보기 메뉴만 `☰` 하나로 접는다. */}
       <div
         className={cn(
-          "mx-auto flex items-center gap-x-2 px-4 py-2 sm:gap-x-3",
+          "mx-auto flex items-center gap-x-2 px-4 py-2.5 sm:gap-x-3",
           SHELL_WIDTH,
         )}
       >
