@@ -36,6 +36,20 @@ jobs:
       - name: Verify
         run: pnpm verify
 
+  # The merge ref's first parent is the base branch head. The script uses only
+  # Node built-ins, so the runner's Node is enough and nothing is installed.
+  migrations:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+
+      - name: Check migration order
+        run: node scripts/check-migration-order.mjs HEAD^1 HEAD
+
   # Database checks and E2E share one local Supabase stack: starting it is the
   # slowest step, so it runs once.
   db:
@@ -82,6 +96,11 @@ jobs:
 
       - name: Check database security advisors
         run: pnpm db:advisors
+
+      # Builds migrations and supabase/schemas in shadow databases and fails
+      # when they differ. The running stack is not touched.
+      - name: Check schema drift
+        run: pnpm db:drift
 
       - name: Check generated database types
         run: |
