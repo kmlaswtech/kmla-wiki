@@ -161,7 +161,18 @@ CI·배포 워크플로와 브랜치 ruleset은 `docs/architecture/delivery.md`�
 | 결정 기록(ADR) | `docs/adr/`                     | 왜 그렇게 정했나, 버린 안   |
 | 설명           | `docs/architecture/`            | 복잡한 로직이 동작하는 방식 |
 
-- 구조, 규칙, 의존성을 크게 바꾸는 결정은 ADR로 남긴다. 쓰는 법은 `docs/adr/README.md`에 있다.
-- 작업과 관련된 ADR만 읽는다. 제목 아래에 "대체됨" 줄이 있는 ADR은 지금 유효하지 않다.
+- 결정 이유는 범위에 맞는 곳에 쓴다. 한 코드에만 해당하면 그 코드의 주석에, 여러 곳에 걸치면
+  ADR에 쓴다. ADR은 `docs/adr/README.md`의 세 기준을 모두 채우고 사용자가 승인할 때만 더한다.
+- 작업과 관련된 ADR만 읽는다. 상태가 `채택`이 아닌 ADR은 지금 유효하지 않다.
 - 설명 문서가 다루는 코드를 바꾸면 같은 PR에서 그 문서도 고친다. 문서와 코드가 다르면 코드를
   믿고, 문서를 고친다.
+
+## Skill
+
+- 프로젝트 skill은 `.agents/skills/`에 있고 `skills add`로 설치한다. `pnpm install`이
+  `scripts/link-skills.mjs`로 git에 없는 `.claude/skills/`에 링크한다. 설치할 것이 없어 install이
+  건너뛰면 링크도 안 생기므로, skill을 더한 뒤에는 `pnpm run prepare`를 돌린다.
+- 설치한 skill(`skills-lock.json`에 있음)은 고치지 않는다. 고치면 `computedHash`가 깨지고 업데이트
+  때 사라진다. skill을 더하거나 빼는 것은 사용자가 정한다.
+- skill이 이 문서와 다르면 이 문서를 따르고 차이를 보고한다. Next.js 전용 API나 런타임 앱 서버가
+  필요한 권장은 이 SPA에 적용하지 않는다.

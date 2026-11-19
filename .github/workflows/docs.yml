@@ -28,7 +28,7 @@ jobs:
       - name: Check agent rule files
         run: |
           status=0
-          # Installed agent skills (`.agents/`, `.claude/skills/`) are third-party files.
+          # Installed agent skills (`.agents/`) are third-party files.
           while IFS= read -r file; do
             case "$(basename "$file")" in
               AGENTS.md)
@@ -46,7 +46,7 @@ jobs:
                 fi
                 ;;
             esac
-          done < <(git ls-files -- '**/AGENTS.md' 'AGENTS.md' '**/CLAUDE.md' 'CLAUDE.md' ':!:.agents/**' ':!:.claude/skills/**')
+          done < <(git ls-files -- '**/AGENTS.md' 'AGENTS.md' '**/CLAUDE.md' 'CLAUDE.md' ':!:.agents/**')
           exit $status
 
       - uses: ./.github/actions/setup

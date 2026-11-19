@@ -25,4 +25,5 @@ supabase/tests/helpers.inc
 
 # Third-party agent skills installed with `skills add`.
 .agents/
+# Links to .agents/skills, made by scripts/link-skills.mjs.
 .claude/skills/
