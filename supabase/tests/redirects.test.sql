@@ -3,6 +3,24 @@ begin;
 \ir helpers.inc
 select * from no_plan();
 
+-- 저장 규칙을 거치지 않고 넘겨주기 문서를 만든다. 이중 넘겨주기와 고리는 저장(`save_revision`)으로는
+-- 생기지 않지만, 대상이 나중에 넘겨주기가 되면 생길 수 있다. 그런 상태를 만들 때만 쓴다. postgres로 부른다.
+create function pg_temp.force_redirect(p_title text, p_target text) returns void
+language plpgsql as $$
+declare
+  v_id bigint;
+begin
+  insert into public.pages (title) values (p_title) returning id into v_id;
+  perform private.write_revision(
+    v_id,
+    (select member.id from private.members as member
+     join auth.users as account on account.id = member.auth_user_id
+     where account.email = 'alice@wiki.test'),
+    public.wiki('#넘겨주기 [[' || p_target || ']]'), '', 'edit'
+  );
+end;
+$$;
+
 select login(:alice);
 select page_id as target_id from public.save_revision('기숙사', null, wiki('기숙사 본문')) \gset
 
@@ -50,13 +68,17 @@ select is(public.get_page_view('긱사') ->> 'title', '기숙사', 'one hop is f
 select is(public.get_page_view('긱사') -> 'redirect', 'null'::jsonb,
   'the target is a normal page, so there is no redirect card');
 
-select * from public.save_revision('기숙', null, wiki('#넘겨주기 [[긱사]]'));
+select logout();
+select pg_temp.force_redirect('기숙', '긱사');
+select login(:alice);
 select is(public.get_page_view('기숙') ->> 'title', '기숙사', 'a chain of redirects is followed');
 select is(public.get_page_view('기숙') ->> 'redirected_from', '기숙',
   'and remembers the first title');
 
 select * from public.save_revision('고리 1', null, wiki('#넘겨주기 [[고리 2]]'));
-select * from public.save_revision('고리 2', null, wiki('#넘겨주기 [[고리 1]]'));
+select logout();
+select pg_temp.force_redirect('고리 2', '고리 1');
+select login(:alice);
 select is(public.get_page_view('고리 1') ->> 'title', '고리 2', 'a loop stops instead of spinning');
 select is(public.get_page_view('고리 1') #>> '{redirect,state}', 'redirect',
   'and the stop is shown as a redirect to a redirect');
@@ -67,6 +89,43 @@ select is(public.get_page_view('끊김') #>> '{redirect,state}', 'missing',
   'and says its target is missing');
 select is(public.get_page_view('끊김') #>> '{redirect,target}', '없는 문서',
   'and names the missing target');
+
+-- ── 저장이 넘겨주기를 푼다 ───────────────────────────────────────────────────
+select * from public.save_revision('기숙사 별칭', null, wiki('#넘겨주기 [[긱사]]'));
+select is((select redirect_target from public.pages where title = '기숙사 별칭'), '기숙사',
+  'saving a redirect to a redirect stores the final page');
+select * from public.save_revision('기숙사 다른 이름', null, wiki('#넘겨주기 [[기숙]]'));
+select is((select redirect_target from public.pages where title = '기숙사 다른 이름'), '기숙사',
+  'a longer chain is followed to the end');
+select throws_ok(
+  $$select * from public.save_revision('고리 3', null, wiki('#넘겨주기 [[고리 1]]'))$$,
+  'WK015', 'redirect loop', 'a redirect into a loop is refused'
+);
+select throws_ok(
+  $$select * from public.save_revision('끊김 2', null, wiki('#넘겨주기 [[끊김]]'))$$,
+  'WK015', 'redirect to a broken redirect', 'a redirect to a broken redirect is refused'
+);
+select throws_ok(
+  $$select * from public.save_revision('기숙사',
+    (select current_revision_id from public.pages where title = '기숙사'),
+    wiki('#넘겨주기 [[긱사]]'))$$,
+  'WK015', 'redirect to itself', 'a redirect that comes back to the page is refused'
+);
+select lives_ok(
+  $$select * from public.save_revision('없는 곳', null, wiki('#넘겨주기 [[아직 없는 문서]]'))$$,
+  'a redirect to a page that does not exist yet still saves'
+);
+
+-- 되돌리기도 옛 넘겨주기 판을 지금의 최종 문서로 되살린다.
+select revision_id as stale_target_rev
+from public.save_revision('되돌림 대상', null, wiki('되돌림 대상 본문')) \gset
+select revision_id as stale_redirect_rev
+from public.save_revision('되돌림', null, wiki('#넘겨주기 [[되돌림 대상]]')) \gset
+select * from public.save_revision('되돌림', :stale_redirect_rev, wiki('되돌림 본문'));
+select * from public.save_revision('되돌림 대상', :stale_target_rev, wiki('#넘겨주기 [[기숙사]]'));
+select * from public.revert_page(:stale_redirect_rev);
+select is((select redirect_target from public.pages where title = '되돌림'), '기숙사',
+  'reverting to an old redirect stores the current final page');
 
 select is(public.get_page_view('긱사', false) #>> '{redirect,state}', 'ok',
   'opening the redirect itself reports a healthy target');
@@ -134,7 +193,9 @@ select is((select redirect_target from public.pages where title = '점호 시간
 -- 넘겨주기 문서를 옮기면 남기는 넘겨주기와 따라오는 넘겨주기가 그 대상을 가리킨다.
 select * from public.save_revision('야자', null, wiki('야자 본문'));
 select * from public.save_revision('야간 자습', null, wiki('#넘겨주기 [[야자]]'));
-select * from public.save_revision('야자습', null, wiki('#넘겨주기 [[야간 자습]]'));
+select logout();
+select pg_temp.force_redirect('야자습', '야간 자습');
+select login(:alice);
 select * from public.move_page('야간 자습', '야간자습');
 select is((select redirect_target from public.pages where title = '야간 자습'), '야자',
   'moving a redirect leaves a redirect to its target, not a double redirect');
@@ -177,8 +238,46 @@ select set_eq(
            ('고리 2', '고리 1', '고리 2'),
            ('옛 넘겨주기', '옛 넘겨주기 2', '기숙사'),
            ('끊김', '없는 문서', null),
+           ('없는 곳', '아직 없는 문서', null),
            ('사라짐', '사라질 문서', null)$$,
   'broken and double redirects are listed, deleted targets count as missing'
+);
+
+-- ── 넘겨주기 끝까지 따라가기 ─────────────────────────────────────────────────
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('기숙')$$,
+  $$values ('기숙사'::text, '기숙'::text, 'page'::text)$$,
+  'resolve_redirect follows a chain to the final page and names the first redirect'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('기숙사')$$,
+  $$values ('기숙사'::text, null::text, 'page'::text)$$,
+  'a normal page resolves to itself'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('끊김')$$,
+  $$values (null::text, '끊김'::text, 'missing'::text)$$,
+  'a redirect to a missing page is missing'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('아무것도 없음')$$,
+  $$values (null::text, null::text, 'missing'::text)$$,
+  'a missing title is missing'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('기숙[사]')$$,
+  $$values (null::text, null::text, 'missing'::text)$$,
+  'an unusable title is missing, not a loop'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('기숙', '긱사')$$,
+  $$values (null::text, '기숙'::text, 'stop'::text)$$,
+  'following stops at the given page'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('고리 1')$$,
+  $$values (null::text, '고리 1'::text, 'loop'::text)$$,
+  'a redirect loop stops'
 );
 
 select logout();

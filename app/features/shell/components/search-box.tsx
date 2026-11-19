@@ -51,7 +51,8 @@ export function SearchBox({ className }: { className?: string }) {
     if (settled === "") return;
     suggestTitles(settled, "", SUGGEST_LIMIT)
       .then((next) => {
-        if (id === requestId.current) setTitles(next);
+        if (id === requestId.current)
+          setTitles(next.map((suggestion) => suggestion.title));
       })
       // 후보를 못 받아도 검색은 된다.
       .catch(() => undefined);

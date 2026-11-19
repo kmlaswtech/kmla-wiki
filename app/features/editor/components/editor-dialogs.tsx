@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { EditorRequest } from "./editor-ui";
 import { TitleInput } from "./title-input";
@@ -11,6 +11,7 @@ import {
   SAFE_HREF,
   templateTitle,
 } from "~/features/markup";
+import { resolveRedirect } from "~/features/pages";
 import { Button } from "~/shared/ui/button";
 import {
   Dialog,
@@ -22,6 +23,7 @@ import {
 } from "~/shared/ui/dialog";
 import { Input } from "~/shared/ui/input";
 import { Label } from "~/shared/ui/label";
+import { Spinner } from "~/shared/ui/spinner";
 import { Textarea } from "~/shared/ui/textarea";
 
 /**
@@ -136,16 +138,37 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
   const [label, setLabel] = useState("");
   const needsLabel = empty && !editing;
 
-  const apply = (value: string) => {
+  /** 넘겨주기를 확인하는 중인가. 그동안은 다시 넣지 않고 "넣기"를 막는다. */
+  const [checking, setChecking] = useState(false);
+  /** 확인하는 사이 대화상자가 닫혔으면 넣지 않는다. */
+  const closed = useRef(false);
+  useEffect(() => {
+    closed.current = false;
+    return () => {
+      closed.current = true;
+    };
+  }, []);
+
+  const apply = async (value: string) => {
     const address = value.trim();
-    if (!address) return;
+    if (!address || checking) return;
     const href = asExternalHref(address);
-    const [title = "", ...rest] = address.split("#");
+    const [rawTitle = "", ...rest] = address.split("#");
+    let title = rawTitle.trim();
+    // 넘겨주기 문서를 가리키면 끝까지 따라가 최종 문서에 건다. 링크가 넘겨주기 문서를 거치지 않게
+    // 한다. 보이는 글자는 친 그대로 둔다. 최종 문서를 찾지 못하면 친 이름에 건다.
+    if (!href && title !== "") {
+      setChecking(true);
+      const resolved = await resolveRedirect(title).catch(() => null);
+      if (closed.current) return;
+      setChecking(false);
+      if (resolved?.status === "page") title = resolved.title;
+    }
     const mark = href
       ? { type: MARK.link, attrs: { href } }
       : {
           type: MARK.wikiLink,
-          attrs: { target: title.trim(), section: rest.join("#").trim() },
+          attrs: { target: title, section: rest.join("#").trim() },
         };
 
     const chain = editor.chain().focus();
@@ -170,7 +193,7 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
     <DialogForm
       title={editing ? "링크 고치기" : "링크 넣기"}
       description="문서 이름을 쓰면 위키 문서로, https://로 시작하면 바깥 사이트로 갑니다. 문서의 한 문단으로 가려면 '문서 이름#문단 제목'처럼 씁니다."
-      onSubmit={() => apply(target)}
+      onSubmit={() => void apply(target)}
       footer={
         <>
           {activeMark ? (
@@ -191,7 +214,8 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
               링크 없애기
             </Button>
           ) : null}
-          <Button type="submit" disabled={target.trim() === ""}>
+          <Button type="submit" disabled={target.trim() === "" || checking}>
+            {checking ? <Spinner /> : null}
             {editing ? "고치기" : "넣기"}
           </Button>
         </>
@@ -203,8 +227,9 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
           id="link-target"
           value={target}
           onChange={setTarget}
-          onCommit={needsLabel ? undefined : apply}
+          onCommit={needsLabel ? undefined : (value) => void apply(value)}
           sections
+          wikiAddresses
           placeholder="예: 귀가, 귀가#신청, https://kmla.hs.kr"
           focusOnMount
         />

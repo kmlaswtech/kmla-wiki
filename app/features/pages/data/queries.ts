@@ -322,6 +322,40 @@ export async function getTitleInfo(query: string): Promise<TitleInfo | null> {
   return row ? { title: row.title, redirectTarget: row.redirect_target } : null;
 }
 
+/**
+ * 넘겨주기를 끝까지 따라간 결과. `via`는 처음 만난 넘겨주기 문서다(쓴 이름이 넘겨주기가 아니면
+ * `null`). 없는 문서에 닿으면 `missing`, 돌고 돌면 `loop`, `stopTitle` 문서에 닿으면 `stop`이다.
+ */
+export type RedirectResolution =
+  | { status: "page"; title: string; via: string | null }
+  | { status: "missing" | "loop" | "stop"; via: string | null };
+
+/**
+ * 넘겨주기를 끝까지 따라가 최종 문서를 찾는다(`resolve_redirect`). 넘겨주기 문서를 저장하기 전에
+ * 확인할 때는 그 문서 이름을 `stopTitle`로 준다. 저장(`save_revision`)과 같은 판정이 나온다.
+ */
+export async function resolveRedirect(
+  title: string,
+  stopTitle?: string,
+): Promise<RedirectResolution> {
+  const rows = unwrap(
+    await getSupabase().rpc("resolve_redirect", {
+      p_title: title,
+      ...(stopTitle === undefined ? {} : { p_stop_key: titleKey(stopTitle) }),
+    }),
+  );
+  const row = rows[0];
+  // 생성 타입은 열이 null일 수 있음을 모른다.
+  const via = (row?.via as string | null | undefined) ?? null;
+  const final = row?.title as string | null | undefined;
+  if (row?.status === "page" && final) {
+    return { status: "page", title: final, via };
+  }
+  const status =
+    row?.status === "loop" || row?.status === "stop" ? row.status : "missing";
+  return { status, via };
+}
+
 export const SPECIAL_PAGE_SIZE = 100;
 
 /** 링크는 걸려 있는데 아직 없는 문서. 많이 가리켜진 순. 영문 제목은 소문자로 온다. */
@@ -388,12 +422,18 @@ export async function listHeadings(
   return view.found ? headingTargets(view) : null;
 }
 
+/** 자동완성 후보 하나. 넘겨주기 문서이면 그 대상도 담는다. */
+export interface TitleSuggestion {
+  title: string;
+  redirectTarget: string | null;
+}
+
 /** 자동완성용 제목 목록. `prefix`가 있으면 그 이름공간(`틀:`, `분류:`) 안에서만 찾는다. */
 export async function suggestTitles(
   query: string,
   prefix = "",
   limit = 8,
-): Promise<string[]> {
+): Promise<TitleSuggestion[]> {
   // 제목 키와 같은 꼴로 맞춘 검색어 하나로, 넓힌 정규식(걸러 내기)과 글자 그대로의 순위를 함께 만든다.
   const needle = searchKey(query);
   const rows = unwrap(
@@ -405,5 +445,8 @@ export async function suggestTitles(
       p_limit: limit,
     }),
   );
-  return rows.map((row) => row.title);
+  return rows.map((row) => ({
+    title: row.title,
+    redirectTarget: row.redirect_target,
+  }));
 }

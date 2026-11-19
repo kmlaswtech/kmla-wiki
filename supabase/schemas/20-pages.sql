@@ -977,6 +977,7 @@ declare
   v_target public.revisions;
   v_page public.pages;
   v_current_body jsonb;
+  v_body jsonb;
   v_summary text;
 begin
   select * into v_target from public.revisions as revision where revision.id = p_revision_id;
@@ -987,20 +988,23 @@ begin
 
   select * into v_page from public.pages as page where page.id = v_target.page_id for update;
   perform private.check_page_writable(v_page);
+  -- 옛 넘겨주기 판이면 지금의 최종 문서로 바꿔 되살린다(`save_revision`과 같다). 본문 규칙
+  -- (`check_redirect_body`)은 보지 않는다. 규칙 이전에 저장된 판도 되돌릴 수 있게 한다.
+  v_body := private.settle_redirect_body(v_page.title, v_target.body);
 
   select revision.body into v_current_body
   from public.revisions as revision where revision.id = v_page.current_revision_id;
-  if v_current_body = v_target.body then
+  if v_current_body = v_body then
     raise exception 'nothing to save' using errcode = 'WK007';
   end if;
 
   v_summary := format('r%s 판으로 되돌림', p_revision_id)
     || case when btrim(coalesce(p_summary, '')) <> '' then ': ' || btrim(p_summary) else '' end;
-  perform private.check_write_limits(v_member_id, v_target.body, v_summary);
+  perform private.check_write_limits(v_member_id, v_body, v_summary);
 
   page_id := v_page.id;
   title := v_page.title;
-  revision_id := private.write_revision(v_page.id, v_member_id, v_target.body, v_summary, 'revert');
+  revision_id := private.write_revision(v_page.id, v_member_id, v_body, v_summary, 'revert');
   return next;
 end;
 $function$;
@@ -1042,6 +1046,9 @@ begin
   end if;
   perform private.check_body(v_body);
   perform private.check_redirect_body(v_title, v_body);
+  -- 넘겨주기 대상이 넘겨주기 문서이면 최종 문서로 바꿔 저장한다. 저장하는 이 넘겨주기가 넘겨주기
+  -- 문서를 가리키지 않게 한다.
+  v_body := private.settle_redirect_body(v_title, v_body);
   perform private.check_write_limits(v_member_id, v_body, p_summary);
 
   select * into v_page from public.pages as page
