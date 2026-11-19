@@ -3,8 +3,9 @@
 --    (`app/features/editor/model/doc-io.ts`)과 같은 모양이다.
 --  * `move_page`의 제목 키 비교를 `private.title_key`로 맞춘다.
 
+-- `jsonb_build_object`가 stable이라 이 함수도 stable이다.
 create function private.redirect_doc(p_target text) returns jsonb
-language sql immutable set search_path = ''
+language sql stable set search_path = ''
 as $$
   select jsonb_build_object(
     'type', 'doc',
@@ -31,7 +32,7 @@ declare
   v_taken public.pages;
   v_old_title text;
   v_old_key text;
-  v_new_key text := private.title_key(p_new_title);
+  v_new_key text := private.title_key(v_new_title);
   -- 3·4에서 넘겨줄 곳. 일반 문서면 새 이름, 넘겨주기 문서면 그 대상.
   v_destination text;
   v_body jsonb;
