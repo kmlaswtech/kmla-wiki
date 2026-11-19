@@ -381,6 +381,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      redirect_issues: {
+        Args: { p_limit?: number }
+        Returns: {
+          next: string
+          target: string
+          title: string
+        }[]
+      }
       register_image: {
         Args: { p_height: number; p_image_id: string; p_width: number }
         Returns: undefined

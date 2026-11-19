@@ -357,6 +357,15 @@ export async function listAllPages(
   return rows.map((row) => row.title);
 }
 
+/** 손볼 넘겨주기. `next`가 `null`이면 대상이 없거나 삭제됐고, 있으면 대상도 넘겨주기다. */
+export async function listRedirectIssues(): Promise<
+  { title: string; target: string; next: string | null }[]
+> {
+  const rows = unwrap(await getSupabase().rpc("redirect_issues"));
+  // 생성 타입은 `next`를 null 없이 적지만 대상이 없으면 null이 온다.
+  return rows.map((row) => ({ ...row, next: row.next ?? null }));
+}
+
 /** 아무 문서의 제목. 문서가 하나도 없으면 `null`. */
 export async function getRandomTitle(): Promise<string | null> {
   return unwrap(await getSupabase().rpc("random_page"));

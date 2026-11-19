@@ -83,6 +83,83 @@ select is(public.get_page_view('사라짐') ->> 'title', '사라짐',
   'a redirect to a deleted page is not followed');
 select is(public.get_page_view('사라짐') #>> '{redirect,state}', 'missing',
   'and its target is reported as missing');
+select logout();
+
+-- ── 이동이 넘겨주기를 정리한다 ───────────────────────────────────────────────
+select login(:alice);
+select page_id as outing_id from public.save_revision('외출', null, wiki('외출 본문')) \gset
+select page_id as alias_id from public.save_revision('외출 신청', null, wiki('#넘겨주기 [[외출]]')) \gset
+select page_id as other_alias_id from public.save_revision('외박', null, wiki('#넘겨주기 [[외출]]')) \gset
+
+-- 다른 이름을 정식 이름으로 올린다.
+select lives_ok(
+  $$select * from public.move_page('외출', '외출 신청')$$,
+  'a page can move onto a redirect that points to it'
+);
+select is((select title from public.pages where id = :outing_id), '외출 신청',
+  'the page takes the new title');
+select is_empty(format('select 1 from public.pages where id = %s', :alias_id),
+  'the redirect that held the title is removed');
+select is((select redirect_target from public.pages where title = '외출'), '외출 신청',
+  'the old title becomes a redirect to the new one');
+select is((select redirect_target from public.pages where id = :other_alias_id), '외출 신청',
+  'other redirects to the old title follow the move');
+select is(
+  (select revision.summary from public.pages as page
+   join public.revisions as revision on revision.id = page.current_revision_id
+   where page.id = :other_alias_id),
+  '외출 이동에 따라 대상을 외출 신청(으)로 바꿈',
+  'and say why they changed'
+);
+select is(public.get_page_view('외박') ->> 'title', '외출 신청',
+  'so they still land on the page in one hop');
+
+-- 넘겨주기를 남기지 않아도 넘겨주기는 따라온다.
+select * from public.save_revision('점호', null, wiki('점호 본문'));
+select * from public.save_revision('점호 시간', null, wiki('#넘겨주기 [[점호]]'));
+select * from public.move_page('점호', '저녁 점호', false);
+select is_empty($$select 1 from public.pages where title = '점호'$$,
+  'without a redirect the old title is gone');
+select is((select redirect_target from public.pages where title = '점호 시간'), '저녁 점호',
+  'but redirects to it are still updated');
+
+-- 내용이 있던 적이 있는 넘겨주기는 지우지 않는다.
+select * from public.save_revision('귀가', null, wiki('귀가 본문'));
+select revision_id as homecoming_rev
+from public.save_revision('귀가 신청', null, wiki('따로 쓰던 문서')) \gset
+select * from public.save_revision('귀가 신청', :homecoming_rev, wiki('#넘겨주기 [[귀가]]'));
+select throws_ok($$select * from public.move_page('귀가', '귀가 신청')$$, 'WK009', null,
+  'a redirect with earlier content keeps its title');
+
+-- 다른 문서로 넘겨주는 문서도 그대로다.
+select throws_ok($$select * from public.move_page('귀가', '외박')$$, 'WK009', null,
+  'a redirect to another page keeps its title');
+
+-- 보호된 넘겨주기는 관리자만 치운다.
+select page_id as guarded_id from public.save_revision('귀가 시간', null, wiki('#넘겨주기 [[귀가]]')) \gset
+select logout();
+update public.pages set protection = 'admin' where id = :guarded_id;
+select login(:alice);
+select throws_ok($$select * from public.move_page('귀가', '귀가 시간')$$, 'WK009', null,
+  'a member cannot remove a protected redirect by moving onto it');
+select logout();
+select login(:admin);
+select lives_ok($$select * from public.move_page('귀가', '귀가 시간')$$,
+  'an admin can');
+select logout();
+
+-- ── 특수 기능: 손볼 넘겨주기 ─────────────────────────────────────────────────
+select login(:alice);
+select set_eq(
+  $$select title, target, next from public.redirect_issues()$$,
+  $$values ('기숙'::text, '긱사'::text, '기숙사'::text),
+           ('고리 1', '고리 2', '고리 1'),
+           ('고리 2', '고리 1', '고리 2'),
+           ('옛 넘겨주기', '옛 넘겨주기 2', '기숙사'),
+           ('끊김', '없는 문서', null),
+           ('사라짐', '사라질 문서', null)$$,
+  'broken and double redirects are listed, deleted targets count as missing'
+);
 
 select logout();
 select * from finish();

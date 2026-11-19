@@ -21,6 +21,7 @@ export {
   listOrphanPages,
   listRecentChanges,
   listRecentlyChangedPages,
+  listRedirectIssues,
   listWantedPages,
   SPECIAL_PAGE_SIZE,
   resolveBody,

@@ -76,6 +76,7 @@ export default function PageRoute({ loaderData }: Route.ComponentProps) {
         view.isAdmin ? (
           <PageAdminMenu
             page={view.page}
+            aliasCount={view.aliases.length}
             onDone={() => void revalidator.revalidate()}
           />
         ) : null
