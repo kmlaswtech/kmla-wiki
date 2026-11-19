@@ -9,6 +9,7 @@ import type {
   SearchHit,
   TitleInfo,
 } from "../model/types";
+import { headingTargets, type HeadingTarget } from "../model/headings";
 import { titleMatchPattern } from "../model/hangul-match";
 import {
   asWikiDoc,
@@ -372,6 +373,19 @@ export async function listRedirectIssues(): Promise<
 /** 아무 문서의 제목. 문서가 하나도 없으면 `null`. */
 export async function getRandomTitle(): Promise<string | null> {
   return unwrap(await getSupabase().rpc("random_page"));
+}
+
+/**
+ * 링크의 `#문단` 후보. 문서가 없으면 `null`.
+ *
+ * 문서 보기 전체(`get_page_view`)를 읽는다. 넘겨주기를 따라가고 틀이 넣은 제목까지 문서 보기와 똑같이
+ * 맞추려면 이것이 필요하다. 링크 대화상자에서 `#`을 친 뒤 문서 제목이 바뀔 때만 부른다.
+ */
+export async function listHeadings(
+  title: string,
+): Promise<HeadingTarget[] | null> {
+  const view = await getPageView(title);
+  return view.found ? headingTargets(view) : null;
 }
 
 /** 자동완성용 제목 목록. `prefix`가 있으면 그 이름공간(`틀:`, `분류:`) 안에서만 찾는다. */

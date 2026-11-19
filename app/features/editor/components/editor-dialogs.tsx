@@ -204,6 +204,7 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
           value={target}
           onChange={setTarget}
           onCommit={needsLabel ? undefined : apply}
+          sections
           placeholder="예: 귀가, 귀가#신청, https://kmla.hs.kr"
           focusOnMount
         />

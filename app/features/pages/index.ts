@@ -17,6 +17,7 @@ export {
   getTitleInfo,
   HISTORY_PAGE_SIZE,
   listAllPages,
+  listHeadings,
   listHistory,
   listOrphanPages,
   listRecentChanges,
@@ -33,6 +34,7 @@ export {
   REDIRECT_MESSAGE,
   WRITE_ERROR,
 } from "./model/errors";
+export type { HeadingTarget } from "./model/headings";
 export { redirectsHere } from "./model/view";
 export type {
   FoundPage,
