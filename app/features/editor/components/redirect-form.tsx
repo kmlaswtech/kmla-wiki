@@ -6,9 +6,10 @@ import { loadLatest, type EditTarget } from "../data/save";
 import { redirectDoc, sameDoc } from "../model/doc-io";
 import { clearDraft, loadDraft } from "../storage/drafts";
 import { TitleInput } from "./title-input";
-import { loginHref } from "~/features/auth";
+import { useLoginOnExpiry } from "~/features/auth";
 import {
   pageHref,
+  redirectPageHref,
   parseTitle,
   titleKey,
   visibleTextLength,
@@ -25,7 +26,7 @@ import {
 import { LinkButton } from "~/shared/components/link-button";
 import { useDebouncedValue } from "~/shared/hooks/use-debounced-value";
 import { cn } from "~/shared/lib/utils";
-import { isWikiError, NOT_VERIFIED } from "~/shared/supabase/errors";
+import { isWikiError } from "~/shared/supabase/errors";
 import { Button } from "~/shared/ui/button";
 import { Input } from "~/shared/ui/input";
 import { Label } from "~/shared/ui/label";
@@ -54,6 +55,7 @@ export function RedirectForm({
   onWriteDocument: () => void;
 }) {
   const navigate = useNavigate();
+  const loginOnExpiry = useLoginOnExpiry();
   const key = titleKey(target.title);
   // 충돌이 나면 최신 판이 새 기준이 된다.
   const [base, setBase] = useState({
@@ -89,14 +91,9 @@ export function RedirectForm({
       });
       // 본문 편집기에서 넘어왔다면 그쪽 임시 저장이 남아 있다. 본문은 이제 쓰지 않는다.
       clearDraft(key, null);
-      await navigate(`${pageHref(saved.title)}?redirect=no`);
+      await navigate(redirectPageHref(saved.title));
     } catch (caught) {
-      if (isWikiError(caught, NOT_VERIFIED)) {
-        await navigate(
-          loginHref(`${location.pathname}${location.search}`, "expired"),
-        );
-        return;
-      }
+      if (await loginOnExpiry(caught)) return;
       if (isWikiError(caught, WRITE_ERROR.conflict)) {
         // 최신 판을 새 기준으로 삼는다. 쓴 대상은 그대로 두어 확인 뒤 다시 저장하게 한다.
         const latest = await loadLatest(target.title).catch(() => null);

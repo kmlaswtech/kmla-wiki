@@ -46,6 +46,7 @@ export {
   namespaceOf,
   normalizeTitle,
   pageHref,
+  redirectPageHref,
   parseTitle,
   searchKey,
   titleKey,

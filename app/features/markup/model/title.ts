@@ -101,3 +101,8 @@ export function pageHref(
 ): string {
   return `/${action}/${titleToPath(title)}`;
 }
+
+/** 넘겨주기를 따라가지 않고 넘겨주기 문서 자체를 여는 주소. */
+export function redirectPageHref(title: string): string {
+  return `${pageHref(title)}?redirect=no`;
+}
