@@ -192,8 +192,8 @@ test("편집기에서 이미지를 올리면 커서 자리에 들어가 바로 �
   await expect(
     editorOf(page).getByRole("img", { name: "빨간 점" }),
   ).toBeVisible();
-  // 설명은 파일 이름에서 채워지고, 고칠 수 있다.
-  await expect(page.getByLabel("이미지 설명")).toHaveValue("빨간 점");
+  // 대체 글은 파일 이름에서 채워지고, 고칠 수 있다.
+  await expect(page.getByLabel("이미지 대체 글")).toHaveValue("빨간 점");
 
   await page.getByRole("button", { name: "저장" }).click();
   await expect(
