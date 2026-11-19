@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useOutletContext } from "react-router";
 
 import type { Route } from "./+types/edit";
@@ -7,6 +8,7 @@ import { withVerifiedMember, type MemberStatus } from "~/features/auth";
 import {
   EditorForm,
   ReadOnlyDocument,
+  RedirectForm,
   type EditTarget,
 } from "~/features/editor";
 import {
@@ -25,7 +27,10 @@ export async function clientLoader({
   params,
 }: Route.ClientLoaderArgs) {
   const title = titleFromParams(params);
-  const sectionParam = new URL(request.url).searchParams.get("section");
+  const searchParams = new URL(request.url).searchParams;
+  const sectionParam = searchParams.get("section");
+  // `?as=redirect`: 넘겨주기 입력으로 연다(없는 문서에서 "다른 문서로 넘겨주기").
+  const asRedirect = searchParams.get("as") === "redirect";
 
   // 넘겨주기 문서를 고칠 때는 대상이 아니라 그 문서 자체를 연다.
   const view = await withVerifiedMember(request, () =>
@@ -45,6 +50,7 @@ export async function clientLoader({
       resolved: empty,
       images: new Map(),
       isNew: true,
+      startAsRedirect: asRedirect,
       blocked: (view.validTitle ? null : "invalid-title") as Blocked | null,
     };
   }
@@ -74,6 +80,9 @@ export async function clientLoader({
     resolved: view.resolved,
     images: view.images,
     isNew: false,
+    // 넘겨주기 문서는 언제나 넘겨주기 입력으로 연다(문단 편집도 없다).
+    startAsRedirect:
+      Boolean(body.attrs?.redirect) || (asRedirect && sectionIndex === null),
     blocked,
   };
 }
@@ -93,13 +102,32 @@ const BLOCKED_MESSAGE: Record<Blocked, string> = {
 };
 
 export default function EditRoute({ loaderData }: Route.ComponentProps) {
-  const { target, resolved, images, isNew, blocked } = loaderData;
+  const { target } = loaderData;
+  // 다른 문서·문단·판으로 가면 화면 상태(넘겨주기 입력인지)를 새로 시작한다.
+  return (
+    <EditScreen
+      key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
+      {...loaderData}
+    />
+  );
+}
+
+function EditScreen({
+  target,
+  resolved,
+  images,
+  isNew,
+  startAsRedirect,
+  blocked,
+}: Route.ComponentProps["loaderData"]) {
   const status = useOutletContext<MemberStatus>();
+  const [redirectMode, setRedirectMode] = useState(startAsRedirect);
   const section =
     target.sectionIndex === null
       ? null
       : findSections(target.baseBody)[target.sectionIndex];
   const readOnly = Boolean(status.ban) || blocked !== null;
+  const savedRedirect = target.baseBody.attrs?.redirect;
 
   return (
     <div>
@@ -109,13 +137,19 @@ export default function EditRoute({ loaderData }: Route.ComponentProps) {
             {target.title}
           </Link>{" "}
           <span className="font-normal text-muted-foreground">
-            {isNew
-              ? "새 문서"
-              : section
-                ? `"${section.title}" 문단 ${readOnly ? "보기" : "편집"}`
-                : readOnly
-                  ? "보기"
-                  : "편집"}
+            {redirectMode && !readOnly
+              ? isNew
+                ? "넘겨주기로 만들기"
+                : savedRedirect
+                  ? "넘겨주기 편집"
+                  : "넘겨주기로 바꾸기"
+              : isNew
+                ? "새 문서"
+                : section
+                  ? `"${section.title}" 문단 ${readOnly ? "보기" : "편집"}`
+                  : readOnly
+                    ? "보기"
+                    : "편집"}
           </span>
         </h1>
       </header>
@@ -137,7 +171,18 @@ export default function EditRoute({ loaderData }: Route.ComponentProps) {
 
       {readOnly ? (
         // 고칠 수 없어도 편집기 모양으로 보여 준다. 골라서 복사하면 다른 문서에 그대로 붙는다.
-        isNew ? null : (
+        isNew ? null : savedRedirect ? (
+          <p className="text-sm text-muted-foreground">
+            이 문서는{" "}
+            <Link
+              to={pageHref(savedRedirect)}
+              className="text-primary hover:underline"
+            >
+              {savedRedirect}
+            </Link>{" "}
+            문서로 넘겨줍니다.
+          </p>
+        ) : (
           <ReadOnlyDocument
             // 편집기는 처음 받은 글로 한 번 만든다. 다른 문서·문단으로 가면 새로 만든다.
             key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
@@ -151,15 +196,19 @@ export default function EditRoute({ loaderData }: Route.ComponentProps) {
             ariaLabel={`${target.title} 본문`}
           />
         )
+      ) : redirectMode ? (
+        <RedirectForm
+          target={target}
+          onWriteDocument={() => setRedirectMode(false)}
+        />
       ) : (
         <>
           <EditNotice />
-          {/* 문서나 문단이 바뀌면 편집기를 새로 만든다. 앞 문서의 글이 남으면 안 된다. */}
           <EditorForm
-            key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
             target={target}
             initialResolved={resolved}
             initialImages={images}
+            onConvertToRedirect={() => setRedirectMode(true)}
           />
         </>
       )}

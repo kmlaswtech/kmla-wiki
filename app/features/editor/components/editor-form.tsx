@@ -65,6 +65,8 @@ interface EditorFormProps {
   initialResolved: ResolvedBody;
   /** 처음 그릴 때 쓸 이미지 정보(편집 화면을 열 때 이미 받은 것). */
   initialImages: ReadonlyMap<string, ImageInfo>;
+  /** "넘겨주기로 바꾸기": 넘겨주기 입력(`RedirectForm`)으로 바꾼다. 문단 편집에는 없다. */
+  onConvertToRedirect?: () => void;
 }
 
 /** 입력이 멈춘 뒤 틀·링크 정보와 임시 저장을 갱신하기까지의 시간. */
@@ -87,7 +89,10 @@ function editingPart(target: EditTarget): WikiDoc {
 }
 
 /**
- * 편집 화면 한 벌: 툴바, 편집기, 분류·넘겨주기, 편집 요약, 저장.
+ * 편집 화면 한 벌: 툴바, 편집기, 분류, 편집 요약, 저장.
+ *
+ * 넘겨주기는 여기서 고치지 않는다(`RedirectForm`). 넘겨주기 문서를 일반 문서로 바꿔 여는 경우에도
+ * 넘겨주기는 빼고 시작한다. 그래서 그대로 저장하면 넘겨주기가 풀린다.
  *
  * 편집기가 곧 미리보기다. 고치는 대로 문서 보기와 같은 모양으로 보인다. 원문 차이는 "변경 사항"
  * 탭에서 본다.
@@ -96,6 +101,7 @@ export function EditorForm({
   target,
   initialResolved,
   initialImages,
+  onConvertToRedirect,
 }: EditorFormProps) {
   const navigate = useNavigate();
   const key = titleKey(target.title);
@@ -106,14 +112,11 @@ export function EditorForm({
   const [draft] = useState(() => loadDraft(key, target.sectionIndex));
   // 임시 저장도 편집기 스키마로 한 번 읽는다. 그래야 기준 판과 키 순서까지 같은 값이 된다.
   const [initial] = useState(() =>
-    splitDoc(normalizeDoc(draft?.body ?? editingPart(target))),
+    withoutRedirect(splitDoc(normalizeDoc(draft?.body ?? editingPart(target)))),
   );
 
   const [content, setContent] = useState<WikiDoc>(initial.content);
   const [meta, setMeta] = useState<DocMeta>(initial.meta);
-  const [showRedirect, setShowRedirect] = useState(
-    initial.meta.redirect !== "",
-  );
   const [summary, setSummary] = useState(draft?.summary ?? "");
   const [resolved, setResolved] = useState(initialResolved);
   const [images, setImages] =
@@ -314,11 +317,10 @@ export function EditorForm({
 
   /** 편집기와 문서 정보를 주어진 문서로 되돌린다(임시 저장 버리기). */
   function resetTo(doc: WikiDoc) {
-    const next = splitDoc(normalizeDoc(doc));
+    const next = withoutRedirect(splitDoc(normalizeDoc(doc)));
     editor?.commands.setContent(next.content, { emitUpdate: true });
     setContent(next.content);
     setMeta(next.meta);
-    setShowRedirect(next.meta.redirect !== "");
   }
 
   async function save(confirmed: boolean) {
@@ -450,7 +452,15 @@ export function EditorForm({
             request={setRequest}
             onPickImage={() => fileInput.current?.click()}
             isTemplatePage={namespaceOf(target.title) === "template"}
-            onRedirect={sectionMode ? undefined : () => setShowRedirect(true)}
+            onConvertToRedirect={
+              sectionMode || !onConvertToRedirect
+                ? undefined
+                : () => {
+                    // 쓰던 글은 임시 저장에 남긴다. 본문 편집으로 돌아오면 이어서 쓴다.
+                    flushDraft(current, summary, dirty);
+                    onConvertToRedirect();
+                  }
+            }
             className="sticky top-(--site-header-height) z-10"
           />
         ) : null}
@@ -497,14 +507,7 @@ export function EditorForm({
         </section>
       ) : null}
 
-      {sectionMode ? null : (
-        <DocMetaFields
-          meta={meta}
-          onChange={setMeta}
-          showRedirect={showRedirect}
-          onHideRedirect={() => setShowRedirect(false)}
-        />
-      )}
+      {sectionMode ? null : <DocMetaFields meta={meta} onChange={setMeta} />}
 
       <div className="grid gap-1.5">
         <Label htmlFor="edit-summary">편집 요약 (선택)</Label>
@@ -657,6 +660,11 @@ export function EditorForm({
       </Dialog>
     </form>
   );
+}
+
+/** 넘겨주기를 뺀다. 넘겨주기는 본문 편집기에서 다루지 않는다. */
+function withoutRedirect(doc: { content: WikiDoc; meta: DocMeta }) {
+  return { content: doc.content, meta: { ...doc.meta, redirect: "" } };
 }
 
 /** 글이 가리키는 것(링크·틀·분류·이미지)의 목록. 같으면 틀·링크·이미지 정보를 다시 받지 않는다. */

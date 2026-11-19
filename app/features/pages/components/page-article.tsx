@@ -8,7 +8,7 @@ import {
 import { useCallback, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import type { FoundPage } from "../model/types";
+import type { FoundPage, RedirectInfo } from "../model/types";
 import {
   ancestorTitles,
   baseName,
@@ -22,6 +22,7 @@ import {
 import { LinkButton } from "~/shared/components/link-button";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { formatDateTime } from "~/shared/lib/time";
+import { cn } from "~/shared/lib/utils";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 import {
@@ -251,32 +252,31 @@ export function PageArticle({
         {revision === null ? (
           <Notice tone="warning">이 판은 볼 수 없습니다.</Notice>
         ) : null}
-        {document.redirect ? (
-          <Notice>
-            <CornerDownRight className="size-4 shrink-0" aria-hidden />
-            <span>
-              이 문서는{" "}
-              <Link
-                to={pageHref(document.redirect)}
-                className="text-primary hover:underline"
-              >
-                {document.redirect}
-              </Link>{" "}
-              문서로 넘겨줍니다.
-            </span>
-          </Notice>
-        ) : null}
       </div>
 
-      <TableOfContents headings={document.headings} />
+      {/* 넘겨주기 문서는 본문이 없다. 빈 본문·목차 대신 어디로 넘겨주는지만 보여 준다. */}
+      {view.redirect ? (
+        <RedirectCard
+          redirect={view.redirect}
+          editHref={
+            editable && !viewingOldRevision
+              ? pageHref(page.title, "edit")
+              : null
+          }
+        />
+      ) : (
+        <>
+          <TableOfContents headings={document.headings} />
 
-      <WikiContent
-        withToc
-        document={document}
-        existing={resolved.existing}
-        sectionEditHref={sectionEditable ? sectionEditHref : undefined}
-        renderImage={renderImage}
-      />
+          <WikiContent
+            withToc
+            document={document}
+            existing={resolved.existing}
+            sectionEditHref={sectionEditable ? sectionEditHref : undefined}
+            renderImage={renderImage}
+          />
+        </>
+      )}
 
       {view.members.length > 0 ? (
         <TitleList
@@ -330,6 +330,72 @@ function UpdatedAt({ value }: { value: string }) {
     <>
       {formatDateTime(value)} (<RelativeTime value={value} />)
     </>
+  );
+}
+
+const REDIRECT_STATE_MESSAGE: Record<RedirectInfo["state"], string> = {
+  ok: "이 이름으로 들어오면 위 문서로 바로 넘어갑니다.",
+  missing:
+    "넘겨줄 문서가 없습니다. 대상을 바꾸거나 그 문서를 먼저 만들어 주세요.",
+  redirect:
+    "넘겨줄 문서도 넘겨주기 문서입니다. 최종 문서로 대상을 바꿔 주세요.",
+};
+
+/** 넘겨주기 문서 자체를 볼 때(`?redirect=no`, 예전 판, 끊긴 넘겨주기). */
+function RedirectCard({
+  redirect,
+  editHref,
+}: {
+  redirect: RedirectInfo;
+  /** 고칠 수 없으면 `null`. */
+  editHref: string | null;
+}) {
+  const healthy = redirect.state === "ok";
+  return (
+    <section
+      aria-label="넘겨주기"
+      className={cn(
+        "rounded-lg border p-4",
+        healthy ? "bg-muted/40" : "border-destructive/40 bg-destructive/5",
+      )}
+    >
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <CornerDownRight className="size-4 shrink-0" aria-hidden />
+        넘겨주기 문서
+      </p>
+      <p className="mt-1.5 text-lg font-semibold break-words break-keep">
+        <Link
+          to={pageHref(redirect.target)}
+          className={cn(
+            "hover:underline",
+            redirect.state === "missing" ? "text-destructive" : "text-primary",
+          )}
+        >
+          {redirect.target}
+        </Link>
+        {redirect.state === "redirect" && redirect.next ? (
+          <span className="font-normal text-muted-foreground">
+            {" "}
+            → {redirect.next}
+          </span>
+        ) : null}
+      </p>
+      <p className="mt-1 text-sm break-keep text-muted-foreground">
+        {REDIRECT_STATE_MESSAGE[redirect.state]}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {redirect.state === "missing" ? null : (
+          <LinkButton size="sm" to={pageHref(redirect.target)}>
+            대상으로 가기
+          </LinkButton>
+        )}
+        {editHref ? (
+          <LinkButton size="sm" variant="outline" to={editHref}>
+            대상 바꾸기
+          </LinkButton>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
