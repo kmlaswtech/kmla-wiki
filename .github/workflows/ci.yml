@@ -43,12 +43,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
 
-      # The stack's ports (547xx) sit inside Linux's ephemeral range. While
-      # `supabase start` pulls images in parallel, an outgoing connection can
-      # take one as its source port and a container then fails to bind it.
-      # Reserving them removes them from the ephemeral pool.
+      # The stack's ports (547xx) sit inside Linux's ephemeral range. An
+      # outgoing connection (pnpm install, image pulls) can take one as its
+      # source port and a container then fails to bind it. Reserving them
+      # removes them from the ephemeral pool, but only for connections opened
+      # afterwards, so this runs before setup.
       - name: Reserve Supabase ports
         run: |
           ports="$(sed -nE 's/^[[:space:]]*[a-z_]*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' supabase/config.toml \
@@ -60,10 +60,26 @@ jobs:
           current="$(cat /proc/sys/net/ipv4/ip_local_reserved_ports)"
           sudo sysctl -w net.ipv4.ip_local_reserved_ports="${current:+$current,}$ports"
 
+      - uses: ./.github/actions/setup
+
       # A fresh runner has no volume, so `start` applies every migration and
       # the seed. Services the app and tests never touch are left out.
+      # A port can still be taken by a connection the runner opened before
+      # this job (outside our control). Image pulls are done after the first
+      # attempt, so a retry starts quickly; the failing port's holder is
+      # printed to help diagnose a repeat.
       - name: Start Supabase
-        run: pnpm exec supabase start -x studio,edge-runtime,imgproxy,mailpit,logflare,vector,realtime,supavisor
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm exec supabase start -x studio,edge-runtime,imgproxy,mailpit,logflare,vector,realtime,supavisor; then
+              exit 0
+            fi
+            echo "::warning::supabase start failed (attempt $attempt). Sockets on 547xx:"
+            sudo ss -tanp | grep -E ':547[0-9]{2}' || true
+            pnpm exec supabase stop --no-backup || true
+            sleep 10
+          done
+          exit 1
 
       - name: Test database (pgTAP)
         run: pnpm test:db
