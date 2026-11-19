@@ -6,9 +6,15 @@ import { LinkButton } from "~/shared/components/link-button";
 import { positiveInt, titleFromParams } from "./title-param";
 import { PageAdminMenu } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
+import { AddAliasButton } from "~/features/editor";
 import { WikiImage } from "~/features/images";
 import { pageHref } from "~/features/markup";
-import { getPageView, PageArticle, type MissingPage } from "~/features/pages";
+import {
+  canEditPage,
+  getPageView,
+  PageArticle,
+  type MissingPage,
+} from "~/features/pages";
 
 export async function clientLoader({
   request,
@@ -54,10 +60,24 @@ export default function PageRoute({ loaderData }: Route.ComponentProps) {
   );
 
   if (!view.found) return <Missing view={view} />;
+  // 다른 이름은 지금 판의 일반 문서에만 더한다. 넘겨주기 문서에 다른 이름을 달면 이중 넘겨주기가 된다.
+  const canAddAlias =
+    canEditPage(view) &&
+    view.redirect === null &&
+    view.page.deletedAt === null &&
+    (view.revision?.isCurrent ?? false);
   return (
     <PageArticle
       view={view}
       renderImage={renderImage}
+      aliasAction={
+        canAddAlias ? (
+          <AddAliasButton
+            title={view.page.title}
+            onAdded={() => void revalidator.revalidate()}
+          />
+        ) : null
+      }
       headerActions={
         view.isAdmin ? (
           <PageAdminMenu
@@ -79,9 +99,18 @@ function Missing({ view }: { view: MissingPage }) {
       </h1>
       <p className="text-muted-foreground">이 문서는 아직 없습니다.</p>
       {view.title && view.validTitle && view.canEdit ? (
-        <LinkButton className="mt-4" to={pageHref(view.title, "edit")}>
-          이 문서 만들기
-        </LinkButton>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <LinkButton to={pageHref(view.title, "edit")}>
+            이 문서 만들기
+          </LinkButton>
+          {/* 줄임말·옛 이름처럼 이미 있는 문서의 다른 이름이라면 넘겨주기로 만든다. */}
+          <LinkButton
+            variant="outline"
+            to={`${pageHref(view.title, "edit")}?as=redirect`}
+          >
+            다른 문서로 넘겨주기
+          </LinkButton>
+        </div>
       ) : null}
       {view.backlinks.length > 0 ? (
         <section className="mt-8 text-sm">
