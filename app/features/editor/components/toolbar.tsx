@@ -399,7 +399,10 @@ function Menu({
         </TooltipTrigger>
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="start">{children}</DropdownMenuContent>
+      {/* 메뉴 단추 너비가 아니라 항목 길이에 맞춘다("넘겨주기로 바꾸기"가 잘리지 않게). */}
+      <DropdownMenuContent align="start" className="w-auto min-w-32">
+        {children}
+      </DropdownMenuContent>
     </DropdownMenu>
   );
 }
