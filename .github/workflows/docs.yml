@@ -7,7 +7,9 @@ name: Docs
 # It also keeps agent rules in one place (docs/adr/0001): each AGENTS.md stays
 # within 200 lines, and each CLAUDE.md only imports its AGENTS.md.
 #
-# It runs no PR scripts and uses no secrets, so fork PRs are safe.
+# `pnpm install` runs the PR's `prepare` script, so this job runs PR code. Like
+# `ci.yml`, it is safe for fork PRs only because it has a read-only token and no
+# secrets. Do not add secrets to this job.
 on:
   pull_request:
     paths: ["**.md", "docs/**"]

@@ -26,8 +26,12 @@ function resolvesTo(link, target) {
   }
 }
 
-const skills = fs
-  .readdirSync(sourceDir, { withFileTypes: true })
+// Without `.agents/skills` there are no project skills; stale links are still removed.
+const skills = (
+  fs.existsSync(sourceDir)
+    ? fs.readdirSync(sourceDir, { withFileTypes: true })
+    : []
+)
   .filter(
     (d) =>
       d.isDirectory() &&
