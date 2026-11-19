@@ -392,6 +392,26 @@ export async function listAllPages(
   return rows.map((row) => row.title);
 }
 
+/**
+ * 이름공간의 문서를 현재 판 크기 순으로. `longest`면 긴 문서부터, 아니면 짧은 문서부터다.
+ * `offset`개를 건너뛴 다음부터 준다.
+ */
+export async function listPagesBySize(
+  namespace: Namespace,
+  longest: boolean,
+  offset = 0,
+): Promise<{ title: string; byteSize: number }[]> {
+  const rows = unwrap(
+    await getSupabase().rpc("page_sizes", {
+      p_namespace: namespace,
+      p_longest: longest,
+      p_offset: offset,
+      p_limit: SPECIAL_PAGE_SIZE,
+    }),
+  );
+  return rows.map((row) => ({ title: row.title, byteSize: row.byte_size }));
+}
+
 /** 손볼 넘겨주기. `next`가 `null`이면 대상이 없거나 삭제됐고, 있으면 대상도 넘겨주기다. */
 export async function listRedirectIssues(): Promise<
   { title: string; target: string; next: string | null }[]

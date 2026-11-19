@@ -92,6 +92,15 @@ select is(
   E'제목\n굵게 각주\n접기\n안',
   'visible text joins pieces of a paragraph and puts blocks on their own lines'
 );
+select is(
+  private.doc_text('{"type":"doc","content":[
+    {"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":"대체","caption":" 본관 앞 "}},
+    {"type":"youtube","attrs":{"videoId":"dQw4w9WgXcQ","caption":"학교 소개"}},
+    {"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":"대체만"}}
+  ]}'),
+  E'본관 앞\n학교 소개\n',
+  'image and video captions are visible text, alt text is not'
+);
 
 select * from finish();
 rollback;

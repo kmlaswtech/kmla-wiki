@@ -2,11 +2,13 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import type { Route } from "./+types/special";
+import { nonNegativeInt } from "./title-param";
 import { withVerifiedMember } from "~/features/auth";
 import { pageHref, redirectPageHref, type Namespace } from "~/features/markup";
 import {
   listAllPages,
   listOrphanPages,
+  listPagesBySize,
   listRedirectIssues,
   listWantedPages,
   SPECIAL_PAGE_SIZE,
@@ -36,7 +38,20 @@ const TABS = [
     label: "모든 문서",
     description: "넘겨주기 문서는 표시되지 않습니다.",
   },
+  {
+    key: "short",
+    label: "짧은 문서",
+    description: "",
+  },
+  {
+    key: "long",
+    label: "긴 문서",
+    description: "",
+  },
 ] as const;
+
+/** 이름공간을 골라 볼 수 있는 탭. */
+const NAMESPACE_TABS: readonly Tab[] = ["all", "short", "long"];
 
 type Tab = (typeof TABS)[number]["key"];
 
@@ -57,6 +72,15 @@ function readNamespace(value: string | null): Namespace {
     : "main";
 }
 
+/** RPC의 `integer` 인자가 받는 가장 큰 값. 넘으면 RPC가 실패한다. */
+const MAX_OFFSET = 2_147_483_647 - SPECIAL_PAGE_SIZE;
+
+/** 크기 순 목록의 건너뛸 개수. 잘못된 값이면 처음부터다. */
+function readOffset(value: string | null): number {
+  const offset = nonNegativeInt(value) ?? 0;
+  return offset <= MAX_OFFSET ? offset : 0;
+}
+
 function specialHref(tab: Tab, extra: Record<string, string> = {}): string {
   return `/special?${new URLSearchParams({ tab, ...extra }).toString()}`;
 }
@@ -67,20 +91,27 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const namespace = readNamespace(params.get("ns"));
   const after = params.get("after") || undefined;
 
+  const offset = readOffset(params.get("offset"));
+  const empty = { wanted: [], redirects: [], titles: [], sized: [], offset };
+
   return withVerifiedMember(request, async () => {
     if (tab === "wanted") {
       const wanted = await listWantedPages();
-      return { tab, namespace, wanted, redirects: [], titles: [] };
+      return { ...empty, tab, namespace, wanted };
     }
     if (tab === "redirects") {
       const redirects = await listRedirectIssues();
-      return { tab, namespace, wanted: [], redirects, titles: [] };
+      return { ...empty, tab, namespace, redirects };
+    }
+    if (tab === "short" || tab === "long") {
+      const sized = await listPagesBySize(namespace, tab === "long", offset);
+      return { ...empty, tab, namespace, sized };
     }
     const titles =
       tab === "orphan"
         ? await listOrphanPages(after)
         : await listAllPages(namespace, after);
-    return { tab, namespace, wanted: [], redirects: [], titles };
+    return { ...empty, tab, namespace, titles };
   });
 }
 
@@ -89,9 +120,26 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
-  const { tab, namespace, wanted, redirects, titles } = loaderData;
+  const { tab, namespace, wanted, redirects, titles, sized, offset } =
+    loaderData;
   const current = TABS.find((item) => item.key === tab)!;
   const last = titles.at(-1);
+  const sizedTab = tab === "short" || tab === "long";
+  // 다음 묶음. 제목 순 목록은 마지막 제목 다음부터, 크기 순 목록은 건너뛸 개수로 잇는다.
+  const moreHref =
+    sizedTab && sized.length === SPECIAL_PAGE_SIZE
+      ? specialHref(tab, {
+          ns: namespace,
+          offset: String(offset + SPECIAL_PAGE_SIZE),
+        })
+      : (tab === "orphan" || tab === "all") &&
+          titles.length === SPECIAL_PAGE_SIZE &&
+          last
+        ? specialHref(tab, {
+            ...(tab === "all" ? { ns: namespace } : {}),
+            after: last,
+          })
+        : null;
 
   return (
     <div>
@@ -111,16 +159,18 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
         ))}
       </nav>
 
-      <p className="mb-4 text-sm text-muted-foreground">
-        {current.description}
-      </p>
+      {current.description ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          {current.description}
+        </p>
+      ) : null}
 
-      {tab === "all" ? (
+      {NAMESPACE_TABS.includes(tab) ? (
         <div className="mb-4 flex flex-wrap gap-1 text-sm">
           {NAMESPACES.map((ns) => (
             <Link
               key={ns.key}
-              to={specialHref("all", { ns: ns.key })}
+              to={specialHref(tab, { ns: ns.key })}
               aria-current={ns.key === namespace ? "page" : undefined}
               className={cn(
                 "rounded px-2 py-0.5 hover:bg-muted",
@@ -137,6 +187,31 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
 
       {tab === "redirects" ? (
         <RedirectIssues rows={redirects} />
+      ) : sizedTab ? (
+        sized.length === 0 ? (
+          <Empty />
+        ) : (
+          <ol className="divide-y text-sm">
+            {sized.map((row, index) => (
+              <li key={row.title} className="flex items-baseline gap-3 py-2">
+                <span className="w-8 shrink-0 text-right text-muted-foreground tabular-nums">
+                  {offset + index + 1}
+                </span>
+                <span className="min-w-0">
+                  <Link
+                    to={pageHref(row.title)}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {row.title}
+                  </Link>{" "}
+                  <span className="text-muted-foreground tabular-nums">
+                    ({row.byteSize.toLocaleString("ko")}바이트)
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        )
       ) : tab === "wanted" ? (
         wanted.length === 0 ? (
           <Empty />
@@ -174,17 +249,9 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
         </ul>
       )}
 
-      {(tab === "orphan" || tab === "all") &&
-      titles.length === SPECIAL_PAGE_SIZE &&
-      last ? (
+      {moreHref ? (
         <div className="mt-4 text-center">
-          <LinkButton
-            variant="outline"
-            to={specialHref(tab, {
-              ...(tab === "all" ? { ns: namespace } : {}),
-              after: last,
-            })}
-          >
+          <LinkButton variant="outline" to={moreHref}>
             더 보기
           </LinkButton>
         </div>

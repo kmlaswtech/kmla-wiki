@@ -46,15 +46,19 @@ export function shouldRevalidate() {
 export interface WikiShellHandle {
   /** 글을 쓰는 화면이다. */
   editor?: boolean;
+  /** 문서를 읽는 화면이다. 포커스가 없을 때 Tab이 검색창으로 간다. */
+  reading?: boolean;
 }
 
 export default function WikiLayout({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   // 편집 화면에서는 폰의 머리띠를 위에 붙이지 않고(툴바와 키보드에 자리를 내준다), 폰에서는 맨
   // 위·아래로 단추를 두지 않는다(편집 요약 칸과 저장 단추를 가린다).
-  const editing = useMatches().some(
-    (match) => (match.handle as WikiShellHandle | undefined)?.editor,
+  const handles = useMatches().map(
+    (match) => match.handle as WikiShellHandle | undefined,
   );
+  const editing = handles.some((handle) => handle?.editor);
+  const reading = handles.some((handle) => handle?.reading);
 
   const recentChanges = useRecentChangesPanel(RECENT_PANEL_PATH);
 
@@ -65,7 +69,11 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
           <div className="h-full w-1/3 animate-navigation-progress bg-primary" />
         </div>
       ) : null}
-      <SiteHeader status={loaderData} stickyOnNarrow={!editing} />
+      <SiteHeader
+        status={loaderData}
+        stickyOnNarrow={!editing}
+        tabToSearch={reading}
+      />
       {loaderData.ban ? (
         <p className="border-b bg-destructive/10 px-4 py-2 text-center text-sm">
           편집이 차단된 상태입니다. 열람은 그대로 할 수 있습니다. 자세한 내용은{" "}

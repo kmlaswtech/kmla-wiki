@@ -35,9 +35,12 @@ const NAV_LINK =
 export function SiteHeader({
   status,
   stickyOnNarrow = true,
+  tabToSearch = false,
 }: {
   status: MemberStatus;
   stickyOnNarrow?: boolean;
+  /** 포커스가 아무 데도 없을 때 Tab이 검색창으로 온다(`SearchBox`). */
+  tabToSearch?: boolean;
 }) {
   const header = useRef<HTMLElement>(null);
 
@@ -94,7 +97,7 @@ export function SiteHeader({
           큼온 위키
         </Link>
 
-        <SearchBox className="min-w-0 flex-1" />
+        <SearchBox className="min-w-0 flex-1" tabToSearch={tabToSearch} />
 
         <NavMenu status={status} />
 

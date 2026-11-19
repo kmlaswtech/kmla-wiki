@@ -23,7 +23,14 @@ type Suggestion =
  * 치면 `go=1`을 붙여 검색으로 가고, 제목이 정확히 맞는 문서가 있으면 검색 화면이 그 문서로 넘긴다.
  * 결과 목록을 보고 싶을 때는 후보 맨 아래의 "전체 검색"을 고른다.
  */
-export function SearchBox({ className }: { className?: string }) {
+export function SearchBox({
+  className,
+  tabToSearch = false,
+}: {
+  className?: string;
+  /** 포커스가 아무 데도 없을 때 Tab이 검색창으로 오게 한다(문서를 읽는 화면). */
+  tabToSearch?: boolean;
+}) {
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
   /** 입력칸의 확정된 값. Base UI에 넘기는 데만 쓴다. */
@@ -59,8 +66,27 @@ export function SearchBox({ className }: { className?: string }) {
   }, [settled]);
 
   // `/`를 누르면 검색창으로 간다. 글을 쓰는 중에는 가로채지 않는다.
+  //
+  // 문서를 볼 때는 포커스가 아무 데도 없으면 Tab도 검색창으로 간다. 문서를 읽다가 다른 문서를 찾는
+  // 일이 가장 많기 때문이다. 본문 글자나 빈 곳을 누른 뒤에도 그렇다(브라우저는 누른 자리 다음 링크로
+  // 보내지만, 일부러 검색창을 먼저 둔다). 링크·단추에 포커스가 있으면 브라우저대로 다음 요소로 가므로,
+  // 검색창에서 Tab을 이어 누르면 본문 링크까지 간다.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.key === "Tab" &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        tabToSearch &&
+        (document.activeElement === null ||
+          document.activeElement === document.body)
+      ) {
+        event.preventDefault();
+        input.current?.focus();
+        return;
+      }
       if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey)
         return;
       const target = event.target as HTMLElement | null;
@@ -74,7 +100,7 @@ export function SearchBox({ className }: { className?: string }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [tabToSearch]);
 
   const items: Suggestion[] =
     trimmed === ""

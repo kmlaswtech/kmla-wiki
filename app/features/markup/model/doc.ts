@@ -58,8 +58,13 @@ export const NODE = {
   template: "template",
   /** 틀 본문 안의 값 자리. `attrs.index`(1부터). */
   templateParam: "templateParam",
-  /** 올린 이미지. `attrs.id`(uuid), `attrs.alt`. */
+  /** 올린 이미지. `attrs.id`(uuid), `attrs.alt`, `attrs.size`, `attrs.align`(`model/media.ts`). */
   image: "image",
+  /**
+   * 유튜브 영상. `attrs.videoId`, `attrs.start`(초), `attrs.size`, `attrs.align`
+   * (`model/youtube.ts`, `model/media.ts`).
+   */
+  youtube: "youtube",
   /** 각주. `attrs.note`(내용, 글자). */
   footnote: "footnote",
 } as const;

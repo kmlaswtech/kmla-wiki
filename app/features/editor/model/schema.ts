@@ -14,11 +14,17 @@ import {
 import { StarterKit } from "@tiptap/starter-kit";
 
 import {
+  DEFAULT_VIDEO_SIZE,
   HEADING_LEVELS,
   IMAGE_ID,
   MARK,
+  isMediaAlign,
+  isMediaSize,
   NODE,
+  normalizeStart,
   SAFE_HREF,
+  YOUTUBE_ID,
+  type MediaSize,
 } from "~/features/markup";
 
 /**
@@ -241,6 +247,52 @@ export const TemplateParam = Node.create({
   },
 });
 
+/**
+ * 이미지·영상의 크기·정렬·캡션 속성. 문서 보기(`WikiContent`)가 `data-size`·`data-align`과
+ * `<figcaption>`으로 남기므로 복사해 붙여넣어도 살아난다. 모르는 값은 버린다.
+ */
+function mediaAttributes(defaultSize: MediaSize | null) {
+  return {
+    size: {
+      default: defaultSize,
+      parseHTML: (element: HTMLElement) => {
+        const value = element.getAttribute("data-size");
+        return isMediaSize(value) ? value : defaultSize;
+      },
+      rendered: false,
+    },
+    align: {
+      default: "left",
+      parseHTML: (element: HTMLElement) => {
+        const value = element.getAttribute("data-align");
+        return isMediaAlign(value) ? value : "left";
+      },
+      rendered: false,
+    },
+    // 그림 아래에 보이는 글. 비어 있으면 보이지 않는다.
+    caption: {
+      default: "",
+      parseHTML: (element: HTMLElement) =>
+        element.getAttribute("data-caption") ??
+        element.querySelector(":scope figcaption")?.textContent?.trim() ??
+        "",
+      rendered: false,
+    },
+  };
+}
+
+/**
+ * 크기·정렬·캡션을 HTML로 남긴다. 편집기 안에서 잘라내 붙여넣을 때(클립보드 HTML은 `renderHTML`로
+ * 만든다) 고른 값이 사라지지 않게 한다.
+ */
+function mediaDataAttributes(attrs: Record<string, unknown>) {
+  return {
+    "data-size": attrs.size,
+    "data-align": attrs.align,
+    "data-caption": attrs.caption || null,
+  };
+}
+
 /** 위키에 올린 이미지. 바깥 주소의 이미지는 받지 않는다(붙여넣어도 버린다). */
 export const WikiImage = Node.create({
   name: NODE.image,
@@ -253,6 +305,8 @@ export const WikiImage = Node.create({
     return {
       id: { default: "", rendered: false },
       alt: { default: "", rendered: false },
+      // 고르지 않으면 올린 원본 크기다.
+      ...mediaAttributes(null),
     };
   },
 
@@ -276,8 +330,54 @@ export const WikiImage = Node.create({
       {
         "data-wiki-image": node.attrs.id,
         "data-alt": node.attrs.alt,
+        ...mediaDataAttributes(node.attrs),
       },
       `[이미지: ${String(node.attrs.alt || node.attrs.id)}]`,
+    ];
+  },
+});
+
+/** 유튜브 영상. 주소가 아니라 영상 id와 시작 시각만 저장한다(`markup/model/youtube.ts`). */
+export const Youtube = Node.create({
+  name: NODE.youtube,
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+
+  addAttributes() {
+    return {
+      videoId: { default: "", rendered: false },
+      start: { default: 0, rendered: false },
+      // 크기는 늘 적는다. 영상에는 원본 크기가 없다.
+      ...mediaAttributes(DEFAULT_VIDEO_SIZE),
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "figure[data-youtube]",
+        getAttrs: (element) => {
+          const videoId = element.getAttribute("data-youtube") ?? "";
+          const start = normalizeStart(
+            Number(element.getAttribute("data-start")),
+          );
+          return YOUTUBE_ID.test(videoId) ? { videoId, start } : false;
+        },
+      },
+    ];
+  },
+
+  renderHTML({ node }) {
+    return [
+      "figure",
+      {
+        "data-youtube": node.attrs.videoId,
+        "data-start": String(node.attrs.start ?? 0),
+        ...mediaDataAttributes(node.attrs),
+      },
+      `[유튜브: ${String(node.attrs.videoId)}]`,
     ];
   },
 });
@@ -313,6 +413,7 @@ export function schemaExtensions(): AnyExtension[] {
     Template,
     TemplateParam,
     WikiImage,
+    Youtube,
   ];
 }
 

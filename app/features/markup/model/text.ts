@@ -9,6 +9,13 @@ import {
   type WikiMark,
   type WikiNode,
 } from "./doc";
+import {
+  DEFAULT_VIDEO_SIZE,
+  MEDIA_ALIGN_LABEL,
+  MEDIA_SIZE_LABEL,
+  mediaAlign,
+  mediaSize,
+} from "./media";
 import { templateTitle } from "./refs";
 import { headingDepth } from "./sections";
 
@@ -42,6 +49,8 @@ export function visibleTextLength(doc: WikiDoc): number {
   walk(doc.content, (node) => {
     if (node.type === NODE.text) length += (node.text ?? "").trim().length;
     if (node.type === NODE.footnote) length += stringAttr(node, "note").length;
+    if (node.type === NODE.image || node.type === NODE.youtube)
+      length += stringAttr(node, "caption").trim().length;
   });
   return length;
 }
@@ -108,11 +117,36 @@ function blockToText(node: WikiNode): string {
       // 설명이 같은 다른 이미지로 바꾼 것도 비교에 보이게 이미지 번호 앞부분을 적는다.
       const id = stringAttr(node, "id").slice(0, 8);
       const alt = stringAttr(node, "alt");
-      return `[이미지 ${id}${alt ? `: ${alt}` : ""}]`;
+      return `[이미지 ${id}${alt ? `: ${alt}` : ""}${mediaLayoutText(node)}]`;
+    }
+    case NODE.youtube: {
+      const start = numberAttr(node, "start") ?? 0;
+      return `[유튜브 ${stringAttr(node, "videoId")}${start > 0 ? ` ${start}초부터` : ""}${mediaLayoutText(node)}]`;
     }
     default:
       return node.content ? blocksToText(node.content) : "";
   }
+}
+
+/**
+ * 크기·정렬과 캡션. 바꾼 것도 비교에 보이게 적는다. 이미지의 기본값(원본 크기, 왼쪽, 캡션 없음)은
+ * 적지 않아, 이 기능 전의 이미지는 글자가 그대로다.
+ */
+function mediaLayoutText(node: WikiNode): string {
+  const chosen = mediaSize(node);
+  // 영상은 고르지 않아도 기본 크기가 있다. 기본 크기는 이미지처럼 적지 않는다.
+  const size =
+    node.type === NODE.youtube && chosen === DEFAULT_VIDEO_SIZE ? null : chosen;
+  const align = mediaAlign(node);
+  const parts = [
+    size ? MEDIA_SIZE_LABEL[size] : null,
+    align === "left" ? null : `${MEDIA_ALIGN_LABEL[align]} 정렬`,
+  ].filter(Boolean);
+  const caption = stringAttr(node, "caption").trim();
+  return (
+    (parts.length > 0 ? ` (${parts.join(", ")})` : "") +
+    (caption ? ` — ${caption}` : "")
+  );
 }
 
 /** 표 칸 하나. 제목 칸과 합친 칸도 비교에 보이게 표시한다. */

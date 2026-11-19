@@ -71,11 +71,55 @@ describe("normalizeDoc", () => {
       template("틀:오래된 정보", ["값"]),
       {
         type: "image",
-        attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a", alt: "지도" },
+        attrs: {
+          id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a",
+          alt: "지도",
+          size: "medium",
+          align: "center",
+          caption: "본관 앞",
+        },
+      },
+      {
+        type: "youtube",
+        attrs: {
+          videoId: "dQw4w9WgXcQ",
+          start: 90,
+          size: "small",
+          align: "right",
+          caption: "",
+        },
       },
       { type: "fold", attrs: { title: "더" }, content: [para(text("숨김"))] },
     );
     expect(sameDoc(normalizeDoc(body), body)).toBe(true);
+  });
+
+  it("fills the default size and alignment of images and videos", () => {
+    const normalized = normalizeDoc(
+      doc(
+        {
+          type: "image",
+          attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a" },
+        },
+        { type: "youtube", attrs: { videoId: "dQw4w9WgXcQ" } },
+      ),
+    );
+    expect(normalized.content.map((node) => node.attrs)).toEqual([
+      {
+        id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a",
+        alt: "",
+        size: null,
+        align: "left",
+        caption: "",
+      },
+      {
+        videoId: "dQw4w9WgXcQ",
+        start: 0,
+        size: "large",
+        align: "left",
+        caption: "",
+      },
+    ]);
   });
 
   it("drops nodes the editor does not know", () => {

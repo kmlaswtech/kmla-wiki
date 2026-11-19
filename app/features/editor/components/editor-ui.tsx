@@ -10,7 +10,9 @@ export type EditorRequest =
   | { kind: "template"; pos?: number }
   /** `pos`가 있으면 그 자리의 각주를 고친다. */
   | { kind: "footnote"; pos?: number }
-  | { kind: "table" };
+  | { kind: "table" }
+  /** `pos`가 있으면 그 자리의 유튜브 영상을 고친다. */
+  | { kind: "youtube"; pos?: number };
 
 /**
  * 노드 뷰(틀·이미지·각주)가 편집기 바깥에서 받아야 하는 것. 노드 뷰는 편집기 안에 따로 그려지지만

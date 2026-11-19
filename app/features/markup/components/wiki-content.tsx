@@ -1,5 +1,13 @@
 import { Pencil } from "lucide-react";
-import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Link } from "react-router";
 
 import {
@@ -12,6 +20,8 @@ import {
   type WikiNode,
 } from "../model/doc";
 import { headingId } from "../model/heading-id";
+import { mediaAlign, mediaSize } from "../model/media";
+import { normalizeStart, YOUTUBE_ID, youtubeEmbedUrl } from "../model/youtube";
 import { headingNumberMap } from "../model/heading-number";
 import {
   MISSING_TEMPLATE,
@@ -139,7 +149,75 @@ export function WikiContent({
     );
   }, [document, existing, sectionEditHref, renderImage, withToc, embedded]);
 
-  return <div className={cn("wiki-content", className)}>{content}</div>;
+  const root = useRef<HTMLDivElement>(null);
+  useRevealStrikeOnTap(root);
+  useResetStrikeOnChange(root, document);
+
+  return (
+    <div ref={root} className={cn("wiki-content", className)}>
+      {content}
+    </div>
+  );
+}
+
+/**
+ * 취소선 글자. 마우스를 쓰는 화면은 올렸을 때 선을 걷는다(CSS). 손가락으로 쓰는 화면에는 올릴
+ * 마우스가 없으므로 누를 때마다 선을 걷고 되돌린다(`data-revealed`). 링크 안의 취소선은 누르면
+ * 링크로 간다.
+ *
+ * 취소선마다 단추를 달지 않고 본문 하나에서 받는다. `<s>`는 누르는 요소가 아니므로 역할을 바꾸지
+ * 않는다.
+ */
+function useRevealStrikeOnTap(root: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    /** 지금 누르는 것이 손가락(또는 펜)인지. `pointerdown`이 `click`보다 먼저 온다. */
+    let touchPress = false;
+    const onPointerDown = (event: PointerEvent) => {
+      touchPress = event.pointerType !== "mouse";
+    };
+    const onClick = (event: MouseEvent) => {
+      if (!touchPress || !(event.target instanceof Element)) return;
+      const strike = event.target.closest("s");
+      // 링크·각주 단추·접기 제목 안이면 그쪽 동작이 먼저다.
+      if (
+        !strike ||
+        !element.contains(strike) ||
+        event.target.closest("a, button, summary")
+      )
+        return;
+      strike.setAttribute("data-touched", "");
+      strike.toggleAttribute("data-revealed");
+    };
+    element.addEventListener("pointerdown", onPointerDown);
+    element.addEventListener("click", onClick);
+    return () => {
+      element.removeEventListener("pointerdown", onPointerDown);
+      element.removeEventListener("click", onClick);
+    };
+  }, [root]);
+}
+
+/**
+ * 다른 문서·판으로 바뀌면 걷어 둔 취소선을 되돌린다. React가 같은 `<s>` 요소를 다른 글자에 다시
+ * 쓰면 손으로 붙인 속성이 남기 때문이다.
+ */
+function useResetStrikeOnChange(
+  root: RefObject<HTMLElement | null>,
+  document: ParsedDocument,
+) {
+  useEffect(() => {
+    const element = root.current;
+    return () => {
+      for (const strike of element?.querySelectorAll("s[data-touched]") ?? []) {
+        strike.removeAttribute("data-touched");
+        strike.removeAttribute("data-revealed");
+      }
+    };
+    // 문서가 바뀔 때마다 앞 문서에서 걷어 둔 것을 지우려고 `document`를 둔다.
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
+  }, [root, document]);
 }
 
 /**
@@ -274,20 +352,52 @@ function renderBlock(
       );
     case NODE.image: {
       const id = stringAttr(node, "id");
-      const alt = stringAttr(node, "alt");
+      const rawAlt = stringAttr(node, "alt");
+      // 설명(화면 낭독기용)을 비워 두었으면 캡션을 대신 읽게 한다.
+      const alt = rawAlt || stringAttr(node, "caption");
       return (
-        <figure
+        <MediaFigure
           key={key}
-          className="wiki-image"
+          node={node}
           data-wiki-image={id}
-          data-alt={alt}
+          data-alt={rawAlt}
         >
           {context.renderImage ? (
             context.renderImage(id, alt)
           ) : (
             <span className="text-muted-foreground">[이미지: {alt}]</span>
           )}
-        </figure>
+        </MediaFigure>
+      );
+    }
+    case NODE.youtube: {
+      const videoId = stringAttr(node, "videoId");
+      if (!YOUTUBE_ID.test(videoId)) return null;
+      const start = normalizeStart(numberAttr(node, "start"));
+      return (
+        <MediaFigure
+          key={key}
+          node={node}
+          data-youtube={videoId}
+          data-start={start}
+        >
+          <span className="wiki-youtube">
+            <iframe
+              src={youtubeEmbedUrl({ videoId, start })}
+              title={stringAttr(node, "caption") || "유튜브 영상"}
+              loading="lazy"
+              // 유튜브는 어느 사이트에 끼웠는지 알아야 재생한다(리퍼러가 없으면 오류 153).
+              referrerPolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              // 재생에 필요한 것만 연다. 유튜브 재생기는 스크립트와 자기 저장소가 있어야 돈다. 두 가지를 함께
+              // 여는 것이 위험한 경우는 같은 출처의 글을 끼울 때뿐이다. 이 틀은 늘 유튜브 주소(다른 출처)라
+              // 이 사이트에 닿지 못한다.
+              // oxlint-disable-next-line react/iframe-missing-sandbox
+              sandbox="allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox"
+            />
+          </span>
+        </MediaFigure>
       );
     }
     case MISSING_TEMPLATE: {
@@ -306,6 +416,37 @@ function renderBlock(
         <Fragment key={key}>{renderBlocks(children, context)}</Fragment>
       ) : null;
   }
+}
+
+/**
+ * 이미지·영상 상자: 크기·정렬과, 그림 아래의 캡션(비어 있으면 그리지 않는다). `data-*`는 이 글을
+ * 복사해 편집기에 붙여넣을 때 노드로 되살리는 데 쓴다(`features/editor/model/schema.ts`).
+ */
+function MediaFigure({
+  node,
+  children,
+  ...data
+}: {
+  node: WikiNode;
+  children: ReactNode;
+  [dataAttribute: `data-${string}`]: string | number;
+}) {
+  const caption = stringAttr(node, "caption");
+  return (
+    <figure
+      className="wiki-media"
+      data-size={mediaSize(node) ?? undefined}
+      data-align={mediaAlign(node)}
+      {...data}
+    >
+      <div className="wiki-media-item">
+        {children}
+        {caption.trim() ? (
+          <figcaption className="wiki-media-caption">{caption}</figcaption>
+        ) : null}
+      </div>
+    </figure>
+  );
 }
 
 function renderInline(

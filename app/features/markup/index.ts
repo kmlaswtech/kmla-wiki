@@ -16,6 +16,19 @@ export {
 } from "./model/doc";
 export { headingId } from "./model/heading-id";
 export {
+  DEFAULT_VIDEO_SIZE,
+  MEDIA_ALIGN_LABEL,
+  MEDIA_ALIGNS,
+  MEDIA_SIZE_LABEL,
+  MEDIA_SIZES,
+  isMediaAlign,
+  isMediaSize,
+  mediaAlign,
+  mediaSize,
+  type MediaAlign,
+  type MediaSize,
+} from "./model/media";
+export {
   parseWiki,
   type Footnote,
   type HeadingInfo,
@@ -53,3 +66,12 @@ export {
   titleToPath,
   type Namespace,
 } from "./model/title";
+export {
+  formatStart,
+  normalizeStart,
+  parseYoutubeUrl,
+  YOUTUBE_ID,
+  youtubeEmbedUrl,
+  youtubeThumbnailUrl,
+  youtubeWatchUrl,
+} from "./model/youtube";
