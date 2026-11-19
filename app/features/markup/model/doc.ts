@@ -94,6 +94,20 @@ export function emptyDoc(): WikiDoc {
   return { type: "doc", content: [{ type: NODE.paragraph }] };
 }
 
+/**
+ * 넘겨주기 문서의 본문. 본문과 분류 없이 대상만 둔다(DB가 다른 모양은 거부한다).
+ *
+ * 편집기 코드(`editor/model/doc-io.ts`)에 두지 않는다. 문서 보기 화면의 "다른 이름 더하기"가 이것을
+ * 쓰는데, 그 파일을 import하면 편집기(Tiptap) 전체가 문서 보기 화면의 번들에 들어간다.
+ */
+export function redirectDoc(target: string): WikiDoc {
+  return {
+    type: "doc",
+    content: emptyDoc().content,
+    attrs: { redirect: target },
+  };
+}
+
 /** 저장된 값이 문서 모양인지. 서버가 검사하지만 화면도 낡은 값·깨진 값에 버틴다. */
 export function isWikiDoc(value: unknown): value is WikiDoc {
   return (

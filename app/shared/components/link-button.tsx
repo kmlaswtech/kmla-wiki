@@ -11,16 +11,21 @@ type LinkButtonProps = LinkProps & VariantProps<typeof buttonVariants>;
  * 주소 복사가 되고, 화면 낭독기도 "링크"로 읽는다.
  *
  * Base UI의 Button에 `<a>`를 끼우면 역할이 버튼으로 바뀌므로, 모양(`buttonVariants`)만 빌려 온다.
+ *
+ * 마우스를 올리거나 누르기 시작하면 갈 화면의 코드를 미리 받는다(`prefetch="intent"`). 단추는
+ * 편집·기록처럼 다른 화면으로 가는 일이 많다.
  */
 export function LinkButton({
   variant,
   size,
   className,
+  prefetch = "intent",
   ...props
 }: LinkButtonProps) {
   return (
     <Link
       {...props}
+      prefetch={prefetch}
       className={cn(buttonVariants({ variant, size }), className)}
     />
   );

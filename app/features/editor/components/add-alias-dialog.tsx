@@ -2,9 +2,13 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { redirectDoc } from "../model/doc-io";
 import { useLoginOnExpiry } from "~/features/auth";
-import { parseTitle, redirectPageHref, titleKey } from "~/features/markup";
+import {
+  parseTitle,
+  redirectDoc,
+  redirectPageHref,
+  titleKey,
+} from "~/features/markup";
 import {
   describeWriteError,
   getTitleInfo,

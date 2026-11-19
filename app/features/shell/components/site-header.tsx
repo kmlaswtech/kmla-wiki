@@ -109,6 +109,7 @@ export function SiteHeader({
             <NavLink
               key={to}
               to={to}
+              prefetch="intent"
               aria-label={iconOnWide ? label : undefined}
               className={({ isActive }) =>
                 cn(NAV_LINK, isActive && "text-foreground")
@@ -164,7 +165,10 @@ function NavMenu({ status }: { status: MemberStatus }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-40">
         {navItems(status).map(({ to, label, icon: Icon }) => (
-          <DropdownMenuItem key={to} render={<Link to={to} />}>
+          <DropdownMenuItem
+            key={to}
+            render={<Link to={to} prefetch="intent" />}
+          >
             <Icon aria-hidden />
             {label}
           </DropdownMenuItem>

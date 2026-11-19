@@ -1,4 +1,5 @@
 export { DiffView } from "./components/diff-view";
+export { MissingArticle } from "./components/missing-article";
 export {
   canAddAlias,
   canEditPage,
@@ -6,6 +7,7 @@ export {
 } from "./components/page-article";
 export { RecentChangesPanel } from "./components/recent-changes-panel";
 export { useRecentChangesPanel } from "./components/use-recent-changes-panel";
+export { RevertDialog } from "./components/revert-dialog";
 export { RevisionList } from "./components/revision-list";
 export { movePage, revertPage, saveRevision } from "./data/mutations";
 export {
@@ -38,6 +40,7 @@ export {
 } from "./model/errors";
 export type { RedirectResolution, TitleSuggestion } from "./data/queries";
 export type { HeadingTarget } from "./model/headings";
+export { MAIN_PAGE_TITLE } from "./model/main-page";
 export { redirectsHere } from "./model/view";
 export type {
   FoundPage,

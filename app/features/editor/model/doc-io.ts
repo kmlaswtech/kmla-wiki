@@ -48,15 +48,6 @@ export function joinDoc(content: WikiDoc, meta: DocMeta): WikiDoc {
   return doc;
 }
 
-/** 넘겨주기 문서의 본문. 본문과 분류 없이 대상만 둔다(DB가 다른 모양은 거부한다). */
-export function redirectDoc(target: string): WikiDoc {
-  return {
-    type: "doc",
-    content: emptyDoc().content,
-    attrs: { redirect: target },
-  };
-}
-
 /**
  * 저장된 문서를 편집기 스키마로 한 번 읽어 다시 쓴다. 기본 속성이 채워지고 키 순서가 맞춰져,
  * 편집기가 내놓는 값과 그대로 비교할 수 있다. 편집기가 모르는 노드·마크는 버린다.

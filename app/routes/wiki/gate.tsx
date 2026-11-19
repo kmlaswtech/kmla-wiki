@@ -1,4 +1,10 @@
-import { Outlet, redirect, useMatches, useNavigation } from "react-router";
+import {
+  Outlet,
+  PrefetchPageLinks,
+  redirect,
+  useMatches,
+  useNavigation,
+} from "react-router";
 
 import type { Route } from "./+types/gate";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
@@ -13,6 +19,13 @@ import { cn } from "~/shared/lib/utils";
 
 /** 곁의 최근 변경을 읽는 자리(`routes.ts`, `recent-panel.ts`). */
 const RECENT_PANEL_PATH = "/_panel/recent";
+
+/**
+ * 어느 화면에서든 곧 갈 일이 많은 화면. 문서 링크를 누르거나 검색창에서 Enter를 칠 때다. 이 라우트의
+ * 코드를 미리 받아, 처음 갈 때 코드 파일을 차례로 받는 시간을 없앤다. 문서 제목은 아무것이나 된다.
+ * 데이터는 미리 읽지 않는다(`clientLoader`가 있는 라우트는 React Router가 읽지 않는다).
+ */
+const PREFETCH_PAGES = ["/w/_", "/search"];
 
 /** 본문과 최근 변경이 함께 쓰는 상자 모양. 폰에서는 상자 없이 꽉 채운다. */
 const BOX = "sm:rounded-lg sm:border sm:border-surface-border sm:shadow-xs";
@@ -107,6 +120,9 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
       <SiteFooter />
+      {PREFETCH_PAGES.map((page) => (
+        <PrefetchPageLinks key={page} page={page} />
+      ))}
       <ScrollButtons className={editing ? "max-sm:hidden" : undefined} />
     </div>
   );

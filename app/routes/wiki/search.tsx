@@ -9,15 +9,13 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const params = new URL(request.url).searchParams;
   const query = (params.get("q") ?? "").trim();
 
-  // 머리띠 검색창에서 Enter를 친 경우(`go=1`). 제목이 정확히 맞는 문서가 있으면 바로 연다.
-  if (params.get("go") === "1" && query !== "") {
-    const exact = await withVerifiedMember(request, () =>
-      findExactTitle(query),
-    );
-    if (exact) throw redirect(pageHref(exact));
-  }
-
-  const hits = await withVerifiedMember(request, () => searchPages(query));
+  // 머리띠 검색창에서 Enter를 친 경우(`go=1`). 제목이 정확히 맞는 문서가 있으면 바로 연다. 없을 때
+  // 기다리지 않게 검색도 함께 보낸다. 맞는 문서가 있으면 검색 결과는 버린다.
+  const go = params.get("go") === "1" && query !== "";
+  const [exact, hits] = await withVerifiedMember(request, () =>
+    Promise.all([go ? findExactTitle(query) : null, searchPages(query)]),
+  );
+  if (exact) throw redirect(pageHref(exact));
   return { query, hits };
 }
 
