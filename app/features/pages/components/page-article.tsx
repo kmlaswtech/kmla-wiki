@@ -42,6 +42,19 @@ interface PageArticleProps {
   aliasAction?: ReactNode;
 }
 
+/**
+ * 이 문서에 다른 이름(이 문서로 넘겨주는 새 문서)을 더할 수 있는가. 이 문서를 고치지 않으므로 보호
+ * 여부와는 상관없다. 넘겨주기 문서에 다른 이름을 달면 이중 넘겨주기가 되므로 일반 문서의 지금 판에만.
+ */
+export function canAddAlias(view: FoundPage): boolean {
+  return (
+    (view.canEdit || view.isAdmin) &&
+    view.redirect === null &&
+    view.page.deletedAt === null &&
+    (view.revision?.isCurrent ?? false)
+  );
+}
+
 /** 이 사용자가 이 문서를 고칠 수 있는가. 화면용 판단이고 실제 판정은 서버가 한다. */
 export function canEditPage(view: FoundPage): boolean {
   if (view.isAdmin) return true;
@@ -77,14 +90,6 @@ export function PageArticle({
   );
 
   const ancestors = ancestorTitles(page.title);
-  // 이 문서로 오는 넘겨주기는 링크가 아니라 이 문서의 다른 이름이다. 역링크와 따로 보여 준다.
-  // 넘겨주기 문서로 오는 넘겨주기는 다른 이름이 아니라 이중 넘겨주기다. 그때는 가리키는 문서에 둔다.
-  const aliases = view.redirect
-    ? []
-    : view.backlinks.filter((link) => link.isRedirect);
-  const linking = view.redirect
-    ? view.backlinks
-    : view.backlinks.filter((link) => !link.isRedirect);
 
   return (
     <article>
@@ -309,32 +314,32 @@ export function PageArticle({
         />
       ) : null}
 
-      {aliases.length > 0 || aliasAction ? (
+      {view.aliases.length > 0 || aliasAction ? (
         <section
           aria-label="다른 이름"
           className="mt-4 flex flex-wrap items-center gap-1.5 text-sm"
         >
           <span className="text-muted-foreground">다른 이름</span>
-          {aliases.map((alias) => (
+          {view.aliases.map((alias) => (
             <Badge
-              key={alias.title}
+              key={alias}
               variant="secondary"
-              render={<Link to={`${pageHref(alias.title)}?redirect=no`} />}
+              render={<Link to={`${pageHref(alias)}?redirect=no`} />}
             >
-              {alias.title}
+              {alias}
             </Badge>
           ))}
           {aliasAction}
         </section>
       ) : null}
 
-      {linking.length > 0 ? (
+      {view.backlinks.length > 0 ? (
         <details className="mt-4 text-sm">
           <summary className="cursor-pointer text-muted-foreground">
-            이 문서를 가리키는 문서 {linking.length}개
+            이 문서를 가리키는 문서 {view.backlinks.length}개
           </summary>
           <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-            {linking.map((link) => (
+            {view.backlinks.map((link) => (
               <li key={link.title}>
                 <Link
                   to={`${pageHref(link.title)}${link.isRedirect ? "?redirect=no" : ""}`}

@@ -121,6 +121,10 @@ export async function getPageView(
     };
   }
 
+  const backlinks = toBacklinks(raw.backlinks);
+  // 넘겨주기 문서로 오는 넘겨주기는 이중 넘겨주기다. 다른 이름으로 치지 않고 역링크에 남긴다.
+  const isAlias = (link: Backlink) => !raw.redirect && link.isRedirect;
+
   return {
     found: true,
     page: {
@@ -151,7 +155,8 @@ export async function getPageView(
       : null,
     resolved: toResolved(raw.resolved),
     images: toImageMap(raw.images ?? []),
-    backlinks: toBacklinks(raw.backlinks),
+    aliases: backlinks.filter(isAlias).map((link) => link.title),
+    backlinks: backlinks.filter((link) => !isAlias(link)),
     children: raw.children ?? [],
     members: raw.members ?? [],
     ...viewer,

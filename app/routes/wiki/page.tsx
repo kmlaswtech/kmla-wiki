@@ -9,7 +9,12 @@ import { withVerifiedMember } from "~/features/auth";
 import { AddAliasButton } from "~/features/editor";
 import { WikiImage } from "~/features/images";
 import { pageHref } from "~/features/markup";
-import { getPageView, PageArticle, type MissingPage } from "~/features/pages";
+import {
+  canAddAlias,
+  getPageView,
+  PageArticle,
+  type MissingPage,
+} from "~/features/pages";
 
 export async function clientLoader({
   request,
@@ -55,19 +60,12 @@ export default function PageRoute({ loaderData }: Route.ComponentProps) {
   );
 
   if (!view.found) return <Missing view={view} />;
-  // 다른 이름은 지금 판의 일반 문서에만 더한다. 넘겨주기 문서에 다른 이름을 달면 이중 넘겨주기가 된다.
-  // 새 넘겨주기 문서를 만들 뿐 이 문서를 고치지 않으므로, 이 문서의 보호 여부와는 상관없다.
-  const canAddAlias =
-    (view.canEdit || view.isAdmin) &&
-    view.redirect === null &&
-    view.page.deletedAt === null &&
-    (view.revision?.isCurrent ?? false);
   return (
     <PageArticle
       view={view}
       renderImage={renderImage}
       aliasAction={
-        canAddAlias ? (
+        canAddAlias(view) ? (
           <AddAliasButton
             title={view.page.title}
             onAdded={() => void revalidator.revalidate()}
