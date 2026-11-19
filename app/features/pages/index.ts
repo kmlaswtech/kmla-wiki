@@ -33,6 +33,7 @@ export {
   REDIRECT_MESSAGE,
   WRITE_ERROR,
 } from "./model/errors";
+export { redirectsHere } from "./model/view";
 export type {
   FoundPage,
   MissingPage,

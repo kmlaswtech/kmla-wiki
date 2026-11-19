@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import type { Route } from "./+types/special";
@@ -198,55 +199,65 @@ function RedirectIssues({
 }: {
   rows: { title: string; target: string; next: string | null }[];
 }) {
-  const broken = rows.filter((row) => row.next === null);
-  const double = rows.filter((row) => row.next !== null);
+  const broken: ReactNode[] = [];
+  const double: ReactNode[] = [];
+  for (const { title, target, next } of rows) {
+    if (next === null) {
+      broken.push(
+        <IssueRow key={title} title={title}>
+          <Link
+            to={pageHref(target)}
+            className="text-destructive hover:underline"
+          >
+            {target}
+          </Link>
+        </IssueRow>,
+      );
+    } else {
+      double.push(
+        <IssueRow key={title} title={title}>
+          <RedirectLink title={target} />
+          <span aria-hidden>→</span>
+          <Link to={pageHref(next)} className="text-primary hover:underline">
+            {next}
+          </Link>
+        </IssueRow>,
+      );
+    }
+  }
   return (
     <div className="space-y-6 text-sm">
-      <section>
-        <h2 className="mb-2 font-semibold">끊긴 넘겨주기 {broken.length}개</h2>
-        {broken.length === 0 ? (
-          <Empty />
-        ) : (
-          <ul className="divide-y">
-            {broken.map((row) => (
-              <li key={row.title} className="flex flex-wrap gap-x-2 py-2">
-                <RedirectLink title={row.title} />
-                <span aria-hidden>→</span>
-                <Link
-                  to={pageHref(row.target)}
-                  className="text-destructive hover:underline"
-                >
-                  {row.target}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section>
-        <h2 className="mb-2 font-semibold">이중 넘겨주기 {double.length}개</h2>
-        {double.length === 0 ? (
-          <Empty />
-        ) : (
-          <ul className="divide-y">
-            {double.map((row) => (
-              <li key={row.title} className="flex flex-wrap gap-x-2 py-2">
-                <RedirectLink title={row.title} />
-                <span aria-hidden>→</span>
-                <RedirectLink title={row.target} />
-                <span aria-hidden>→</span>
-                <Link
-                  to={pageHref(row.next!)}
-                  className="text-primary hover:underline"
-                >
-                  {row.next}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <IssueList heading="끊긴 넘겨주기" items={broken} />
+      <IssueList heading="이중 넘겨주기" items={double} />
     </div>
+  );
+}
+
+function IssueList({
+  heading,
+  items,
+}: {
+  heading: string;
+  items: ReactNode[];
+}) {
+  return (
+    <section>
+      <h2 className="mb-2 font-semibold">
+        {heading} {items.length}개
+      </h2>
+      {items.length === 0 ? <Empty /> : <ul className="divide-y">{items}</ul>}
+    </section>
+  );
+}
+
+/** 넘겨주기 문서 → 그 뒤로 이어지는 곳. */
+function IssueRow({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <li className="flex flex-wrap gap-x-2 py-2">
+      <RedirectLink title={title} />
+      <span aria-hidden>→</span>
+      {children}
+    </li>
   );
 }
 

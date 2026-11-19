@@ -10,6 +10,7 @@ import {
   describeWriteError,
   getPageView,
   movePage,
+  redirectsHere,
 } from "~/features/pages";
 import { Button } from "~/shared/ui/button";
 import { Checkbox } from "~/shared/ui/checkbox";
@@ -26,18 +27,11 @@ export async function clientLoader({
     getPageView(title, { followRedirect: false }),
   );
   if (!view.found) throw data(null, { status: 404 });
-  // 이 문서로 오는 넘겨주기. 넘겨주기 문서를 옮길 때는 `aliases`가 비고 `backlinks`에 섞여 온다.
-  const redirects = [
-    ...view.aliases,
-    ...view.backlinks
-      .filter((link) => link.isRedirect)
-      .map((link) => link.title),
-  ];
   return {
     title: view.page.title,
     redirectTarget: view.page.redirectTarget,
     canMove: canEditPage(view),
-    redirects,
+    redirects: redirectsHere(view),
     linkCount: view.backlinks.filter((link) => !link.isRedirect).length,
     subpages: view.children,
   };
@@ -122,7 +116,10 @@ export default function MoveRoute({
             옛 이름에 넘겨주기 남기기
           </Label>
           <MovePreview
-            {...loaderData}
+            title={title}
+            redirectTarget={loaderData.redirectTarget}
+            redirects={loaderData.redirects}
+            linkCount={loaderData.linkCount}
             newTitle={parseTitle(newTitle)}
             leaveRedirect={leaveRedirect}
           />

@@ -361,9 +361,12 @@ export async function listAllPages(
 export async function listRedirectIssues(): Promise<
   { title: string; target: string; next: string | null }[]
 > {
-  const rows = unwrap(await getSupabase().rpc("redirect_issues"));
   // 생성 타입은 `next`를 null 없이 적지만 대상이 없으면 null이 온다.
-  return rows.map((row) => ({ ...row, next: row.next ?? null }));
+  return unwrap(await getSupabase().rpc("redirect_issues")) as {
+    title: string;
+    target: string;
+    next: string | null;
+  }[];
 }
 
 /** 아무 문서의 제목. 문서가 하나도 없으면 `null`. */

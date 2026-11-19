@@ -13,6 +13,7 @@ import {
   canAddAlias,
   getPageView,
   PageArticle,
+  redirectsHere,
   type MissingPage,
 } from "~/features/pages";
 
@@ -76,11 +77,7 @@ export default function PageRoute({ loaderData }: Route.ComponentProps) {
         view.isAdmin ? (
           <PageAdminMenu
             page={view.page}
-            // 넘겨주기 문서를 볼 때는 그리로 오는 넘겨주기가 `aliases`가 아니라 `backlinks`에 있다.
-            aliasCount={
-              view.aliases.length +
-              view.backlinks.filter((link) => link.isRedirect).length
-            }
+            aliasCount={redirectsHere(view).length}
             onDone={() => void revalidator.revalidate()}
           />
         ) : null
