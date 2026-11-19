@@ -5,11 +5,8 @@ import { loginHref } from "./model/next";
 import { isWikiError, NOT_VERIFIED } from "~/shared/supabase/errors";
 
 /**
- * 쓰기 중에 회원 확인이 지나 거절됐으면 로그인 화면으로 보낸다. 로그인 뒤에는 지금 화면으로
- * 돌아온다. 읽기(`clientLoader`)는 `withVerifiedMember`가 같은 일을 한다.
- *
- * 돌려주는 함수는 오류가 확인 만료였으면 `true`다. `beforeLeave`는 떠나기 직전에 부른다(쓰던
- * 글을 임시 저장하는 등).
+ * 쓰기가 회원 확인 만료로 거절됐으면 로그인으로 보내고 `true`를 돌려준다(로그인 뒤 지금 화면으로
+ * 돌아온다). `beforeLeave`는 떠나기 직전에 부른다. 읽기는 `withVerifiedMember`가 맡는다.
  */
 export function useLoginOnExpiry(): (
   error: unknown,

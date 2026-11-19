@@ -9,8 +9,8 @@ import { TitleInput } from "./title-input";
 import { useLoginOnExpiry } from "~/features/auth";
 import {
   pageHref,
-  redirectPageHref,
   parseTitle,
+  redirectPageHref,
   titleKey,
   visibleTextLength,
   type WikiDoc,
