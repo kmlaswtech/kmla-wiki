@@ -1,0 +1,55 @@
+name: Docs
+
+# `ci.yml` skips Markdown- and docs-only PRs. Without this workflow, a
+# formatting error in those PRs would first fail `pnpm format:check` in the
+# deploy workflow after merge, and block the deployment.
+#
+# It also keeps agent rules in one place (docs/adr/0001): each AGENTS.md stays
+# within 200 lines, and each CLAUDE.md only imports its AGENTS.md.
+#
+# It runs no PR scripts and uses no secrets, so fork PRs are safe.
+on:
+  pull_request:
+    paths: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check agent rule files
+        run: |
+          status=0
+          # Installed agent skills (`.agents/`) are third-party files.
+          while IFS= read -r file; do
+            case "$(basename "$file")" in
+              AGENTS.md)
+                lines=$(wc -l < "$file")
+                echo "$file: $lines lines"
+                if (( lines > 200 )); then
+                  echo "::error file=$file::$file has $lines lines (limit 200). Remove stale rules or move explanations to docs/ before adding more."
+                  status=1
+                fi
+                ;;
+              CLAUDE.md)
+                if [[ "$(cat "$file")" != "@AGENTS.md" ]]; then
+                  echo "::error file=$file::$file must contain only '@AGENTS.md'. Write rules in AGENTS.md next to it."
+                  status=1
+                fi
+                ;;
+            esac
+          done < <(git ls-files -- '**/AGENTS.md' 'AGENTS.md' '**/CLAUDE.md' 'CLAUDE.md' ':!:.agents/**')
+          exit $status
+
+      - uses: ./.github/actions/setup
+
+      - name: Check formatting
+        run: pnpm format:check

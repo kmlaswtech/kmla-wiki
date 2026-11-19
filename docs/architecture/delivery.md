@@ -32,7 +32,7 @@ CI는 merge를 막지 않고 결과만 알린다.
 - `keepalive.yml`: 매일 위키 dev·prod Supabase의 `public.keepalive()`를 publishable key로 불러
   무료 프로젝트가 일시 정지되지 않게 한다. 주소와 key는 공개 값이라 워크플로에 그대로 적는다. 실패는
   경고만 남긴다.
-- `agents-size.yml`: 각 `AGENTS.md`가 200줄을 넘지 않는지 검사한다(`.agents/`의 skill 파일은 뺀다).
+- `docs.yml`: Markdown·`docs/`만 바뀐 PR에서 `ci.yml` 대신 돈다. 각 `AGENTS.md`가 200줄 이하인지, 각 `CLAUDE.md`가 `@AGENTS.md` 한 줄인지 검사하고 `pnpm format:check`를 돌린다.
 - `release-tag.yml`: `main`에 들어온 커밋에 KST 날짜 태그(`v2026.11.17`, 같은 날 두 번째부터
   `.2`)를 붙인다.
 

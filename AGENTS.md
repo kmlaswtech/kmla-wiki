@@ -16,7 +16,7 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
 - 규칙인가? 동작 설명은 `docs/architecture/`에, 결정 이유와 버린 안은 `docs/adr/`에 두고 여기에는
   링크만 둔다.
 - 한 폴더에서만 필요한가? 그 폴더의 `AGENTS.md`(예: `supabase/AGENTS.md`)에 둔다.
-- `AGENTS.md`는 200줄을 넘기지 않는다(`agents-size.yml`이 검사). 넘으면 더하기 전에 낡은 줄을
+- `AGENTS.md`는 200줄을 넘기지 않는다(`docs.yml`이 검사). 넘으면 더하기 전에 낡은 줄을
   지우거나 옮긴다.
 - 규칙의 이유가 없어지면(도구가 바뀜, 기능이 없어짐) 그 규칙도 지운다.
 
@@ -70,6 +70,9 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
 
 - 위키 계정은 KMLA 계정 하나에 하나다. 운영에서는 `custom:kmla` 말고 다른 로그인 수단을 모두 끈다.
 - KMLA 토큰이나 refresh token을 저장하거나 회원 확인 말고 다른 곳에 쓰지 않는다.
+- `kmla-verify`는 확인이 끝나면 그 토큰의 KMLA 세션을 끊는다(`logout?scope=local`). 이 단계를
+  지우지 않는다. KMLA 토큰은 KMLA Auth API(이메일 조회, 비밀번호 변경)에서 그 사용자로 동작하기
+  때문이다.
 - `kmla-verify`의 판정은 `handler.ts`(Deno API 없음, Vitest가 시험)에, 연결은 `index.ts`에 둔다.
 - custom provider는 `config.toml`로 설정할 수 없다. 로컬은 `pnpm kmla:provider`(admin API)로
   등록하고, `pnpm db:reset` 뒤에 다시 실행한다.
@@ -126,8 +129,8 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
 
 - 실행한 검사와 건너뛴 검사를 구분해 보고한다.
 - 포맷은 바뀐 파일에 적용한다(`pnpm exec prettier --write <files>`). CI가
-  `pnpm format:check`로 저장소 전체를 검사한다. Markdown과 `docs/`만 바뀐 PR에서는 CI가 돌지
-  않으므로, 그때는 로컬 Prettier가 유일한 검사다.
+  `pnpm format:check`로 저장소 전체를 검사한다. Markdown과 `docs/`만 바뀐 PR에서는 `ci.yml` 대신
+  `docs.yml`이 검사한다.
 - Supabase CLI 명령은 Windows에서 하나씩 순서대로 실행한다.
 
 ## 브랜치, PR, 배포
@@ -158,8 +161,7 @@ CI·배포 워크플로와 브랜치 ruleset은 `docs/architecture/delivery.md`�
 | 결정 기록(ADR) | `docs/adr/`                     | 왜 그렇게 정했나, 버린 안   |
 | 설명           | `docs/architecture/`            | 복잡한 로직이 동작하는 방식 |
 
-- 지금 유효한 결정은 `docs/adr/README.md`의 목록에서 찾고, 작업과 관련된 ADR만 읽는다.
-- 구조, 규칙, 의존성을 크게 바꾸는 결정은 ADR로 남긴다. 받아들인 ADR은 고치지 않는다. 결정을
-  바꾸면 새 ADR을 쓰고 옛 ADR의 상태를 "대체됨"으로 바꾼다.
+- 구조, 규칙, 의존성을 크게 바꾸는 결정은 ADR로 남긴다. 쓰는 법은 `docs/adr/README.md`에 있다.
+- 작업과 관련된 ADR만 읽는다. 제목 아래에 "대체됨" 줄이 있는 ADR은 지금 유효하지 않다.
 - 설명 문서가 다루는 코드를 바꾸면 같은 PR에서 그 문서도 고친다. 문서와 코드가 다르면 코드를
   믿고, 문서를 고친다.

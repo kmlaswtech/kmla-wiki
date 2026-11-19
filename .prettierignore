@@ -22,3 +22,6 @@ pnpm-lock.yaml
 
 # psql `\ir`로 불러 쓰는 SQL 조각. Prettier가 다룰 형식이 아니다.
 supabase/tests/helpers.inc
+
+# Third-party agent skills installed with `skills add`.
+.agents/
