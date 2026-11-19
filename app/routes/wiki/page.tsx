@@ -13,6 +13,7 @@ import {
   canAddAlias,
   getPageView,
   PageArticle,
+  redirectsHere,
   type MissingPage,
 } from "~/features/pages";
 
@@ -76,6 +77,7 @@ export default function PageRoute({ loaderData }: Route.ComponentProps) {
         view.isAdmin ? (
           <PageAdminMenu
             page={view.page}
+            aliasCount={redirectsHere(view).length}
             onDone={() => void revalidator.revalidate()}
           />
         ) : null

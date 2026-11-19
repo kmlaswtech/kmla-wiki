@@ -18,11 +18,17 @@ interface PageAdminMenuProps {
     protection: "open" | "admin";
     deletedAt: string | null;
   };
+  /** 이 문서로 오는 넘겨주기 수. 삭제하면 이것들이 끊긴다. */
+  aliasCount?: number;
   onDone: () => void;
 }
 
 /** 문서에 붙는 관리 메뉴: 보호와 삭제·복구. */
-export function PageAdminMenu({ page, onDone }: PageAdminMenuProps) {
+export function PageAdminMenu({
+  page,
+  aliasCount = 0,
+  onDone,
+}: PageAdminMenuProps) {
   const [open, setOpen] = useState<"protect" | "delete" | null>(null);
   const close = (next: boolean) =>
     setOpen((current) => (next ? current : null));
@@ -79,7 +85,11 @@ export function PageAdminMenu({ page, onDone }: PageAdminMenuProps) {
         description={
           deleted
             ? `${page.title} 문서와 판 기록을 다시 모두에게 보이게 합니다.`
-            : `${page.title} 문서와 판 기록을 일반 사용자에게 보이지 않게 합니다. 기록은 지워지지 않고 관리자가 복구할 수 있습니다.`
+            : `${page.title} 문서와 판 기록을 일반 사용자에게 보이지 않게 합니다. 기록은 지워지지 않고 관리자가 복구할 수 있습니다.${
+                aliasCount > 0
+                  ? ` 이 문서로 오는 넘겨주기 ${aliasCount}개가 끊깁니다.`
+                  : ""
+              }`
         }
         confirmLabel={deleted ? "복구" : "삭제"}
         destructive={!deleted}

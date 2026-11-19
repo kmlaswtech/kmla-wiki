@@ -1,14 +1,16 @@
+import { useState } from "react";
 import { data, Form, Link, redirect, useNavigation } from "react-router";
 
 import type { Route } from "./+types/move";
 import { formText, titleFromParams } from "./title-param";
 import { withVerifiedMember } from "~/features/auth";
-import { pageHref } from "~/features/markup";
+import { pageHref, parseTitle, titleKey } from "~/features/markup";
 import {
   canEditPage,
   describeWriteError,
   getPageView,
   movePage,
+  redirectsHere,
 } from "~/features/pages";
 import { Button } from "~/shared/ui/button";
 import { Checkbox } from "~/shared/ui/checkbox";
@@ -27,8 +29,11 @@ export async function clientLoader({
   if (!view.found) throw data(null, { status: 404 });
   return {
     title: view.page.title,
+    redirectTarget: view.page.redirectTarget,
     canMove: canEditPage(view),
-    childCount: view.children.length,
+    redirects: redirectsHere(view),
+    linkCount: view.backlinks.filter((link) => !link.isRedirect).length,
+    subpages: view.children,
   };
 }
 
@@ -65,8 +70,10 @@ export default function MoveRoute({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { title, canMove, childCount } = loaderData;
+  const { title, canMove, subpages } = loaderData;
   const pending = useNavigation().state === "submitting";
+  const [newTitle, setNewTitle] = useState(actionData?.newTitle ?? title);
+  const [leaveRedirect, setLeaveRedirect] = useState(true);
 
   return (
     <div className="max-w-xl">
@@ -84,8 +91,8 @@ export default function MoveRoute({
           <p className="text-sm text-muted-foreground">
             문서의 이름을 바꿉니다. 판 기록은 그대로 따라갑니다. 제목은 공식
             명칭으로 쓰고, 은어나 약칭은 넘겨주기로 남겨 주세요.
-            {childCount > 0
-              ? ` 하위 문서 ${childCount}개는 함께 옮겨지지 않습니다.`
+            {subpages.length > 0
+              ? ` 하위 문서 ${subpages.length}개(${subpages.join(", ")})는 함께 옮겨지지 않습니다.`
               : ""}
           </p>
           <div className="grid gap-1.5">
@@ -94,15 +101,28 @@ export default function MoveRoute({
               id="new-title"
               type="text"
               name="newTitle"
-              defaultValue={actionData?.newTitle ?? title}
+              value={newTitle}
+              onChange={(event) => setNewTitle(event.target.value)}
               maxLength={100}
               required
             />
           </div>
           <Label className="flex items-center gap-2 font-normal">
-            <Checkbox name="leaveRedirect" defaultChecked />옛 이름에 넘겨주기
-            남기기
+            <Checkbox
+              name="leaveRedirect"
+              checked={leaveRedirect}
+              onCheckedChange={setLeaveRedirect}
+            />
+            옛 이름에 넘겨주기 남기기
           </Label>
+          <MovePreview
+            title={title}
+            redirectTarget={loaderData.redirectTarget}
+            redirects={loaderData.redirects}
+            linkCount={loaderData.linkCount}
+            newTitle={parseTitle(newTitle)}
+            leaveRedirect={leaveRedirect}
+          />
           {actionData?.error ? (
             <p role="alert" className="text-sm text-destructive">
               {actionData.error}
@@ -119,5 +139,73 @@ export default function MoveRoute({
         </p>
       )}
     </div>
+  );
+}
+
+/** 이동하면 바뀌는 것. 서버(`move_page`)가 하는 일을 미리 보여 준다. */
+function MovePreview({
+  title,
+  redirectTarget,
+  newTitle,
+  leaveRedirect,
+  redirects,
+  linkCount,
+}: {
+  title: string;
+  /** 옮길 문서가 넘겨주기면 그 대상. 남기는 넘겨주기와 따라오는 넘겨주기가 이리로 간다. */
+  redirectTarget: string | null;
+  /** 정규화한 새 이름. 쓸 수 없는 이름이면 `null`. */
+  newTitle: string | null;
+  leaveRedirect: boolean;
+  redirects: string[];
+  linkCount: number;
+}) {
+  if (newTitle === null || newTitle === title) return null;
+  // 대소문자·공백만 바꾸면 같은 문서라 넘겨주기와 링크는 그대로 이 문서로 온다.
+  const renamed = titleKey(newTitle) !== titleKey(title);
+  // 새 이름이 이 문서로 오는 넘겨주기면 서버가 그것을 지우고 그 자리로 옮긴다(내용이 있던 적이
+  // 있으면 막는다).
+  const replaced = renamed
+    ? redirects.find((name) => titleKey(name) === titleKey(newTitle))
+    : undefined;
+  const destination = redirectTarget ?? "새 이름";
+  const followers = renamed
+    ? redirects.filter((name) => name !== replaced).length
+    : 0;
+
+  return (
+    <section
+      aria-label="이동하면 바뀌는 것"
+      className="space-y-1.5 rounded-md border bg-muted/40 p-3 text-sm break-keep"
+    >
+      <p className="font-medium">
+        {title} <span aria-hidden>→</span> {newTitle}
+      </p>
+      <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+        {replaced ? (
+          <li>
+            {replaced}은(는) 이 문서로 넘겨주는 문서입니다. 지우고 그 자리로
+            옮깁니다. 넘겨주기가 아닌 내용이 있던 적이 있는 문서면 옮길 수
+            없습니다.
+          </li>
+        ) : null}
+        {followers > 0 ? (
+          <li>
+            이 문서로 오는 넘겨주기 {followers}개도 {destination}을(를) 가리키게
+            바꿉니다.
+          </li>
+        ) : null}
+        {renamed && leaveRedirect ? (
+          <li>옛 이름으로 들어오면 {destination}(으)로 넘어갑니다.</li>
+        ) : null}
+      </ul>
+      {renamed && !leaveRedirect ? (
+        <p role="alert" className="text-destructive">
+          옛 이름은 없는 문서가 됩니다.{" "}
+          {linkCount > 0 ? `링크 ${linkCount}개와 ` : ""}밖에서 공유된 주소가
+          깨집니다.
+        </p>
+      ) : null}
+    </section>
   );
 }
