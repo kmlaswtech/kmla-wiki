@@ -3,14 +3,14 @@
 민족사관고등학교 학교생활 위키. React Router 8 프레임워크 모드의 SPA(`ssr: false`)와
 Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바일 환경을 전부 고려한다.
 
-대화는 한국어로 한다.
+대화 및 기록은 ASD-STE100를 70% 이상 지키며, 한국어로 한다.
 
 ## 실행 환경
 
-- 패키지 매니저는 pnpm이다(`package.json`의 `packageManager`). 명령은 `corepack pnpm …`으로 실행한다.
-  Node 버전은 `.nvmrc`를 따른다.
-- 로컬 Supabase(Docker)를 쓴다. `pnpm db:start` 뒤 `npx supabase status -o env`의 값으로
-  `.env.example`을 `.env.local`에 복사해 채운다.
+- 패키지 매니저는 pnpm이다(`package.json`의 `packageManager`). PATH에 `pnpm`이 없을 수 있으므로 이
+  문서의 `pnpm …`은 `corepack pnpm …`으로 실행한다. Node 버전은 `.nvmrc`를 따른다.
+- 로컬 Supabase(Docker)를 쓴다. `pnpm db:start` 뒤 `.env.example`을 `.env.local`로 복사하고,
+  `pnpm exec supabase status -o env`의 `API_URL`, `PUBLISHABLE_KEY`로 채운다.
 - 개발 서버 포트는 5183이다(`vite.config.ts`, `strictPort`).
 - 로컬 Docker DB는 일회용이다. 초기화, 재시드, 컨테이너 재시작을 확인 없이 해도 된다.
 - 원격 Supabase 프로젝트에는 사용자 요청 없이 push·배포하지 않는다.
@@ -23,10 +23,13 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
   import하지 않는다.
 - `app/features/<feature>/`가 제품 코드를 가진다.
   - `components/`: UI.
-  - `data/`: Supabase I/O. 조회는 `queries.ts`, 쓰기는 `mutations.ts`, Storage는 `files.ts`.
+  - `data/`: Supabase I/O. 파일은 하는 일로 나눈다(조회 `queries.ts`, 쓰기 `mutations.ts`,
+    Storage `files.ts`, 인증 `session.ts` 등).
   - `model/`: 순수 로직.
   - `index.ts`: 공개 API. 다른 feature는 이 파일로만 가져다 쓴다.
-- `app/shared/`는 도메인을 모른다. 범용 유틸은 `shared/lib/`에 둔다.
+- `app/shared/`는 도메인을 모른다. `ui/`(shadcn), `components/`, `hooks/`, `lib/`(범용 유틸),
+  `supabase/`(클라이언트와 생성 타입)가 있다. Supabase 클라이언트는 `getSupabase()`로 꺼낸다.
+  브라우저 전용이라 `clientLoader`/`clientAction`, 이벤트 핸들러, effect에서만 부른다.
 - 라우트 I/O는 `clientLoader`/`clientAction`으로 한다. 서버 `loader`/`action`은 쓰지 않는다.
 - 빌드할 때 루트 라우트를 한 번 렌더한다. 그래서 `app/root.tsx`와 그 import 그래프에서 렌더
   중에 `window`, `document`, `localStorage`, Supabase 클라이언트를 건드리지 않는다.
@@ -70,29 +73,34 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
 
 - 클라이언트의 검증과 권한 확인은 UX일 뿐이다. 권한, 소유권, 상태 전이, 여러 행에 걸친 불변식은
   Postgres(grant, RLS, 제약, 트리거, 트랜잭션 RPC)가 강제한다.
-- 기본 권한을 막아 두었다(foundation migration). 새 테이블과 함수는 필요한 역할에만 명시적으로
-  grant한다. 브라우저가 쓰는 테이블은 grant와 RLS를 같은 migration에 둔다.
+- 기본 권한을 막아 두었다(`supabase/schemas/10-foundation.sql`). 새 테이블과 함수는 필요한 역할에만
+  명시적으로 grant한다. 브라우저가 쓰는 테이블은 grant와 RLS를 테이블과 같은 schemas 파일에 둔다.
+  그러면 같은 migration으로 나간다.
 - anon이 부를 수 있는 것은 `public.keepalive()`(`select true`) 하나뿐이다. `keepalive.yml`이 무료
   프로젝트 일시 정지를 막으려고 일부러 열어 두었다. 권한을 정리할 때 지우지 않는다. 다른 것은
   anon에게 열지 않는다(`privileges.test.sql`이 검사한다).
 - `security definer` 함수는 안에서 호출자를 확인하고, `set search_path = ''`를 두고, 필요한
   역할에만 EXECUTE를 준다.
 - 실명 같은 숨길 정보는 클라이언트 grant가 없는 `private` 스키마에 둔다.
-- migration은 `supabase/migrations/<14자리 버전>_<snake_case>.sql`이다. 원격에 배포된
-  migration은 고치지 않고 새 migration을 더한다.
 - 스키마를 바꾼 뒤에는 `pnpm db:types`로 `app/shared/supabase/database.types.ts`를 다시 만든다.
   이 파일은 손으로 고치지 않는다. CI가 낡은 타입을 잡는다.
 - DB 동작 테스트는 `supabase/tests/*.test.sql`(pgTAP)에 둔다. 공통 계정과 준비 작업은
   `helpers.inc`에 있다.
-- `supabase/seed.sql`은 개발 전용이다. seed 계정(`alice`, `bob`, `admin` 등 `@wiki.test`)은
-  E2E가 개발용 로그인 폼으로 쓴다.
+- `supabase/seed.sql`은 개발 전용이다. seed 계정은 `<이름>@wiki.test`, 비밀번호 `password123`이다.
+  `alice`·`bob`(회원), `admin`(관리자), `expired`(회원 확인 만료), `outsider`(회원 행 없음). E2E가
+  개발용 로그인 폼으로 쓴다.
+
+## 스키마와 migration
+
+DDL은 `supabase/schemas/`가 정본이다. DB 작업 전에 `supabase/CLAUDE.md`를 읽는다.
 
 ## 테스트
 
-- Vitest 테스트는 `test/`에 `app/`과 같은 경로로 둔다. Vitest API는 명시적으로 import한다
-  (`globals: false`).
-- node와 jsdom 환경은 경로로 나뉜다(`vitest.config.ts`). `model/`과 `shared/lib/`의 `.ts`
-  테스트는 node에서 돈다. DOM이 필요하면 `.tsx`로 만든다.
+- Vitest 테스트는 `test/`에 둔다. `app/` 아래 파일은 `app/`을 뺀 같은 경로다
+  (`app/features/markup/model/parse.ts` → `test/features/markup/model/….test.ts`). Edge Function은
+  `test/supabase/functions/<함수>.test.ts`다. Vitest API는 명시적으로 import한다(`globals: false`).
+- node와 jsdom 환경은 경로로 나뉜다(`vitest.config.ts`). `model/`, `shared/lib/`,
+  `supabase/functions/`의 `.ts` 테스트는 node에서 돈다. DOM이 필요하면 `.tsx`로 만든다.
 - Playwright E2E는 `e2e/`에 있고 로컬 Supabase와 seed가 필요하다. 로컬에서는 dev 서버를,
   `CI=1`에서는 프로덕션 빌드를 `vite preview`로 띄운다.
 - E2E는 로컬에서 돌리지 않고 CI 결과로 확인한다. 단, `e2e/`의 테스트를 고쳤을 때는 고친 파일을
@@ -103,14 +111,14 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
 
 ## 검증
 
-| 변경             | 실행할 것                                                                                |
-| ---------------- | ---------------------------------------------------------------------------------------- |
-| 소스 편집 중     | `pnpm typecheck`, `pnpm lint`, 관련 Vitest 파일(`pnpm exec vitest run <file>`)           |
-| 소스 변경 마무리 | `pnpm verify`(typegen, oxlint, tsc, Vitest, build)                                       |
-| DB 변경          | `pnpm db:reset` → `pnpm test:db` → `pnpm db:lint` → `pnpm db:advisors` → `pnpm db:types` |
-| 화면 흐름 변경   | 로컬 E2E는 돌리지 않고 CI 결과를 본다                                                    |
-| E2E 테스트 수정  | 고친 E2E 파일(`pnpm e2e <file>`)                                                         |
-| 문서·설정만      | 바뀐 파일에 Prettier                                                                     |
+| 변경             | 실행할 것                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| 소스 편집 중     | `pnpm typecheck`, `pnpm lint`, 관련 Vitest 파일(`pnpm exec vitest run <file>`)                             |
+| 소스 변경 마무리 | `pnpm verify`(typegen, oxlint, tsc, Vitest, build)                                                         |
+| DB 변경          | `pnpm db:reset` → `pnpm test:db` → `pnpm db:lint` → `pnpm db:advisors` → `pnpm db:types` → `pnpm db:drift` |
+| 화면 흐름 변경   | 로컬 E2E는 돌리지 않고 CI 결과를 본다                                                                      |
+| E2E 테스트 수정  | 고친 E2E 파일(`pnpm e2e <file>`)                                                                           |
+| 문서·설정만      | 바뀐 파일에 Prettier                                                                                       |
 
 - 실행한 검사와 건너뛴 검사를 구분해 보고한다.
 - 포맷은 바뀐 파일에 적용한다(`pnpm exec prettier --write <files>`). CI가
@@ -119,12 +127,14 @@ Supabase로 만든다. 런타임 앱 서버는 없다. 컴퓨터, 패드, 모바
 
 ## CI
 
-`.github/workflows/ci.yml`이 PR에서 돌고(Markdown만 바뀐 경우는 건너뛴다), `main`·`dev` push에서는
+`.github/workflows/ci.yml`이 PR에서 돌고(Markdown이나 `docs/`만 바뀐 경우는 건너뛴다), `main`·`dev` push에서는
 배포 워크플로가 `workflow_call`로 먼저 부른다.
 
 - `app` job: `pnpm format:check`, `pnpm verify`.
-- `db` job: 로컬 Supabase를 한 번 띄운 뒤 pgTAP, DB lint, 보안 advisor, 생성 타입 diff 검사,
-  chromium E2E를 차례로 돌린다.
+- `migrations` job(PR만): base 브랜치에 있는 migration을 고치거나 지우지 않았는지, 새 migration
+  버전이 base의 마지막 버전보다 큰지 검사한다(`scripts/check-migration-order.mjs`).
+- `db` job: 로컬 Supabase를 한 번 띄운 뒤 pgTAP, DB lint, 보안 advisor, schemas·migrations drift
+  검사, 생성 타입 diff 검사, chromium E2E를 차례로 돌린다.
 
 CI는 merge를 막지 않고 결과만 알린다. 그 밖의 워크플로:
 
@@ -146,8 +156,10 @@ KMLA Online 저장소와 같은 구조다. 배포는 GitHub Actions에서만 한
 | `dev`  | `deploy-dev.yml` | 위키 dev(`ipwbtdcrrkklqjesftnq`)  | Preview, `wiki-dev.kmla.online` |
 | `main` | `release.yml`    | 위키 prod(`ubzhxqmmyvwmwinuxntb`) | Production, `wiki.kmla.online`  |
 
-- 순서: CI → 최신 커밋인지 확인 → `supabase db push` → `supabase functions deploy` → Vercel 배포
-  (`scripts/release/vercel.mjs`). DB가 화면보다 먼저 나간다.
+- 순서: CI → 최신 커밋인지 확인 → 사전 점검(`supabase link`, `db push --dry-run`, 함수 목록,
+  Vercel) → 최신 커밋인지 다시 확인 → `supabase db push` → `supabase functions deploy` → Vercel 배포
+  (`scripts/release/vercel.mjs`). DB가 화면보다 먼저 나간다. 워크플로는 Supabase 프로젝트 ID가
+  위 표와 다르면 배포를 거부한다.
 - 비밀 값은 GitHub Environment `Development`(`dev`만)와 `Production`(`main`만)에 같은 이름으로 둔다.
   `SUPABASE_ACCESS_TOKEN`은 그 프로젝트 하나로 범위를 좁힌 토큰이다.
 - 배포되는 것은 migration과 함수 코드뿐이다. 원격 Auth 설정(Site URL, 로그인 수단, `custom:kmla`
