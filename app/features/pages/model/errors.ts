@@ -38,7 +38,8 @@ const MESSAGE: Record<string, string> = {
   [WRITE_ERROR.titleTaken]: "그 제목의 문서가 이미 있습니다.",
 };
 
-const REDIRECT_MESSAGE: Record<string, string> = {
+/** 넘겨주기 규칙(WK015)의 detail별 문구. 넘겨주기 입력이 저장 전에 같은 문구로 알린다. */
+export const REDIRECT_MESSAGE: Record<string, string> = {
   content: "넘겨주기 문서에는 본문을 쓸 수 없습니다.",
   categories: "넘겨주기 문서에는 분류를 달 수 없습니다.",
   self: "자기 자신으로 넘겨줄 수 없습니다.",

@@ -79,7 +79,7 @@ const SAVE_SHORTCUT =
     ? "⌘S"
     : "Ctrl+S";
 
-const NO_META: DocMeta = { categories: [], redirect: "" };
+const NO_META: DocMeta = { categories: [] };
 
 /** 편집기에 여는 부분: 문단 편집이면 그 문단, 아니면 문서 전체. */
 function editingPart(target: EditTarget): WikiDoc {
@@ -92,7 +92,7 @@ function editingPart(target: EditTarget): WikiDoc {
  * 편집 화면 한 벌: 툴바, 편집기, 분류, 편집 요약, 저장.
  *
  * 넘겨주기는 여기서 고치지 않는다(`RedirectForm`). 넘겨주기 문서를 일반 문서로 바꿔 여는 경우에도
- * 넘겨주기는 빼고 시작한다. 그래서 그대로 저장하면 넘겨주기가 풀린다.
+ * 넘겨주기는 빼고 시작한다. 그래서 본문을 쓰고 저장하면 넘겨주기가 풀린다.
  *
  * 편집기가 곧 미리보기다. 고치는 대로 문서 보기와 같은 모양으로 보인다. 원문 차이는 "변경 사항"
  * 탭에서 본다.
@@ -112,7 +112,7 @@ export function EditorForm({
   const [draft] = useState(() => loadDraft(key, target.sectionIndex));
   // 임시 저장도 편집기 스키마로 한 번 읽는다. 그래야 기준 판과 키 순서까지 같은 값이 된다.
   const [initial] = useState(() =>
-    withoutRedirect(splitDoc(normalizeDoc(draft?.body ?? editingPart(target)))),
+    splitDoc(normalizeDoc(draft?.body ?? editingPart(target))),
   );
 
   const [content, setContent] = useState<WikiDoc>(initial.content);
@@ -141,16 +141,11 @@ export function EditorForm({
     [content, meta, sectionMode],
   );
   const baseline = useMemo(() => normalizeDoc(editingPart(base)), [base]);
-  // 넘겨주기 문서를 일반 문서로 바꿔 여는 중인가. 그러면 넘겨주기를 뺀 문서와 비교한다. 아무것도
-  // 쓰지 않았으면 바뀐 것이 없어서, 빈 문서로 저장되거나 임시 저장·나가기 경고가 생기지 않는다.
-  const releasingRedirect = !sectionMode && Boolean(baseline.attrs?.redirect);
-  const baselineJson = useMemo(() => {
-    if (!releasingRedirect) return JSON.stringify(baseline);
-    const { content: released, meta: releasedMeta } = withoutRedirect(
-      splitDoc(baseline),
-    );
-    return JSON.stringify(joinDoc(released, releasedMeta));
-  }, [baseline, releasingRedirect]);
+  const baselineJson = useMemo(() => JSON.stringify(baseline), [baseline]);
+  // 넘겨주기 문서를 일반 문서로 바꿔 여는 중인가. 기준(`normalizeDoc`)에서 넘겨주기가 빠지므로,
+  // 아무것도 쓰지 않으면 바뀐 것이 없다(빈 문서로 저장되거나 임시 저장·나가기 경고가 생기지 않는다).
+  const releasingRedirect =
+    !sectionMode && Boolean(base.baseBody.attrs?.redirect);
   // 양쪽 다 편집기 스키마를 거친 값이라 키 순서가 같다. 그래서 키를 정렬하지 않고 바로 비교한다
   // (글자를 칠 때마다 계산하므로 큰 문서에서 정렬 비용이 크다).
   const dirty = useMemo(
@@ -326,7 +321,7 @@ export function EditorForm({
 
   /** 편집기와 문서 정보를 주어진 문서로 되돌린다(임시 저장 버리기). */
   function resetTo(doc: WikiDoc) {
-    const next = withoutRedirect(splitDoc(normalizeDoc(doc)));
+    const next = splitDoc(normalizeDoc(doc));
     editor?.commands.setContent(next.content, { emitUpdate: true });
     setContent(next.content);
     setMeta(next.meta);
@@ -676,11 +671,6 @@ export function EditorForm({
       </Dialog>
     </form>
   );
-}
-
-/** 넘겨주기를 뺀다. 넘겨주기는 본문 편집기에서 다루지 않는다. */
-function withoutRedirect(doc: { content: WikiDoc; meta: DocMeta }) {
-  return { content: doc.content, meta: { ...doc.meta, redirect: "" } };
 }
 
 /** 글이 가리키는 것(링크·틀·분류·이미지)의 목록. 같으면 틀·링크·이미지 정보를 다시 받지 않는다. */

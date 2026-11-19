@@ -103,7 +103,8 @@ const BLOCKED_MESSAGE: Record<Blocked, string> = {
 
 export default function EditRoute({ loaderData }: Route.ComponentProps) {
   const { target } = loaderData;
-  // 다른 문서·문단·판으로 가면 화면 상태(넘겨주기 입력인지)를 새로 시작한다.
+  // 다른 문서·문단·판으로 가면 화면을 새로 만든다. 편집기는 처음 받은 글로 한 번 만들고, 넘겨주기
+  // 입력인지도 새로 정한다.
   return (
     <EditScreen
       key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
@@ -137,19 +138,13 @@ function EditScreen({
             {target.title}
           </Link>{" "}
           <span className="font-normal text-muted-foreground">
-            {redirectMode && !readOnly
-              ? isNew
-                ? "넘겨주기로 만들기"
-                : savedRedirect
-                  ? "넘겨주기 편집"
-                  : "넘겨주기로 바꾸기"
-              : isNew
-                ? "새 문서"
-                : section
-                  ? `"${section.title}" 문단 ${readOnly ? "보기" : "편집"}`
-                  : readOnly
-                    ? "보기"
-                    : "편집"}
+            {headingLabel({
+              redirectMode: redirectMode && !readOnly,
+              isNew,
+              savedRedirect: Boolean(savedRedirect),
+              sectionTitle: section?.title ?? null,
+              readOnly,
+            })}
           </span>
         </h1>
       </header>
@@ -184,8 +179,6 @@ function EditScreen({
           </p>
         ) : (
           <ReadOnlyDocument
-            // 편집기는 처음 받은 글로 한 번 만든다. 다른 문서·문단으로 가면 새로 만든다.
-            key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
             doc={
               (target.sectionIndex !== null &&
                 getSection(target.baseBody, target.sectionIndex)) ||
@@ -214,6 +207,29 @@ function EditScreen({
       )}
     </div>
   );
+}
+
+/** 제목 옆에 붙는 화면 이름. */
+function headingLabel({
+  redirectMode,
+  isNew,
+  savedRedirect,
+  sectionTitle,
+  readOnly,
+}: {
+  redirectMode: boolean;
+  isNew: boolean;
+  savedRedirect: boolean;
+  sectionTitle: string | null;
+  readOnly: boolean;
+}): string {
+  const verb = readOnly ? "보기" : "편집";
+  if (redirectMode) {
+    if (isNew) return "넘겨주기로 만들기";
+    return savedRedirect ? "넘겨주기 편집" : "넘겨주기로 바꾸기";
+  }
+  if (isNew) return "새 문서";
+  return sectionTitle ? `"${sectionTitle}" 문단 ${verb}` : verb;
 }
 
 /**

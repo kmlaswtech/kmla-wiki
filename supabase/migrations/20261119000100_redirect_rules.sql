@@ -28,7 +28,7 @@ begin
   if not private.is_valid_title(v_target) then
     raise exception 'invalid redirect target' using errcode = 'WK015', detail = 'target';
   end if;
-  if lower(v_target) = lower(p_title) then
+  if private.title_key(v_target) = private.title_key(p_title) then
     raise exception 'redirect to itself' using errcode = 'WK015', detail = 'self';
   end if;
   -- 빈 문단만 있어야 한다(`doc_is_empty`와 같은 기준).
@@ -167,12 +167,10 @@ begin
   where revision.id = coalesce(p_revision_id, v_page.current_revision_id)
     and revision.page_id = v_page.id;
 
-  -- 보여 줄 판의 넘겨주기. 예전 판을 볼 때는 그 판의 대상이다.
-  select ref.target into v_redirect_title
-  from private.extract_refs(v_revision.body) as ref
-  where ref.kind = 'redirect'
-  limit 1;
-  if v_redirect_title is not null then
+  -- 보여 줄 판의 넘겨주기. 예전 판을 볼 때는 그 판의 대상이다. 본문 전체를 훑는 `extract_refs`
+  -- 대신 속성 하나만 읽는다(판정 기준은 같다).
+  v_redirect_title := private.normalize_title(v_revision.body -> 'attrs' ->> 'redirect');
+  if private.is_valid_title(v_redirect_title) then
     select * into v_target from public.pages as page
     where page.title_key = lower(v_redirect_title) and page.deleted_at is null;
     v_redirect := jsonb_build_object(

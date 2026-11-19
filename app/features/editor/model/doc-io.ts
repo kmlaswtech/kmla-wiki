@@ -5,7 +5,6 @@ import {
   emptyDoc,
   isEmptyParagraph,
   normalizeCategories,
-  parseTitle,
   type WikiDoc,
   type WikiNode,
 } from "~/features/markup";
@@ -14,18 +13,18 @@ import {
 export interface DocMeta {
   /** 분류 문서 제목(`분류:생활`). */
   categories: string[];
-  /** 넘겨주기 대상. 넘겨주기 문서가 아니면 빈 글자. */
-  redirect: string;
 }
 
-/** 편집기에 넣을 본문과 따로 고칠 문서 정보로 나눈다. */
+/**
+ * 편집기에 넣을 본문과 따로 고칠 문서 정보로 나눈다.
+ *
+ * 넘겨주기는 본문 편집기에서 다루지 않는다(`RedirectForm`, `redirectDoc`). 그래서 나누면 빠진다.
+ * 넘겨주기 문서를 본문 편집기로 열어 저장하면 넘겨주기가 풀린다.
+ */
 export function splitDoc(doc: WikiDoc): { content: WikiDoc; meta: DocMeta } {
   return {
     content: { type: "doc", content: doc.content },
-    meta: {
-      categories: doc.attrs?.categories ?? [],
-      redirect: doc.attrs?.redirect ?? "",
-    },
+    meta: { categories: doc.attrs?.categories ?? [] },
   };
 }
 
@@ -40,18 +39,12 @@ export function joinDoc(content: WikiDoc, meta: DocMeta): WikiDoc {
   while (blocks.length > 1 && isEmptyParagraph(blocks.at(-1)!)) blocks.pop();
 
   const categories = normalizeCategories(meta.categories);
-  const redirect = parseTitle(meta.redirect);
 
   const doc: WikiDoc = {
     type: "doc",
     content: blocks.length > 0 ? blocks : emptyDoc().content,
   };
-  if (categories.length > 0 || redirect) {
-    doc.attrs = {
-      ...(categories.length > 0 ? { categories } : {}),
-      ...(redirect ? { redirect } : {}),
-    };
-  }
+  if (categories.length > 0) doc.attrs = { categories };
   return doc;
 }
 

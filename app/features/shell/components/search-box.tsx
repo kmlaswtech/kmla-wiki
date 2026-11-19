@@ -5,6 +5,7 @@ import { Form, useNavigate } from "react-router";
 
 import { pageHref } from "~/features/markup";
 import { suggestTitles } from "~/features/pages";
+import { useDebouncedValue } from "~/shared/hooks/use-debounced-value";
 import { cn } from "~/shared/lib/utils";
 import { Button } from "~/shared/ui/button";
 
@@ -41,21 +42,20 @@ export function SearchBox({ className }: { className?: string }) {
   /** 후보 찾기와 제출에 같이 쓰는 검색어. */
   const trimmed = typed.trim();
 
+  const settled = useDebouncedValue(trimmed, SUGGEST_DELAY_MS);
+
   useEffect(() => {
     const id = ++requestId.current;
     // 빈 검색어에는 후보를 그리지 않는다(아래 `items`). 앞선 후보는 다음 응답이 덮는다. 입력칸을
     // 비우면 후보도 비운다(`changeTyped`). 남겨 두면 새로 친 글자에 맞지 않는 후보가 잠깐 보인다.
-    if (trimmed === "") return;
-    const timer = window.setTimeout(() => {
-      suggestTitles(trimmed, "", SUGGEST_LIMIT)
-        .then((next) => {
-          if (id === requestId.current) setTitles(next);
-        })
-        // 후보를 못 받아도 검색은 된다.
-        .catch(() => undefined);
-    }, SUGGEST_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [trimmed]);
+    if (settled === "") return;
+    suggestTitles(settled, "", SUGGEST_LIMIT)
+      .then((next) => {
+        if (id === requestId.current) setTitles(next);
+      })
+      // 후보를 못 받아도 검색은 된다.
+      .catch(() => undefined);
+  }, [settled]);
 
   // `/`를 누르면 검색창으로 간다. 글을 쓰는 중에는 가로채지 않는다.
   useEffect(() => {

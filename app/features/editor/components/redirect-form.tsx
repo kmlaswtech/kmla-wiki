@@ -17,11 +17,14 @@ import {
 import {
   describeWriteError,
   getTitleInfo,
+  REDIRECT_MESSAGE,
   saveRevision,
   WRITE_ERROR,
   type TitleInfo,
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
+import { useDebouncedValue } from "~/shared/hooks/use-debounced-value";
+import { cn } from "~/shared/lib/utils";
 import { isWikiError, NOT_VERIFIED } from "~/shared/supabase/errors";
 import { Button } from "~/shared/ui/button";
 import { Input } from "~/shared/ui/input";
@@ -53,32 +56,35 @@ export function RedirectForm({
   const navigate = useNavigate();
   const key = titleKey(target.title);
   // 충돌이 나면 최신 판이 새 기준이 된다.
-  const [base, setBase] = useState(target);
-  const savedTarget = base.baseBody.attrs?.redirect ?? "";
+  const [base, setBase] = useState({
+    revisionId: target.baseRevisionId,
+    body: target.baseBody,
+  });
+  const savedTarget = base.body.attrs?.redirect ?? "";
   const [value, setValue] = useState(savedTarget);
   const [summary, setSummary] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const check = useTargetCheck(value, base.title);
+  const check = useTargetCheck(value, target.title);
 
-  const [dropped] = useState(() => droppedContent(base.baseBody, key));
+  const [dropped] = useState(() => droppedContent(base.body, key));
 
-  const chosen =
-    check.status === "ok" || check.status === "unknown" ? check.title : null;
+  const body =
+    check.status === "ok" || check.status === "unknown"
+      ? redirectDoc(check.title)
+      : null;
   // 대상이 같아도 저장된 본문이 넘겨주기 모양이 아니면(규칙 이전에 본문이 붙은 것) 저장해 정리한다.
-  const unchanged =
-    chosen !== null && sameDoc(redirectDoc(chosen), base.baseBody);
-  const canSave = chosen !== null && !unchanged && !saving;
+  const canSave = body !== null && !sameDoc(body, base.body) && !saving;
 
   async function save() {
-    if (!canSave || chosen === null) return;
+    if (body === null || !canSave) return;
     setSaving(true);
     setError(null);
     try {
       const saved = await saveRevision({
-        title: base.title,
-        baseRevisionId: base.baseRevisionId,
-        body: redirectDoc(chosen),
+        title: target.title,
+        baseRevisionId: base.revisionId,
+        body,
         summary,
       });
       // 본문 편집기에서 넘어왔다면 그쪽 임시 저장이 남아 있다. 본문은 이제 쓰지 않는다.
@@ -93,14 +99,9 @@ export function RedirectForm({
       }
       if (isWikiError(caught, WRITE_ERROR.conflict)) {
         // 최신 판을 새 기준으로 삼는다. 쓴 대상은 그대로 두어 확인 뒤 다시 저장하게 한다.
-        const latest = await loadLatest(base.title).catch(() => null);
-        if (latest) {
-          setBase({
-            ...base,
-            baseRevisionId: latest.revisionId,
-            baseBody: latest.body,
-          });
-        }
+        const latest = await loadLatest(target.title).catch(() => null);
+        if (latest)
+          setBase({ revisionId: latest.revisionId, body: latest.body });
         setError(
           latest
             ? `그 사이 다른 사람이 이 문서를 고쳤습니다${
@@ -143,20 +144,15 @@ export function RedirectForm({
           넘겨줄 문서
         </Label>
         <p className="text-xs text-muted-foreground">
-          이 이름으로 들어오면 아래 문서로 바로 넘어갑니다. 줄임말, 옛 이름,
-          다른 표기를 한 문서로 모을 때 씁니다.
+          이 이름으로 들어오면 아래 문서로 넘어갑니다. 줄임말, 옛 이름, 다른
+          표기를 한 문서로 모으기 위해 사용합니다.
         </p>
         <TitleInput
           id="redirect-target"
           value={value}
           onChange={setValue}
           placeholder="문서 이름"
-          aria-invalid={
-            check.status === "invalid" ||
-            check.status === "self" ||
-            check.status === "missing" ||
-            undefined
-          }
+          aria-invalid={statusMessage(check)?.error || undefined}
           aria-describedby="redirect-target-status"
         />
         <TargetStatus check={check} onUseNext={setValue} />
@@ -185,7 +181,7 @@ export function RedirectForm({
           {saving ? <Spinner /> : null}
           저장
         </Button>
-        <LinkButton variant="ghost" to={pageHref(base.title)}>
+        <LinkButton variant="ghost" to={pageHref(target.title)}>
           취소
         </LinkButton>
         <Button
@@ -232,25 +228,23 @@ function droppedContent(baseBody: WikiDoc, key: string): string[] {
 function useTargetCheck(value: string, ownTitle: string): TargetCheck {
   const title = parseTitle(value);
   const self = title !== null && titleKey(title) === titleKey(ownTitle);
+  const settledTitle = useDebouncedValue(self ? null : title, 250);
   const [found, setFound] = useState<{
     title: string;
     info: TitleInfo | null | "error";
   } | null>(null);
 
   useEffect(() => {
-    if (title === null || self) return;
+    if (settledTitle === null) return;
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      getTitleInfo(title).then(
-        (info) => !cancelled && setFound({ title, info }),
-        () => !cancelled && setFound({ title, info: "error" }),
-      );
-    }, 250);
+    getTitleInfo(settledTitle).then(
+      (info) => !cancelled && setFound({ title: settledTitle, info }),
+      () => !cancelled && setFound({ title: settledTitle, info: "error" }),
+    );
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
-  }, [title, self]);
+  }, [settledTitle]);
 
   if (value.trim() === "") return { status: "empty" };
   if (title === null) return { status: "invalid" };
@@ -268,6 +262,34 @@ function useTargetCheck(value: string, ownTitle: string): TargetCheck {
   return { status: "ok", title: found.info.title };
 }
 
+/** 대상 칸 아래에 보일 한 줄. 빈 칸과 "대상도 넘겨주기"(단추가 붙는다)는 따로 그린다. */
+function statusMessage(
+  check: TargetCheck,
+): { text: string; error: boolean } | null {
+  return check.status === "empty" || check.status === "redirect"
+    ? null
+    : STATUS_MESSAGE[check.status];
+}
+
+const STATUS_MESSAGE: Record<
+  Exclude<TargetCheck["status"], "empty" | "redirect">,
+  { text: string; error: boolean }
+> = {
+  checking: { text: "문서를 확인하는 중…", error: false },
+  ok: { text: "있는 문서입니다.", error: false },
+  unknown: {
+    text: "문서가 있는지 확인하지 못했습니다. 그대로 저장할 수는 있습니다.",
+    error: false,
+  },
+  // 저장할 때 DB가 거부하는 것과 같은 문구.
+  invalid: { text: REDIRECT_MESSAGE.target!, error: true },
+  self: { text: REDIRECT_MESSAGE.self!, error: true },
+  missing: {
+    text: "없는 문서입니다. 현존하는 문서로만 넘겨줄 수 있습니다.",
+    error: true,
+  },
+};
+
 function TargetStatus({
   check,
   onUseNext,
@@ -276,63 +298,40 @@ function TargetStatus({
   onUseNext: (title: string) => void;
 }) {
   const id = "redirect-target-status";
-  switch (check.status) {
-    case "empty":
-      return <p id={id} className="sr-only" aria-live="polite" />;
-    case "checking":
-      return (
-        <p
-          id={id}
-          aria-live="polite"
-          className="flex items-center gap-1.5 text-sm text-muted-foreground"
+  if (check.status === "redirect") {
+    return (
+      <div
+        id={id}
+        aria-live="polite"
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-destructive"
+      >
+        <span>
+          {check.title}도 넘겨주기 문서입니다(→ {check.next}).
+        </span>
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          onClick={() => onUseNext(check.next)}
         >
-          <Spinner /> 문서를 확인하는 중…
-        </p>
-      );
-    case "ok":
-      return (
-        <p id={id} aria-live="polite" className="text-sm text-muted-foreground">
-          있는 문서입니다.
-        </p>
-      );
-    case "unknown":
-      return (
-        <p id={id} aria-live="polite" className="text-sm text-muted-foreground">
-          문서가 있는지 확인하지 못했습니다. 그대로 저장할 수는 있습니다.
-        </p>
-      );
-    case "redirect":
-      return (
-        <div
-          id={id}
-          aria-live="polite"
-          className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-destructive"
-        >
-          <span>
-            {check.title}도 넘겨주기 문서입니다(→ {check.next}).
-          </span>
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            onClick={() => onUseNext(check.next)}
-          >
-            최종 문서로 바꾸기
-          </Button>
-        </div>
-      );
-    default:
-      return (
-        <p id={id} aria-live="polite" className="text-sm text-destructive">
-          {STATUS_ERROR[check.status]}
-        </p>
-      );
+          최종 문서로 바꾸기
+        </Button>
+      </div>
+    );
   }
+  const message = statusMessage(check);
+  return (
+    <p
+      id={id}
+      aria-live="polite"
+      className={cn(
+        "flex items-center gap-1.5 text-sm",
+        message === null && "sr-only",
+        message?.error ? "text-destructive" : "text-muted-foreground",
+      )}
+    >
+      {check.status === "checking" ? <Spinner /> : null}
+      {message?.text}
+    </p>
+  );
 }
-
-const STATUS_ERROR: Record<"invalid" | "self" | "missing", string> = {
-  invalid:
-    "쓸 수 없는 문서 이름입니다. [ ] { } | # < > 는 제목에 쓸 수 없습니다.",
-  self: "자기 자신으로 넘겨줄 수 없습니다.",
-  missing: "없는 문서입니다. 있는 문서로만 넘겨줄 수 있습니다.",
-};
