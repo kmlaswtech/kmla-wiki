@@ -17,11 +17,11 @@ import {
 } from "~/features/markup";
 import {
   describeWriteError,
-  getTitleInfo,
   REDIRECT_MESSAGE,
+  resolveRedirect,
   saveRevision,
   WRITE_ERROR,
-  type TitleInfo,
+  type RedirectResolution,
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
 import { useDebouncedValue } from "~/shared/hooks/use-debounced-value";
@@ -32,11 +32,16 @@ import { Input } from "~/shared/ui/input";
 import { Label } from "~/shared/ui/label";
 import { Spinner } from "~/shared/ui/spinner";
 
-/** 대상 칸에 쓴 이름의 상태. 있는 일반 문서일 때만 저장할 수 있다. */
+/**
+ * 대상 칸에 쓴 이름의 상태. 넘겨주기 문서를 쓰면 끝까지 따라가 최종 문서를 대상으로 삼는다. 그래서
+ * 넘겨주기가 넘겨주기를 가리키지 않는다. 있는 일반 문서에 닿을 때만 저장할 수 있다.
+ */
 type TargetCheck =
-  | { status: "empty" | "invalid" | "self" | "checking" | "missing" }
-  | { status: "ok"; title: string }
-  | { status: "redirect"; title: string; next: string }
+  | { status: "empty" | "invalid" | "self" | "checking" | "missing" | "loop" }
+  /** `via`: 쓴 이름이 넘겨주기 문서였으면 그 문서. `title`은 따라가 닿은 최종 문서다. */
+  | { status: "ok"; title: string; via: string | null }
+  /** 쓴 넘겨주기 문서를 따라갔는데 없는 문서에 닿았다. */
+  | { status: "broken"; via: string }
   /** 확인하지 못했다. 저장은 막지 않는다(DB가 대상의 존재까지 요구하지는 않는다). */
   | { status: "unknown"; title: string };
 
@@ -148,11 +153,13 @@ export function RedirectForm({
           id="redirect-target"
           value={value}
           onChange={setValue}
+          tabCompletes
+          wikiAddresses
           placeholder="문서 이름"
           aria-invalid={statusMessage(check)?.error || undefined}
           aria-describedby="redirect-target-status"
         />
-        <TargetStatus check={check} onUseNext={setValue} />
+        <TargetStatus check={check} />
       </div>
 
       <div className="grid gap-1.5">
@@ -221,22 +228,23 @@ function droppedContent(baseBody: WikiDoc, key: string): string[] {
   return lines;
 }
 
-/** 쓴 이름이 쓸 수 있는 대상인지. 입력이 잠깐 멈추면 DB에서 확인한다. */
+/** 쓴 이름이 쓸 수 있는 대상인지. 입력이 잠깐 멈추면 DB에서 넘겨주기를 끝까지 따라가 본다. */
 function useTargetCheck(value: string, ownTitle: string): TargetCheck {
   const title = parseTitle(value);
   const self = title !== null && titleKey(title) === titleKey(ownTitle);
   const settledTitle = useDebouncedValue(self ? null : title, 250);
   const [found, setFound] = useState<{
     title: string;
-    info: TitleInfo | null | "error";
+    /** `null`: 확인하지 못했다. */
+    result: RedirectResolution | null;
   } | null>(null);
 
   useEffect(() => {
     if (settledTitle === null) return;
     let cancelled = false;
-    getTitleInfo(settledTitle).then(
-      (info) => !cancelled && setFound({ title: settledTitle, info }),
-      () => !cancelled && setFound({ title: settledTitle, info: "error" }),
+    resolveRedirect(settledTitle).then(
+      (result) => !cancelled && setFound({ title: settledTitle, result }),
+      () => !cancelled && setFound({ title: settledTitle, result: null }),
     );
     return () => {
       cancelled = true;
@@ -247,79 +255,71 @@ function useTargetCheck(value: string, ownTitle: string): TargetCheck {
   if (title === null) return { status: "invalid" };
   if (self) return { status: "self" };
   if (found?.title !== title) return { status: "checking" };
-  if (found.info === "error") return { status: "unknown", title };
-  if (found.info === null) return { status: "missing" };
-  if (found.info.redirectTarget !== null) {
-    return {
-      status: "redirect",
-      title: found.info.title,
-      next: found.info.redirectTarget,
-    };
+  const { result } = found;
+  if (result === null) return { status: "unknown", title };
+  if (result.status !== "page") {
+    if (result.status === "loop") return { status: "loop" };
+    return result.via === null
+      ? { status: "missing" }
+      : { status: "broken", via: result.via };
   }
-  return { status: "ok", title: found.info.title };
+  // 따라가 보니 이 문서로 돌아왔다.
+  return titleKey(result.title) === titleKey(ownTitle)
+    ? { status: "self" }
+    : { status: "ok", title: result.title, via: result.via };
 }
 
-/** 대상 칸 아래에 보일 한 줄. 빈 칸과 "대상도 넘겨주기"(단추가 붙는다)는 따로 그린다. */
-function statusMessage(
-  check: TargetCheck,
-): { text: string; error: boolean } | null {
-  return check.status === "empty" || check.status === "redirect"
-    ? null
-    : STATUS_MESSAGE[check.status];
-}
-
+/** 글이 바뀌지 않는 안내. 저장할 때 DB가 거부하는 것과 같은 문구도 있다. */
 const STATUS_MESSAGE: Record<
-  Exclude<TargetCheck["status"], "empty" | "redirect">,
+  "checking" | "unknown" | "invalid" | "self" | "missing" | "loop",
   { text: string; error: boolean }
 > = {
   checking: { text: "문서를 확인하는 중…", error: false },
-  ok: { text: "있는 문서입니다.", error: false },
   unknown: {
     text: "문서가 있는지 확인하지 못했습니다. 그대로 저장할 수는 있습니다.",
     error: false,
   },
-  // 저장할 때 DB가 거부하는 것과 같은 문구.
   invalid: { text: REDIRECT_MESSAGE.target!, error: true },
   self: { text: REDIRECT_MESSAGE.self!, error: true },
   missing: {
     text: "없는 문서입니다. 현존하는 문서로만 넘겨줄 수 있습니다.",
     error: true,
   },
+  loop: {
+    text: "넘겨주기가 돌고 돌아 최종 문서를 찾지 못했습니다. 다른 문서를 골라 주세요.",
+    error: true,
+  },
 };
 
-function TargetStatus({
-  check,
-  onUseNext,
-}: {
-  check: TargetCheck;
-  onUseNext: (title: string) => void;
-}) {
-  const id = "redirect-target-status";
-  if (check.status === "redirect") {
-    return (
-      <div
-        id={id}
-        aria-live="polite"
-        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-destructive"
-      >
-        <span>
-          {check.title}도 넘겨주기 문서입니다(→ {check.next}).
-        </span>
-        <Button
-          type="button"
-          size="xs"
-          variant="outline"
-          onClick={() => onUseNext(check.next)}
-        >
-          최종 문서로 바꾸기
-        </Button>
-      </div>
-    );
+/** 대상 칸 아래에 보일 한 줄. 빈 칸은 없다. */
+function statusMessage(
+  check: TargetCheck,
+): { text: string; error: boolean } | null {
+  switch (check.status) {
+    case "empty":
+      return null;
+    case "ok":
+      return check.via === null
+        ? { text: "있는 문서입니다.", error: false }
+        : {
+            text: `${check.via}: 넘겨주기 문서입니다. 저장하면 최종 문서인 ${check.title}(으)로 넘겨줍니다.`,
+            error: false,
+          };
+    case "broken":
+      return {
+        text: `${check.via}: 넘겨주기 문서인데 그 대상이 없는 문서입니다. 현존하는 문서로만 넘겨줄 수 있습니다.`,
+        error: true,
+      };
+    default:
+      return STATUS_MESSAGE[check.status];
   }
+}
+
+function TargetStatus({ check }: { check: TargetCheck }) {
   const message = statusMessage(check);
   return (
     <p
-      id={id}
+      id="redirect-target-status"
       aria-live="polite"
       className={cn(
         "flex items-center gap-1.5 text-sm",

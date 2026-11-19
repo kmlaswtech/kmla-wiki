@@ -16,6 +16,9 @@ select public.save_revision('괄호(시험).', null, wiki('정규식 기호가 �
 select public.save_revision('틀:가이드', null, wiki('틀'));
 select public.save_revision('틀:안내', null, wiki('틀'));
 select public.save_revision('지운 가', null, wiki('지운다'));
+select public.save_revision('별명', null, wiki('#넘겨주기 [[가나]]'));
+select public.save_revision('틀:옛 안내', null, wiki('#넘겨주기 [[가나]]'));
+select public.save_revision('틀:새 안내', null, wiki('#넘겨주기 [[틀:안내]]'));
 select logout();
 
 select login(:admin);
@@ -46,6 +49,18 @@ select results_eq(
 select is_empty(
   $$select title from public.suggest_titles('괄호.', '괄호\.', '', 8)$$,
   'an escaped dot does not match any character'
+);
+
+select results_eq(
+  $$select title, redirect_target from public.suggest_titles('별명', '별명', '', 8)$$,
+  $$values ('별명'::text, '가나'::text)$$,
+  'redirect pages are suggested together with their target'
+);
+
+select results_eq(
+  $$select title, redirect_target from public.suggest_titles('안내', '안내', '틀:', 8)$$,
+  $$values ('틀:안내'::text, null::text), ('틀:새 안내'::text, '틀:안내'::text), ('틀:옛 안내'::text, null::text)$$,
+  'inside a namespace, a redirect target outside that namespace is left out'
 );
 
 select is(

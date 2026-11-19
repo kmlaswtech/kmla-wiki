@@ -2,10 +2,12 @@ import { Popover } from "@base-ui/react/popover";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { sectionCandidates, sectionExists } from "../model/section-link";
+import { wikiAddressTarget } from "../model/wiki-address";
 import {
   listHeadings,
   suggestTitles,
   type HeadingTarget,
+  type TitleSuggestion,
 } from "~/features/pages";
 import { useDebouncedValue } from "~/shared/hooks/use-debounced-value";
 import { cn } from "~/shared/lib/utils";
@@ -26,10 +28,19 @@ interface TitleInputProps {
   prefix?: string;
   /**
    * `문서#문단`을 받는 링크 칸인가. 켜면 `#` 뒤에서 그 문서의 문단 제목을 후보로 보이고, 없는 문단이면
-   * 칸 아래에 알린다. Tab으로 후보를 채우는 것도 이 칸에서만 한다. 새 문서 제목 같은 칸에서는 다음 칸으로
-   * 가려고 누른 Tab이 친 제목을 바꾸면 안 되기 때문이다.
+   * 칸 아래에 알린다.
    */
   sections?: boolean;
+  /**
+   * Tab으로 후보를 칸에 채울지. 기본은 `sections`를 따른다. 새 문서 제목 같은 칸에서는 다음 칸으로
+   * 가려고 누른 Tab이 친 제목을 바꾸면 안 되므로 끈다. 있는 문서를 고르는 칸에서만 켠다.
+   */
+  tabCompletes?: boolean;
+  /**
+   * 위키 문서 주소(`https://wiki.kmla.online/w/귀가#신청`)를 붙여넣으면 문서 이름으로 바꿀지.
+   * `sections`가 꺼져 있으면 `#` 뒤 문단은 버린다.
+   */
+  wikiAddresses?: boolean;
   placeholder?: string;
   /** 대화상자를 열자마자 칠 수 있게 처음부터 초점을 둔다. */
   focusOnMount?: boolean;
@@ -42,15 +53,15 @@ interface TitleInputProps {
 
 interface Option {
   label: string;
-  /** 고르면 칸에 들어갈 글 전체. */
+  /** 고르면 칸에 들어갈 글 전체. 넘겨주기 문서이면 그 대상이라 `label`과 다르다. */
   value: string;
 }
 
 /**
  * 제목 자동완성. 치는 동안 비슷한 문서 제목을 아래에 보여 준다.
  *
- * ↑↓로 후보를 옮기고 Enter로 고른다. 링크 칸(`sections`)에서는 Tab이 후보를 칸에 채우기만 하고 초점은
- * 그대로 둔다. 그래서 이어서 `#문단`을 칠 수 있다.
+ * ↑↓로 후보를 옮기고 Enter로 고른다. `tabCompletes` 칸에서는 Tab이 후보를 칸에 채우기만 하고 초점은
+ * 그대로 둔다. 그래서 링크 칸에서는 이어서 `#문단`을 칠 수 있다.
  */
 export function TitleInput({
   id,
@@ -60,6 +71,8 @@ export function TitleInput({
   submitOnEnter = true,
   prefix = "",
   sections = false,
+  tabCompletes = sections,
+  wikiAddresses = false,
   placeholder,
   focusOnMount,
   "aria-label": ariaLabel,
@@ -74,7 +87,7 @@ export function TitleInput({
   // 어느 검색어의 후보인지도 둔다. 치는 동안에는 앞 검색어의 후보가 잠시 보인다.
   const [suggestions, setSuggestions] = useState<{
     query: string;
-    titles: string[];
+    titles: TitleSuggestion[];
   }>({ query: "", titles: [] });
   const [active, setActive] = useState(-1);
   const [open, setOpen] = useState(false);
@@ -97,11 +110,12 @@ export function TitleInput({
         if (cancelled) return;
         setSuggestions({
           query: settledQuery,
-          titles: titles.map((title) =>
-            prefix && title.startsWith(prefix)
-              ? title.slice(prefix.length)
-              : title,
-          ),
+          // 대상도 같은 이름공간 안에 있다(밖이면 DB가 `null`을 준다).
+          titles: titles.map(({ title, redirectTarget }) => ({
+            title: withoutPrefix(title, prefix),
+            redirectTarget:
+              redirectTarget && withoutPrefix(redirectTarget, prefix),
+          })),
         });
         setActive(-1);
       })
@@ -150,16 +164,20 @@ export function TitleInput({
       : [];
   } else if (searchable) {
     fresh = suggestions.query === query;
-    options = suggestions.titles.map((title) => ({
+    // 넘겨주기 문서는 줄임말로 찾을 수 있게 후보에 보이되, 고르면 대상이 들어간다. 링크와 넘겨주기가
+    // 넘겨주기 문서를 거치지 않게 한다.
+    options = suggestions.titles.map(({ title, redirectTarget }) => ({
       label: title,
-      value: title,
+      value: redirectTarget ?? title,
     }));
   }
+  // 칸에 든 글이 이미 이 후보인가. 넘겨주기 후보는 이름(`label`)으로 쳐도 같다고 본다.
+  const typed = value.trim();
+  const typedIs = (option: Option) =>
+    option.value === typed || option.label === typed;
   // 이미 칸에 든 것과 같은 후보 하나만 남았으면 목록을 접는다.
   const visible =
-    !open || (options.length === 1 && options[0]!.value === value.trim())
-      ? []
-      : options;
+    !open || (options.length === 1 && typedIs(options[0]!)) ? [] : options;
 
   // 치는 중에는 맞는 후보가 보이므로 알리지 않는다. 맞는 후보가 없을 때만 알린다.
   const missingSection =
@@ -178,6 +196,16 @@ export function TitleInput({
     onChange(picked);
     setOpen(false);
     onCommit?.(picked);
+  };
+
+  /** 붙여넣은 위키 문서 주소를 칸에 넣을 글로 바꾼다. 위키 주소가 아니면 그대로다. */
+  const fromWikiAddress = (raw: string): string => {
+    if (!wikiAddresses) return raw;
+    const address = wikiAddressTarget(raw, window.location.origin);
+    if (address === null) return raw;
+    return sections && address.section
+      ? `${address.title}#${address.section}`
+      : address.title;
   };
 
   const describedBy =
@@ -202,7 +230,7 @@ export function TitleInput({
         aria-autocomplete="list"
         autoComplete="off"
         onChange={(event) => {
-          onChange(event.target.value);
+          onChange(fromWikiAddress(event.target.value));
           setOpen(true);
           setActive(-1);
         }}
@@ -221,12 +249,11 @@ export function TitleInput({
           } else if (
             event.key === "Tab" &&
             !event.shiftKey &&
-            sections &&
+            tabCompletes &&
             fresh &&
             visible.length > 0 &&
             // 고르지 않았는데 친 글이 이미 후보와 같으면 채울 것이 없다. 평소처럼 다음 칸으로 간다.
-            (active >= 0 ||
-              !visible.some((option) => option.value === value.trim()))
+            (active >= 0 || !visible.some(typedIs))
           ) {
             // 고른 후보(없으면 첫 후보)를 채우고 칸에 머문다.
             event.preventDefault();
@@ -275,7 +302,7 @@ export function TitleInput({
             >
               {visible.map((option, index) => (
                 <div
-                  key={option.value}
+                  key={option.label}
                   role="option"
                   tabIndex={-1}
                   aria-selected={index === active}
@@ -295,6 +322,12 @@ export function TitleInput({
                     <span className="text-muted-foreground">#</span>
                   ) : null}
                   {option.label}
+                  {!sectionMode && option.value !== option.label ? (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      → {option.value}
+                    </span>
+                  ) : null}
                 </div>
               ))}
             </Popover.Popup>
@@ -309,6 +342,13 @@ export function TitleInput({
       ) : null}
     </div>
   );
+}
+
+/** 이름공간 접두어(`틀:`)를 뗀 이름. 후보는 접두어 없이 보여 주고 칸에 넣는다. */
+function withoutPrefix(title: string, prefix: string): string {
+  return prefix && title.startsWith(prefix)
+    ? title.slice(prefix.length)
+    : title;
 }
 
 /** 제목 후보를 찾을 만한 글인가. 비었거나 바깥 주소를 치는 중이면 찾지 않는다. */

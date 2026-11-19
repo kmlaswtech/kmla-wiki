@@ -92,3 +92,60 @@ REVOKE ALL ON FUNCTION "public"."redirect_issues"(integer) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."redirect_issues"(integer) TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."redirect_issues"(integer) FROM PUBLIC, "anon";
+
+-- 넘겨주기를 끝까지 따라가 최종 문서를 찾는다. 넘겨주기 입력과 링크 넣기가 넘겨주기 문서를 가리키지
+-- 않게 할 때 쓴다. 한 행을 돌려준다.
+--   status 'page':    `title`이 최종 문서다.
+--   status 'missing': 쓴 이름, 또는 따라간 대상이 없는 문서다.
+--   status 'loop':    넘겨주기가 돌고 돌거나 너무 길다(10단계).
+-- `via`는 처음 만난 넘겨주기 문서(쓴 이름이 넘겨주기가 아니면 null)다. 호출자의 RLS를 그대로 따른다.
+CREATE OR REPLACE FUNCTION public.resolve_redirect (
+  p_title text
+)
+  RETURNS TABLE (
+    title  text,
+    via    text,
+    status text
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path TO ''
+  AS $function$
+declare
+  v_key text := private.title_key(p_title);
+  v_seen text[] := array[]::text[];
+  v_page record;
+  v_via text;
+begin
+  for i in 1..10 loop
+    if v_key is null or v_key = any(v_seen) then
+      exit;
+    end if;
+    v_seen := v_seen || v_key;
+    select page.title, page.redirect_key into v_page
+    from public.pages as page
+    where page.title_key = v_key and page.deleted_at is null;
+    if not found then
+      return query select null::text, v_via, 'missing'::text;
+      return;
+    end if;
+    if v_page.redirect_key is null then
+      return query select v_page.title, v_via, 'page'::text;
+      return;
+    end if;
+    v_via := coalesce(v_via, v_page.title);
+    v_key := v_page.redirect_key;
+  end loop;
+  return query select null::text, v_via, 'loop'::text;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text) FROM PUBLIC, "anon";

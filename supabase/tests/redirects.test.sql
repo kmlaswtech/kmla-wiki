@@ -181,6 +181,33 @@ select set_eq(
   'broken and double redirects are listed, deleted targets count as missing'
 );
 
+-- ── 넘겨주기 끝까지 따라가기 ─────────────────────────────────────────────────
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('기숙')$$,
+  $$values ('기숙사'::text, '기숙'::text, 'page'::text)$$,
+  'resolve_redirect follows a chain to the final page and names the first redirect'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('기숙사')$$,
+  $$values ('기숙사'::text, null::text, 'page'::text)$$,
+  'a normal page resolves to itself'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('끊김')$$,
+  $$values (null::text, '끊김'::text, 'missing'::text)$$,
+  'a redirect to a missing page is missing'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('아무것도 없음')$$,
+  $$values (null::text, null::text, 'missing'::text)$$,
+  'a missing title is missing'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('고리 1')$$,
+  $$values (null::text, '고리 1'::text, 'loop'::text)$$,
+  'a redirect loop stops'
+);
+
 select logout();
 select * from finish();
 rollback;

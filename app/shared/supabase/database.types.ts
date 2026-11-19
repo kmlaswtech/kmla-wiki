@@ -395,6 +395,14 @@ export type Database = {
       }
       resolve_body: { Args: { p_body: Json }; Returns: Json }
       resolve_images: { Args: { p_body: Json }; Returns: Json }
+      resolve_redirect: {
+        Args: { p_title: string }
+        Returns: {
+          status: string
+          title: string
+          via: string
+        }[]
+      }
       restore_page: {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
@@ -453,6 +461,7 @@ export type Database = {
           p_query: string
         }
         Returns: {
+          redirect_target: string
           title: string
         }[]
       }

@@ -89,13 +89,17 @@ CREATE OR REPLACE FUNCTION public.suggest_titles (
   p_limit   integer DEFAULT 8
 )
   RETURNS TABLE (
-    title text
+    title text,
+    redirect_target text
   )
   LANGUAGE sql
   STABLE
   SET search_path TO ''
   AS $function$
-  select page.title
+  -- 넘겨주기 문서도 후보로 낸다(줄임말로 찾을 수 있게). 대신 대상을 함께 돌려주어, 고르면 대상이
+  -- 들어가게 한다. 대상이 이 이름공간 밖이면(`틀:옛이름` → 일반 문서) 그 칸에 넣을 수 없으므로 null이다.
+  select page.title,
+    case when starts_with(page.redirect_key, arg.prefix) then page.redirect_target end
   from (select coalesce(p_prefix, '') as prefix) as arg
   cross join public.pages as page
   -- 접두어 뒤 부분. 걸러 내기와 순위 모두 이것을 본다.

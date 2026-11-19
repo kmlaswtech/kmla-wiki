@@ -26,6 +26,7 @@ export {
   listWantedPages,
   SPECIAL_PAGE_SIZE,
   resolveBody,
+  resolveRedirect,
   searchPages,
   suggestTitles,
 } from "./data/queries";
@@ -34,6 +35,7 @@ export {
   REDIRECT_MESSAGE,
   WRITE_ERROR,
 } from "./model/errors";
+export type { RedirectResolution, TitleSuggestion } from "./data/queries";
 export type { HeadingTarget } from "./model/headings";
 export { redirectsHere } from "./model/view";
 export type {

@@ -510,7 +510,11 @@ function FootnoteRef({
         >
           [{number}]
         </PopoverTrigger>
-        <PopoverContent side="top" className="wiki-content wiki-footnote py-2">
+        <PopoverContent
+          side="top"
+          // 출처 한 줄이 한 줄에 들어가게 기본 팝오버보다 넓게 둔다. 좁은 화면에서는 화면 너비를 따른다.
+          className="wiki-content wiki-footnote max-w-[min(40rem,var(--available-width))] py-2"
+        >
           <p>
             <span className="mr-2 text-primary tabular-nums">[{number}]</span>
             <NoteText note={note} />
