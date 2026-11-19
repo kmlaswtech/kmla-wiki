@@ -8,7 +8,6 @@ CREATE OR REPLACE FUNCTION private.settle_redirect_body (
 )
   RETURNS jsonb
   LANGUAGE plpgsql
-  STABLE
   SET search_path TO ''
   AS $function$
 declare
@@ -18,6 +17,7 @@ begin
   if v_raw = '' then
     return p_body;
   end if;
+  perform pg_advisory_xact_lock(hashtext('wiki:redirect-save'));
   select * into v_end from public.resolve_redirect(v_raw, private.title_key(p_title));
   case v_end.status
     when 'page' then
@@ -54,8 +54,13 @@ declare
   v_page record;
   v_via text;
 begin
+  -- 제목으로 쓸 수 없는 글은 없는 문서로 친다.
+  if v_key is null then
+    return query select null::text, null::text, 'missing'::text;
+    return;
+  end if;
   for i in 1..10 loop
-    if v_key is null or v_key = any(v_seen) then
+    if v_key = any(v_seen) then
       exit;
     end if;
     if v_key = p_stop_key then
@@ -82,6 +87,56 @@ end;
 $function$;
 
 REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text, text) FROM PUBLIC, "anon";
+
+CREATE OR REPLACE FUNCTION public.revert_page (
+  p_revision_id bigint,
+  p_summary     text   DEFAULT ''::text
+)
+  RETURNS TABLE (
+    page_id     bigint,
+    revision_id bigint,
+    title       text
+  )
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint := private.require_editor();
+  v_target public.revisions;
+  v_page public.pages;
+  v_current_body jsonb;
+  v_body jsonb;
+  v_summary text;
+begin
+  select * into v_target from public.revisions as revision where revision.id = p_revision_id;
+  -- 숨긴 판은 관리자만 되살릴 수 있다. 없는 판과 같은 오류로 답해 존재를 알리지 않는다.
+  if v_target.id is null or (v_target.hidden_at is not null and not private.is_admin()) then
+    raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+
+  select * into v_page from public.pages as page where page.id = v_target.page_id for update;
+  perform private.check_page_writable(v_page);
+  -- 옛 넘겨주기 판이면 지금의 최종 문서로 바꿔 되살린다(`save_revision`과 같다). 본문 규칙
+  -- (`check_redirect_body`)은 보지 않는다. 규칙 이전에 저장된 판도 되돌릴 수 있게 한다.
+  v_body := private.settle_redirect_body(v_page.title, v_target.body);
+
+  select revision.body into v_current_body
+  from public.revisions as revision where revision.id = v_page.current_revision_id;
+  if v_current_body = v_body then
+    raise exception 'nothing to save' using errcode = 'WK007';
+  end if;
+
+  v_summary := format('r%s 판으로 되돌림', p_revision_id)
+    || case when btrim(coalesce(p_summary, '')) <> '' then ': ' || btrim(p_summary) else '' end;
+  perform private.check_write_limits(v_member_id, v_body, v_summary);
+
+  page_id := v_page.id;
+  title := v_page.title;
+  revision_id := private.write_revision(v_page.id, v_member_id, v_body, v_summary, 'revert');
+  return next;
+end;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.save_revision (
   p_title            text,
@@ -110,7 +165,8 @@ begin
   end if;
   perform private.check_body(v_body);
   perform private.check_redirect_body(v_title, v_body);
-  -- 넘겨주기 대상이 넘겨주기 문서이면 최종 문서로 바꿔 저장한다(이중 넘겨주기를 남기지 않는다).
+  -- 넘겨주기 대상이 넘겨주기 문서이면 최종 문서로 바꿔 저장한다. 저장하는 이 넘겨주기가 넘겨주기
+  -- 문서를 가리키지 않게 한다.
   v_body := private.settle_redirect_body(v_title, v_body);
   perform private.check_write_limits(v_member_id, v_body, p_summary);
 
@@ -165,13 +221,18 @@ CREATE OR REPLACE FUNCTION public.suggest_titles (
   SET search_path TO ''
   AS $function$
   -- 넘겨주기 문서도 후보로 낸다(줄임말로 찾을 수 있게). 대신 대상을 함께 돌려주어, 고르면 대상이
-  -- 들어가게 한다. 대상이 이 이름공간 밖이면(`틀:옛이름` → 일반 문서) 그 칸에 넣을 수 없으므로 null이다.
-  select page.title,
-    case when starts_with(page.redirect_key, arg.prefix) then page.redirect_target end
+  -- 들어가게 한다. 대상이 있는 일반 문서이고 이 이름공간 안일 때만 준다. 아니면(없는 문서, 또 넘겨주기,
+  -- `틀:옛이름` → 일반 문서) null이라 넘겨주기 문서 이름이 들어가고, 저장·링크 넣기가 대상을 푼다.
+  select page.title, target.title
   from (select coalesce(p_prefix, '') as prefix) as arg
   cross join public.pages as page
   -- 접두어 뒤 부분. 걸러 내기와 순위 모두 이것을 본다.
   cross join lateral (select substr(page.title_key, length(arg.prefix) + 1) as rest) as key
+  left join public.pages as target
+    on target.title_key = page.redirect_key
+    and target.deleted_at is null
+    and target.redirect_key is null
+    and starts_with(target.title_key, arg.prefix)
   where page.deleted_at is null
     and starts_with(page.title_key, arg.prefix)
     and key.rest ~ coalesce(p_pattern, '')

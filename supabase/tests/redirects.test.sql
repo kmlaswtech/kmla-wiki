@@ -116,6 +116,17 @@ select lives_ok(
   'a redirect to a page that does not exist yet still saves'
 );
 
+-- 되돌리기도 옛 넘겨주기 판을 지금의 최종 문서로 되살린다.
+select revision_id as stale_target_rev
+from public.save_revision('되돌림 대상', null, wiki('되돌림 대상 본문')) \gset
+select revision_id as stale_redirect_rev
+from public.save_revision('되돌림', null, wiki('#넘겨주기 [[되돌림 대상]]')) \gset
+select * from public.save_revision('되돌림', :stale_redirect_rev, wiki('되돌림 본문'));
+select * from public.save_revision('되돌림 대상', :stale_target_rev, wiki('#넘겨주기 [[기숙사]]'));
+select * from public.revert_page(:stale_redirect_rev);
+select is((select redirect_target from public.pages where title = '되돌림'), '기숙사',
+  'reverting to an old redirect stores the current final page');
+
 select is(public.get_page_view('긱사', false) #>> '{redirect,state}', 'ok',
   'opening the redirect itself reports a healthy target');
 select is(public.get_page_view('기숙', false) #>> '{redirect,next}', '기숙사',
@@ -252,6 +263,16 @@ select results_eq(
   $$select title, via, status from public.resolve_redirect('아무것도 없음')$$,
   $$values (null::text, null::text, 'missing'::text)$$,
   'a missing title is missing'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('기숙[사]')$$,
+  $$values (null::text, null::text, 'missing'::text)$$,
+  'an unusable title is missing, not a loop'
+);
+select results_eq(
+  $$select title, via, status from public.resolve_redirect('기숙', '긱사')$$,
+  $$values (null::text, '기숙'::text, 'stop'::text)$$,
+  'following stops at the given page'
 );
 select results_eq(
   $$select title, via, status from public.resolve_redirect('고리 1')$$,

@@ -1,5 +1,5 @@
 import { Popover } from "@base-ui/react/popover";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ClipboardEvent } from "react";
 
 import { sectionCandidates, sectionExists } from "../model/section-link";
 import { wikiAddressTarget } from "../model/wiki-address";
@@ -198,14 +198,28 @@ export function TitleInput({
     onCommit?.(picked);
   };
 
-  /** 붙여넣은 위키 문서 주소를 칸에 넣을 글로 바꾼다. 위키 주소가 아니면 그대로다. */
-  const fromWikiAddress = (raw: string): string => {
-    if (!wikiAddresses) return raw;
-    const address = wikiAddressTarget(raw, window.location.origin);
-    if (address === null) return raw;
-    return sections && address.section
-      ? `${address.title}#${address.section}`
-      : address.title;
+  /**
+   * 붙여넣은 위키 문서 주소를 문서 이름으로 바꿔 넣는다. 위키 주소가 아니면 평소처럼 붙여넣는다. 손으로
+   * 주소를 치는 동안에는 바꾸지 않는다(한글 조합 중에 칸의 글이 바뀌면 입력이 끊긴다).
+   */
+  const pasteWikiAddress = (event: ClipboardEvent<HTMLInputElement>) => {
+    if (!wikiAddresses) return;
+    const address = wikiAddressTarget(
+      event.clipboardData.getData("text"),
+      window.location.origin,
+    );
+    if (address === null) return;
+    event.preventDefault();
+    const text =
+      sections && address.section
+        ? `${address.title}#${address.section}`
+        : address.title;
+    const input = event.currentTarget;
+    const start = input.selectionStart ?? value.length;
+    const end = input.selectionEnd ?? start;
+    onChange(value.slice(0, start) + text + value.slice(end));
+    setOpen(true);
+    setActive(-1);
   };
 
   const describedBy =
@@ -230,10 +244,11 @@ export function TitleInput({
         aria-autocomplete="list"
         autoComplete="off"
         onChange={(event) => {
-          onChange(fromWikiAddress(event.target.value));
+          onChange(event.target.value);
           setOpen(true);
           setActive(-1);
         }}
+        onPaste={pasteWikiAddress}
         onBlur={() => {
           window.setTimeout(() => setOpen(false), 150);
           onBlur?.();

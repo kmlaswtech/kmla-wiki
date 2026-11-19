@@ -120,8 +120,13 @@ declare
   v_page record;
   v_via text;
 begin
+  -- 제목으로 쓸 수 없는 글은 없는 문서로 친다.
+  if v_key is null then
+    return query select null::text, null::text, 'missing'::text;
+    return;
+  end if;
   for i in 1..10 loop
-    if v_key is null or v_key = any(v_seen) then
+    if v_key = any(v_seen) then
       exit;
     end if;
     if v_key = p_stop_key then
@@ -158,17 +163,20 @@ GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text, text) TO "postgres";
 REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text, text) FROM PUBLIC, "anon";
 
 
--- 넘겨주기 본문의 대상을 최종 문서로 바꾼다. 저장(`save_revision`)이 부른다. 그래서 어느 길로 저장해도
--- 넘겨주기가 넘겨주기 문서를 가리키지 않는다. 대상 이름의 대소문자도 실제 문서에 맞춘다.
--- 없는 문서로 넘겨주는 것은 막지 않지만(규칙 이전과 같다), 넘겨주기를 거쳐 없는 문서에 닿거나
--- 돌고 돌거나 이 문서로 돌아오면 거부한다.
+-- 넘겨주기 본문의 대상을 최종 문서로 바꾼다. 저장(`save_revision`)과 되돌리기(`revert_page`)가 부른다.
+-- 그래서 넘겨주기를 저장하는 순간에는 그 넘겨주기가 넘겨주기 문서를 가리키지 않는다. 저장한 뒤에
+-- 대상이 넘겨주기로 바뀌어 생기는 연쇄는 막지 않는다(특수 기능의 `redirect_issues`가 보인다).
+-- 대상 이름의 대소문자도 실제 문서에 맞춘다. 없는 문서로 넘겨주는 것은 막지 않지만(규칙 이전과
+-- 같다), 넘겨주기를 거쳐 없는 문서에 닿거나 돌고 돌거나 이 문서로 돌아오면 거부한다.
+--
+-- 두 문서를 동시에 서로에게 넘겨주면 각자 상대를 일반 문서로 보고 둘 다 통과한다. 그래서 넘겨주기
+-- 저장은 트랜잭션 잠금 하나로 한 번에 하나씩 한다. 넘겨주기 저장은 드물어 기다림은 거의 없다.
 CREATE OR REPLACE FUNCTION private.settle_redirect_body (
   p_title text,
   p_body  jsonb
 )
   RETURNS jsonb
   LANGUAGE plpgsql
-  STABLE
   SET search_path TO ''
   AS $function$
 declare
@@ -178,6 +186,7 @@ begin
   if v_raw = '' then
     return p_body;
   end if;
+  perform pg_advisory_xact_lock(hashtext('wiki:redirect-save'));
   select * into v_end from public.resolve_redirect(v_raw, private.title_key(p_title));
   case v_end.status
     when 'page' then

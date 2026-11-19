@@ -242,14 +242,14 @@ function useTargetCheck(value: string, ownTitle: string): TargetCheck {
   useEffect(() => {
     if (settledTitle === null) return;
     let cancelled = false;
-    resolveRedirect(settledTitle).then(
+    resolveRedirect(settledTitle, ownTitle).then(
       (result) => !cancelled && setFound({ title: settledTitle, result }),
       () => !cancelled && setFound({ title: settledTitle, result: null }),
     );
     return () => {
       cancelled = true;
     };
-  }, [settledTitle]);
+  }, [settledTitle, ownTitle]);
 
   if (value.trim() === "") return { status: "empty" };
   if (title === null) return { status: "invalid" };
@@ -259,14 +259,13 @@ function useTargetCheck(value: string, ownTitle: string): TargetCheck {
   if (result === null) return { status: "unknown", title };
   if (result.status !== "page") {
     if (result.status === "loop") return { status: "loop" };
+    // 따라가 보니 이 문서로 돌아온다.
+    if (result.status === "stop") return { status: "self" };
     return result.via === null
       ? { status: "missing" }
       : { status: "broken", via: result.via };
   }
-  // 따라가 보니 이 문서로 돌아왔다.
-  return titleKey(result.title) === titleKey(ownTitle)
-    ? { status: "self" }
-    : { status: "ok", title: result.title, via: result.via };
+  return { status: "ok", title: result.title, via: result.via };
 }
 
 /** 글이 바뀌지 않는 안내. 저장할 때 DB가 거부하는 것과 같은 문구도 있다. */

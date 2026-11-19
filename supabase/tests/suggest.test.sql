@@ -17,6 +17,7 @@ select public.save_revision('틀:가이드', null, wiki('틀'));
 select public.save_revision('틀:안내', null, wiki('틀'));
 select public.save_revision('지운 가', null, wiki('지운다'));
 select public.save_revision('별명', null, wiki('#넘겨주기 [[가나]]'));
+select public.save_revision('끊긴 별명', null, wiki('#넘겨주기 [[없는 문서]]'));
 select public.save_revision('틀:옛 안내', null, wiki('#넘겨주기 [[가나]]'));
 select public.save_revision('틀:새 안내', null, wiki('#넘겨주기 [[틀:안내]]'));
 select logout();
@@ -52,9 +53,15 @@ select is_empty(
 );
 
 select results_eq(
-  $$select title, redirect_target from public.suggest_titles('별명', '별명', '', 8)$$,
+  $$select title, redirect_target from public.suggest_titles('별명', '별명', '', 8) where title = '별명'$$,
   $$values ('별명'::text, '가나'::text)$$,
   'redirect pages are suggested together with their target'
+);
+
+select results_eq(
+  $$select title, redirect_target from public.suggest_titles('끊긴 별명', '끊긴 별명', '', 8)$$,
+  $$values ('끊긴 별명'::text, null::text)$$,
+  'a redirect to a missing page is suggested without a target'
 );
 
 select results_eq(

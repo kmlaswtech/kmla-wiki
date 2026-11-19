@@ -97,13 +97,18 @@ CREATE OR REPLACE FUNCTION public.suggest_titles (
   SET search_path TO ''
   AS $function$
   -- 넘겨주기 문서도 후보로 낸다(줄임말로 찾을 수 있게). 대신 대상을 함께 돌려주어, 고르면 대상이
-  -- 들어가게 한다. 대상이 이 이름공간 밖이면(`틀:옛이름` → 일반 문서) 그 칸에 넣을 수 없으므로 null이다.
-  select page.title,
-    case when starts_with(page.redirect_key, arg.prefix) then page.redirect_target end
+  -- 들어가게 한다. 대상이 있는 일반 문서이고 이 이름공간 안일 때만 준다. 아니면(없는 문서, 또 넘겨주기,
+  -- `틀:옛이름` → 일반 문서) null이라 넘겨주기 문서 이름이 들어가고, 저장·링크 넣기가 대상을 푼다.
+  select page.title, target.title
   from (select coalesce(p_prefix, '') as prefix) as arg
   cross join public.pages as page
   -- 접두어 뒤 부분. 걸러 내기와 순위 모두 이것을 본다.
   cross join lateral (select substr(page.title_key, length(arg.prefix) + 1) as rest) as key
+  left join public.pages as target
+    on target.title_key = page.redirect_key
+    and target.deleted_at is null
+    and target.redirect_key is null
+    and starts_with(target.title_key, arg.prefix)
   where page.deleted_at is null
     and starts_with(page.title_key, arg.prefix)
     and key.rest ~ coalesce(p_pattern, '')
