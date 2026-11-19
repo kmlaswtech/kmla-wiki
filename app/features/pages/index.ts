@@ -10,6 +10,7 @@ export {
   getPageView,
   getRandomTitle,
   getRevisionBodies,
+  getTitleInfo,
   HISTORY_PAGE_SIZE,
   listAllPages,
   listHistory,
@@ -22,15 +23,21 @@ export {
   searchPages,
   suggestTitles,
 } from "./data/queries";
-export { describeWriteError, WRITE_ERROR } from "./model/errors";
+export {
+  describeWriteError,
+  REDIRECT_MESSAGE,
+  WRITE_ERROR,
+} from "./model/errors";
 export type {
   FoundPage,
   MissingPage,
   PageView,
   RecentChange,
+  RedirectInfo,
   ResolvedBody,
   RevisionBody,
   RevisionSummary,
   SavedRevision,
   SearchHit,
+  TitleInfo,
 } from "./model/types";

@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 
 import { suggestTitles } from "~/features/pages";
+import { useDebouncedValue } from "~/shared/hooks/use-debounced-value";
 import { cn } from "~/shared/lib/utils";
 import { Input } from "~/shared/ui/input";
 
@@ -49,31 +50,29 @@ export function TitleInput({
 
   // 주소나 `#문단`을 치는 중이면 제목 후보를 찾지 않는다.
   const query = value.split("#")[0]!.trim();
-  const searchable = query !== "" && !/^(https?:|mailto:|www\.)/i.test(query);
+  const searchable = isSearchable(query);
+  const settledQuery = useDebouncedValue(query, 150);
 
   useEffect(() => {
-    if (!searchable) return;
+    if (!isSearchable(settledQuery)) return;
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      suggestTitles(query, prefix)
-        .then((titles) => {
-          if (cancelled) return;
-          setSuggestions(
-            titles.map((title) =>
-              prefix && title.startsWith(prefix)
-                ? title.slice(prefix.length)
-                : title,
-            ),
-          );
-          setActive(-1);
-        })
-        .catch(() => undefined);
-    }, 150);
+    suggestTitles(settledQuery, prefix)
+      .then((titles) => {
+        if (cancelled) return;
+        setSuggestions(
+          titles.map((title) =>
+            prefix && title.startsWith(prefix)
+              ? title.slice(prefix.length)
+              : title,
+          ),
+        );
+        setActive(-1);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
-  }, [query, prefix, searchable]);
+  }, [settledQuery, prefix]);
 
   const shown = open && searchable ? suggestions : [];
 
@@ -162,4 +161,9 @@ export function TitleInput({
       ) : null}
     </div>
   );
+}
+
+/** 제목 후보를 찾을 만한 글인가. 비었거나 바깥 주소를 치는 중이면 찾지 않는다. */
+function isSearchable(query: string): boolean {
+  return query !== "" && !/^(https?:|mailto:|www\.)/i.test(query);
 }

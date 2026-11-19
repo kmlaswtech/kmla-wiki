@@ -4,6 +4,7 @@ import {
   Bold,
   CircleHelp,
   Code,
+  CornerDownRight,
   Ellipsis,
   Heading,
   Image,
@@ -44,8 +45,8 @@ interface ToolbarProps {
   onPickImage?: () => void;
   /** 틀 문서를 고치는 중인가. 그러면 값 자리 넣기가 보인다. */
   isTemplatePage?: boolean;
-  /** 넘겨주기 칸을 연다. */
-  onRedirect?: () => void;
+  /** 이 문서를 넘겨주기로 바꾼다(넘겨주기 입력으로 간다). 주지 않으면 메뉴에 없다. */
+  onConvertToRedirect?: () => void;
   className?: string;
 }
 
@@ -59,7 +60,7 @@ export function Toolbar({
   request,
   onPickImage,
   isTemplatePage = false,
-  onRedirect,
+  onConvertToRedirect,
   className,
 }: ToolbarProps) {
   const state = useEditorState({
@@ -265,8 +266,14 @@ export function Toolbar({
           <Minus />
           구분선
         </DropdownMenuItem>
-        {onRedirect ? (
-          <DropdownMenuItem onClick={onRedirect}>넘겨주기</DropdownMenuItem>
+        {onConvertToRedirect ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onConvertToRedirect}>
+              <CornerDownRight />
+              넘겨주기로 바꾸기
+            </DropdownMenuItem>
+          </>
         ) : null}
         {isTemplatePage ? (
           <>
@@ -392,7 +399,10 @@ function Menu({
         </TooltipTrigger>
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="start">{children}</DropdownMenuContent>
+      {/* 메뉴 단추 너비가 아니라 항목 길이에 맞춘다("넘겨주기로 바꾸기"가 잘리지 않게). */}
+      <DropdownMenuContent align="start" className="w-auto min-w-32">
+        {children}
+      </DropdownMenuContent>
     </DropdownMenu>
   );
 }

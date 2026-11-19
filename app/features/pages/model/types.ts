@@ -17,6 +17,21 @@ export interface Backlink {
   isRedirect: boolean;
 }
 
+export interface RedirectInfo {
+  /** 넘겨줄 문서 제목. 있는 문서면 그 문서의 표기 그대로. */
+  target: string;
+  /** ok: 일반 문서, missing: 없는 문서, redirect: 대상도 넘겨주기. */
+  state: "ok" | "missing" | "redirect";
+  /** 대상도 넘겨주기면 그 대상이 가리키는 제목. */
+  next: string | null;
+}
+
+/** 제목 하나의 상태. 넘겨주기 대상을 고를 때 쓴다. */
+export interface TitleInfo {
+  title: string;
+  redirectTarget: string | null;
+}
+
 interface Viewer {
   /** 차단되지 않았는가. 보호·삭제 여부는 문서 쪽에서 따로 본다. */
   canEdit: boolean;
@@ -37,6 +52,8 @@ export interface FoundPage extends Viewer {
   };
   /** 넘겨주기를 따라왔다면 처음 요청한 제목. */
   redirectedFrom: string | null;
+  /** 보여 줄 판이 넘겨주기면 그 대상. 화면은 본문 대신 넘겨주기 카드를 그린다. */
+  redirect: RedirectInfo | null;
   /** 볼 판. 숨겨졌거나 없는 판을 요청하면 `null`. */
   revision: {
     id: number;

@@ -23,21 +23,32 @@ import {
 } from "~/features/editor/model/doc-io";
 
 describe("document attributes", () => {
-  it("splits categories and the redirect off and joins them back", () => {
+  it("splits categories off and joins them back", () => {
+    const body = {
+      ...doc(para(text("글"))),
+      attrs: { categories: ["분류:생활"] },
+    };
+    const { content, meta } = splitDoc(body);
+    expect(content.attrs).toBeUndefined();
+    expect(meta).toEqual({ categories: ["분류:생활"] });
+    expect(joinDoc(content, meta)).toEqual(body);
+  });
+
+  it("leaves the redirect out, because the body editor does not edit it", () => {
     const body = {
       ...doc(para(text("글"))),
       attrs: { categories: ["분류:생활"], redirect: "PRISM" },
     };
     const { content, meta } = splitDoc(body);
-    expect(content.attrs).toBeUndefined();
-    expect(meta).toEqual({ categories: ["분류:생활"], redirect: "PRISM" });
-    expect(joinDoc(content, meta)).toEqual(body);
+    expect(joinDoc(content, meta)).toEqual({
+      ...doc(para(text("글"))),
+      attrs: { categories: ["분류:생활"] },
+    });
   });
 
   it("drops empty attributes, duplicate categories and trailing empty paragraphs", () => {
     const joined = joinDoc(doc(para(text("글")), para(), para()), {
       categories: ["생활", "분류:생활", " "],
-      redirect: "  ",
     });
     expect(joined).toEqual({
       ...doc(para(text("글"))),
@@ -46,9 +57,9 @@ describe("document attributes", () => {
   });
 
   it("keeps one paragraph in an empty document", () => {
-    expect(
-      joinDoc(doc(para(), para()), { categories: [], redirect: "" }),
-    ).toEqual(doc(para()));
+    expect(joinDoc(doc(para(), para()), { categories: [] })).toEqual(
+      doc(para()),
+    );
   });
 });
 

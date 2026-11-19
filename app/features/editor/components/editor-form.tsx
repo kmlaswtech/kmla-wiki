@@ -65,6 +65,8 @@ interface EditorFormProps {
   initialResolved: ResolvedBody;
   /** 처음 그릴 때 쓸 이미지 정보(편집 화면을 열 때 이미 받은 것). */
   initialImages: ReadonlyMap<string, ImageInfo>;
+  /** "넘겨주기로 바꾸기": 넘겨주기 입력(`RedirectForm`)으로 바꾼다. 문단 편집에는 없다. */
+  onConvertToRedirect?: () => void;
 }
 
 /** 입력이 멈춘 뒤 틀·링크 정보와 임시 저장을 갱신하기까지의 시간. */
@@ -77,7 +79,7 @@ const SAVE_SHORTCUT =
     ? "⌘S"
     : "Ctrl+S";
 
-const NO_META: DocMeta = { categories: [], redirect: "" };
+const NO_META: DocMeta = { categories: [] };
 
 /** 편집기에 여는 부분: 문단 편집이면 그 문단, 아니면 문서 전체. */
 function editingPart(target: EditTarget): WikiDoc {
@@ -87,7 +89,10 @@ function editingPart(target: EditTarget): WikiDoc {
 }
 
 /**
- * 편집 화면 한 벌: 툴바, 편집기, 분류·넘겨주기, 편집 요약, 저장.
+ * 편집 화면 한 벌: 툴바, 편집기, 분류, 편집 요약, 저장.
+ *
+ * 넘겨주기는 여기서 고치지 않는다(`RedirectForm`). 넘겨주기 문서를 일반 문서로 바꿔 여는 경우에도
+ * 넘겨주기는 빼고 시작한다. 그래서 본문을 쓰고 저장하면 넘겨주기가 풀린다.
  *
  * 편집기가 곧 미리보기다. 고치는 대로 문서 보기와 같은 모양으로 보인다. 원문 차이는 "변경 사항"
  * 탭에서 본다.
@@ -96,6 +101,7 @@ export function EditorForm({
   target,
   initialResolved,
   initialImages,
+  onConvertToRedirect,
 }: EditorFormProps) {
   const navigate = useNavigate();
   const key = titleKey(target.title);
@@ -111,9 +117,6 @@ export function EditorForm({
 
   const [content, setContent] = useState<WikiDoc>(initial.content);
   const [meta, setMeta] = useState<DocMeta>(initial.meta);
-  const [showRedirect, setShowRedirect] = useState(
-    initial.meta.redirect !== "",
-  );
   const [summary, setSummary] = useState(draft?.summary ?? "");
   const [resolved, setResolved] = useState(initialResolved);
   const [images, setImages] =
@@ -139,6 +142,10 @@ export function EditorForm({
   );
   const baseline = useMemo(() => normalizeDoc(editingPart(base)), [base]);
   const baselineJson = useMemo(() => JSON.stringify(baseline), [baseline]);
+  // 넘겨주기 문서를 일반 문서로 바꿔 여는 중인가. 기준(`normalizeDoc`)에서 넘겨주기가 빠지므로,
+  // 아무것도 쓰지 않으면 바뀐 것이 없다(빈 문서로 저장되거나 임시 저장·나가기 경고가 생기지 않는다).
+  const releasingRedirect =
+    !sectionMode && Boolean(base.baseBody.attrs?.redirect);
   // 양쪽 다 편집기 스키마를 거친 값이라 키 순서가 같다. 그래서 키를 정렬하지 않고 바로 비교한다
   // (글자를 칠 때마다 계산하므로 큰 문서에서 정렬 비용이 크다).
   const dirty = useMemo(
@@ -318,7 +325,6 @@ export function EditorForm({
     editor?.commands.setContent(next.content, { emitUpdate: true });
     setContent(next.content);
     setMeta(next.meta);
-    setShowRedirect(next.meta.redirect !== "");
   }
 
   async function save(confirmed: boolean) {
@@ -427,6 +433,13 @@ export function EditorForm({
         </section>
       ) : null}
 
+      {releasingRedirect ? (
+        <p className="rounded-md bg-muted px-3 py-2 text-sm break-keep text-muted-foreground">
+          넘겨주기 문서를 일반 문서로 바꿉니다. 본문을 쓰고 저장하면 넘겨주기가
+          풀립니다.
+        </p>
+      ) : null}
+
       <div role="tablist" aria-label="편집과 변경 사항" className="flex gap-1">
         {(["edit", "changes"] as const).map((name) => (
           <Button
@@ -450,7 +463,15 @@ export function EditorForm({
             request={setRequest}
             onPickImage={() => fileInput.current?.click()}
             isTemplatePage={namespaceOf(target.title) === "template"}
-            onRedirect={sectionMode ? undefined : () => setShowRedirect(true)}
+            onConvertToRedirect={
+              sectionMode || !onConvertToRedirect
+                ? undefined
+                : () => {
+                    // 쓰던 글은 임시 저장에 남긴다. 본문 편집으로 돌아오면 이어서 쓴다.
+                    flushDraft(current, summary, dirty);
+                    onConvertToRedirect();
+                  }
+            }
             className="sticky top-(--site-header-height) z-10"
           />
         ) : null}
@@ -497,14 +518,7 @@ export function EditorForm({
         </section>
       ) : null}
 
-      {sectionMode ? null : (
-        <DocMetaFields
-          meta={meta}
-          onChange={setMeta}
-          showRedirect={showRedirect}
-          onHideRedirect={() => setShowRedirect(false)}
-        />
-      )}
+      {sectionMode ? null : <DocMetaFields meta={meta} onChange={setMeta} />}
 
       <div className="grid gap-1.5">
         <Label htmlFor="edit-summary">편집 요약 (선택)</Label>

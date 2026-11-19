@@ -91,7 +91,9 @@ test("문서를 읽는다: 목차, 각주, 분류, 틀, 넘겨주기", async ({ 
 
   // 넘겨주기 문서 자체 보기.
   await page.goto("/w/중베?redirect=no");
-  await expect(page.getByText("문서로 넘겨줍니다.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "넘겨주기" })).toContainText(
+    "덕고관/엘리베이터",
+  );
 });
 
 test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ page }) => {

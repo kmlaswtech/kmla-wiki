@@ -2,10 +2,12 @@ import type {
   Backlink,
   PageView,
   RecentChange,
+  RedirectInfo,
   ResolvedBody,
   RevisionBody,
   RevisionSummary,
   SearchHit,
+  TitleInfo,
 } from "../model/types";
 import { titleMatchPattern } from "../model/hangul-match";
 import {
@@ -39,6 +41,11 @@ interface RawPageView {
   can_edit: boolean;
   is_admin: boolean;
   redirected_from?: string | null;
+  redirect?: {
+    target: string;
+    state: RedirectInfo["state"];
+    next: string | null;
+  } | null;
   page?: {
     id: number;
     title: string;
@@ -127,6 +134,13 @@ export async function getPageView(
       deletedAt: raw.page.deleted_at,
     },
     redirectedFrom: raw.redirected_from ?? null,
+    redirect: raw.redirect
+      ? {
+          target: raw.redirect.target,
+          state: raw.redirect.state,
+          next: raw.redirect.next ?? null,
+        }
+      : null,
     revision: raw.revision
       ? {
           id: raw.revision.id,
@@ -283,17 +297,23 @@ export async function searchPages(query: string): Promise<SearchHit[]> {
  * 잡히고, 넘겨주기는 문서 보기가 따라간다.
  */
 export async function findExactTitle(query: string): Promise<string | null> {
+  return (await getTitleInfo(query))?.title ?? null;
+}
+
+/** 그 제목의 문서가 있는지, 넘겨주기인지. 없거나 쓸 수 없는 제목이면 `null`. */
+export async function getTitleInfo(query: string): Promise<TitleInfo | null> {
   const title = parseTitle(query);
   if (!title) return null;
   const rows = unwrap(
     await getSupabase()
       .from("pages")
-      .select("title")
+      .select("title, redirect_target")
       .is("deleted_at", null)
       .eq("title_key", titleKey(title))
       .limit(1),
   );
-  return rows[0]?.title ?? null;
+  const row = rows[0];
+  return row ? { title: row.title, redirectTarget: row.redirect_target } : null;
 }
 
 export const SPECIAL_PAGE_SIZE = 100;

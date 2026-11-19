@@ -96,7 +96,8 @@ export async function saveEdit(
   return { status: "conflict", latest };
 }
 
-async function loadLatest(
+/** 이 문서의 최신 판. 넘겨주기 문서면 따라가지 않고 그 문서 자체를 읽는다. */
+export async function loadLatest(
   title: string,
 ): Promise<{ revisionId: number | null; body: WikiDoc }> {
   const view = await getPageView(title, { followRedirect: false });
