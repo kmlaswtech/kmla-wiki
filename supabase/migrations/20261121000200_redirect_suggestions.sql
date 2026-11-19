@@ -2,8 +2,42 @@ SET local check_function_bodies = off;
 
 DROP FUNCTION "public"."suggest_titles"(text, text, text, integer);
 
+CREATE OR REPLACE FUNCTION private.settle_redirect_body (
+  p_title text,
+  p_body  jsonb
+)
+  RETURNS jsonb
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path TO ''
+  AS $function$
+declare
+  v_raw text := btrim(coalesce(p_body -> 'attrs' ->> 'redirect', ''));
+  v_end record;
+begin
+  if v_raw = '' then
+    return p_body;
+  end if;
+  select * into v_end from public.resolve_redirect(v_raw, private.title_key(p_title));
+  case v_end.status
+    when 'page' then
+      return jsonb_set(p_body, '{attrs,redirect}', to_jsonb(v_end.title));
+    when 'stop' then
+      raise exception 'redirect to itself' using errcode = 'WK015', detail = 'self';
+    when 'loop' then
+      raise exception 'redirect loop' using errcode = 'WK015', detail = 'loop';
+    else
+      if v_end.via is not null then
+        raise exception 'redirect to a broken redirect' using errcode = 'WK015', detail = 'broken';
+      end if;
+      return p_body;
+  end case;
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.resolve_redirect (
-  p_title text
+  p_title    text,
+  p_stop_key text DEFAULT NULL::text
 )
   RETURNS TABLE (
     title  text,
@@ -24,6 +58,10 @@ begin
     if v_key is null or v_key = any(v_seen) then
       exit;
     end if;
+    if v_key = p_stop_key then
+      return query select null::text, v_via, 'stop'::text;
+      return;
+    end if;
     v_seen := v_seen || v_key;
     select page.title, page.redirect_key into v_page
     from public.pages as page
@@ -43,7 +81,74 @@ begin
 end;
 $function$;
 
-REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text) FROM PUBLIC, "anon";
+REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text, text) FROM PUBLIC, "anon";
+
+CREATE OR REPLACE FUNCTION public.save_revision (
+  p_title            text,
+  p_base_revision_id bigint,
+  p_body             jsonb,
+  p_summary          text   DEFAULT ''::text
+)
+  RETURNS TABLE (
+    page_id     bigint,
+    revision_id bigint,
+    title       text
+  )
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint := private.require_editor();
+  v_title text := private.normalize_title(p_title);
+  v_page public.pages;
+  v_body jsonb := p_body;
+  v_current_body jsonb;
+begin
+  if not private.is_valid_title(v_title) then
+    raise exception 'invalid title' using errcode = 'WK004';
+  end if;
+  perform private.check_body(v_body);
+  perform private.check_redirect_body(v_title, v_body);
+  -- 넘겨주기 대상이 넘겨주기 문서이면 최종 문서로 바꿔 저장한다(이중 넘겨주기를 남기지 않는다).
+  v_body := private.settle_redirect_body(v_title, v_body);
+  perform private.check_write_limits(v_member_id, v_body, p_summary);
+
+  select * into v_page from public.pages as page
+  where page.title_key = lower(v_title)
+  for update;
+
+  if v_page.id is null then
+    if p_base_revision_id is not null then
+      raise exception 'page not found' using errcode = 'WK006';
+    end if;
+    if private.doc_is_empty(v_body) then
+      raise exception 'nothing to save' using errcode = 'WK007';
+    end if;
+    begin
+      insert into public.pages (title) values (v_title) returning * into v_page;
+    exception when unique_violation then
+      -- 같은 제목을 다른 사람이 방금 만들었다.
+      raise exception 'edit conflict' using errcode = 'WK001';
+    end;
+  else
+    perform private.check_page_writable(v_page);
+    if v_page.current_revision_id is distinct from p_base_revision_id then
+      raise exception 'edit conflict' using errcode = 'WK001';
+    end if;
+    select revision.body into v_current_body
+    from public.revisions as revision where revision.id = v_page.current_revision_id;
+    if v_current_body = v_body then
+      raise exception 'nothing to save' using errcode = 'WK007';
+    end if;
+  end if;
+
+  page_id := v_page.id;
+  title := v_page.title;
+  revision_id := private.write_revision(v_page.id, v_member_id, v_body, p_summary, 'edit');
+  return next;
+end;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.suggest_titles (
   p_query   text,
@@ -81,13 +186,15 @@ $function$;
 
 REVOKE ALL ON FUNCTION "public"."suggest_titles"(text, text, text, integer) FROM PUBLIC, "anon";
 
-GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "authenticated";
+REVOKE ALL ON FUNCTION "private"."settle_redirect_body"(text, jsonb) FROM PUBLIC;
 
-REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text) FROM "postgres";
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text, text) TO "authenticated";
 
-GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "postgres";
+REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text, text) FROM "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "service_role";
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text, text) TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text, text) TO "service_role";
 
 GRANT EXECUTE ON FUNCTION "public"."suggest_titles"(text, text, text, integer) TO "authenticated";
 

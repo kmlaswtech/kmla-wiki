@@ -396,7 +396,7 @@ export type Database = {
       resolve_body: { Args: { p_body: Json }; Returns: Json }
       resolve_images: { Args: { p_body: Json }; Returns: Json }
       resolve_redirect: {
-        Args: { p_title: string }
+        Args: { p_stop_key?: string; p_title: string }
         Returns: {
           status: string
           title: string

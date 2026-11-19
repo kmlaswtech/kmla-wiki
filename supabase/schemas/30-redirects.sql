@@ -93,14 +93,17 @@ GRANT EXECUTE ON FUNCTION "public"."redirect_issues"(integer) TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."redirect_issues"(integer) FROM PUBLIC, "anon";
 
--- 넘겨주기를 끝까지 따라가 최종 문서를 찾는다. 넘겨주기 입력과 링크 넣기가 넘겨주기 문서를 가리키지
--- 않게 할 때 쓴다. 한 행을 돌려준다.
+-- 넘겨주기를 끝까지 따라가 최종 문서를 찾는다. 한 행을 돌려준다.
 --   status 'page':    `title`이 최종 문서다.
 --   status 'missing': 쓴 이름, 또는 따라간 대상이 없는 문서다.
 --   status 'loop':    넘겨주기가 돌고 돌거나 너무 길다(10단계).
--- `via`는 처음 만난 넘겨주기 문서(쓴 이름이 넘겨주기가 아니면 null)다. 호출자의 RLS를 그대로 따른다.
+--   status 'stop':    `p_stop_key` 문서에 닿았다(저장하려는 문서로 돌아오는 넘겨주기).
+-- `via`는 처음 만난 넘겨주기 문서(쓴 이름이 넘겨주기가 아니면 null)다. 호출자의 권한(RLS)으로 읽는다.
+-- 넘겨주기 입력과 링크 넣기가 쓴 이름의 최종 문서를 미리 확인하고, 저장(`settle_redirect_body`)이
+-- 넘겨주기 대상을 최종 문서로 바꿀 때 쓴다.
 CREATE OR REPLACE FUNCTION public.resolve_redirect (
-  p_title text
+  p_title    text,
+  p_stop_key text DEFAULT NULL::text
 )
   RETURNS TABLE (
     title  text,
@@ -121,6 +124,10 @@ begin
     if v_key is null or v_key = any(v_seen) then
       exit;
     end if;
+    if v_key = p_stop_key then
+      return query select null::text, v_via, 'stop'::text;
+      return;
+    end if;
     v_seen := v_seen || v_key;
     select page.title, page.redirect_key into v_page
     from public.pages as page
@@ -140,12 +147,52 @@ begin
 end;
 $function$;
 
-GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "authenticated";
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text, text) TO "authenticated";
 
-GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "service_role";
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text, text) TO "service_role";
 
-REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text) FROM "postgres";
+REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text, text) FROM "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text) TO "postgres";
+GRANT EXECUTE ON FUNCTION "public"."resolve_redirect"(text, text) TO "postgres";
 
-REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text) FROM PUBLIC, "anon";
+REVOKE ALL ON FUNCTION "public"."resolve_redirect"(text, text) FROM PUBLIC, "anon";
+
+
+-- 넘겨주기 본문의 대상을 최종 문서로 바꾼다. 저장(`save_revision`)이 부른다. 그래서 어느 길로 저장해도
+-- 넘겨주기가 넘겨주기 문서를 가리키지 않는다. 대상 이름의 대소문자도 실제 문서에 맞춘다.
+-- 없는 문서로 넘겨주는 것은 막지 않지만(규칙 이전과 같다), 넘겨주기를 거쳐 없는 문서에 닿거나
+-- 돌고 돌거나 이 문서로 돌아오면 거부한다.
+CREATE OR REPLACE FUNCTION private.settle_redirect_body (
+  p_title text,
+  p_body  jsonb
+)
+  RETURNS jsonb
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path TO ''
+  AS $function$
+declare
+  v_raw text := btrim(coalesce(p_body -> 'attrs' ->> 'redirect', ''));
+  v_end record;
+begin
+  if v_raw = '' then
+    return p_body;
+  end if;
+  select * into v_end from public.resolve_redirect(v_raw, private.title_key(p_title));
+  case v_end.status
+    when 'page' then
+      return jsonb_set(p_body, '{attrs,redirect}', to_jsonb(v_end.title));
+    when 'stop' then
+      raise exception 'redirect to itself' using errcode = 'WK015', detail = 'self';
+    when 'loop' then
+      raise exception 'redirect loop' using errcode = 'WK015', detail = 'loop';
+    else
+      if v_end.via is not null then
+        raise exception 'redirect to a broken redirect' using errcode = 'WK015', detail = 'broken';
+      end if;
+      return p_body;
+  end case;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."settle_redirect_body"(text, jsonb) FROM PUBLIC;

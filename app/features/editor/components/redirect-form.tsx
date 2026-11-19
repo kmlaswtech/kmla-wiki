@@ -285,10 +285,7 @@ const STATUS_MESSAGE: Record<
     text: "없는 문서입니다. 현존하는 문서로만 넘겨줄 수 있습니다.",
     error: true,
   },
-  loop: {
-    text: "넘겨주기가 돌고 돌아 최종 문서를 찾지 못했습니다. 다른 문서를 골라 주세요.",
-    error: true,
-  },
+  loop: { text: REDIRECT_MESSAGE.loop!, error: true },
 };
 
 /** 대상 칸 아래에 보일 한 줄. 빈 칸은 없다. */

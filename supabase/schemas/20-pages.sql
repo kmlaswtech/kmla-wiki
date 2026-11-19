@@ -1042,6 +1042,8 @@ begin
   end if;
   perform private.check_body(v_body);
   perform private.check_redirect_body(v_title, v_body);
+  -- 넘겨주기 대상이 넘겨주기 문서이면 최종 문서로 바꿔 저장한다(이중 넘겨주기를 남기지 않는다).
+  v_body := private.settle_redirect_body(v_title, v_body);
   perform private.check_write_limits(v_member_id, v_body, p_summary);
 
   select * into v_page from public.pages as page
