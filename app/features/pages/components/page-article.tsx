@@ -38,6 +38,21 @@ interface PageArticleProps {
   renderImage?: (imageId: string, alt: string) => ReactNode;
   /** 제목 줄 오른쪽에 덧붙일 버튼(관리 메뉴). */
   headerActions?: ReactNode;
+  /** "다른 이름" 칸 끝에 둘 `이름 추가` 단추. 더할 수 없으면 비운다. */
+  aliasAction?: ReactNode;
+}
+
+/**
+ * 이 문서에 다른 이름(이 문서로 넘겨주는 새 문서)을 더할 수 있는가. 이 문서를 고치지 않으므로 보호
+ * 여부와는 상관없다. 넘겨주기 문서에 다른 이름을 달면 이중 넘겨주기가 되므로 일반 문서의 지금 판에만.
+ */
+export function canAddAlias(view: FoundPage): boolean {
+  return (
+    (view.canEdit || view.isAdmin) &&
+    view.redirect === null &&
+    view.page.deletedAt === null &&
+    (view.revision?.isCurrent ?? false)
+  );
 }
 
 /** 이 사용자가 이 문서를 고칠 수 있는가. 화면용 판단이고 실제 판정은 서버가 한다. */
@@ -55,6 +70,7 @@ export function PageArticle({
   view,
   renderImage,
   headerActions,
+  aliasAction,
 }: PageArticleProps) {
   const { page, revision, resolved } = view;
   const body = revision?.body ?? emptyDoc();
@@ -298,6 +314,25 @@ export function PageArticle({
         />
       ) : null}
 
+      {view.aliases.length > 0 || aliasAction ? (
+        <section
+          aria-label="다른 이름"
+          className="mt-4 flex flex-wrap items-center gap-1.5 text-sm"
+        >
+          <span className="text-muted-foreground">다른 이름</span>
+          {view.aliases.map((alias) => (
+            <Badge
+              key={alias}
+              variant="secondary"
+              render={<Link to={`${pageHref(alias)}?redirect=no`} />}
+            >
+              {alias}
+            </Badge>
+          ))}
+          {aliasAction}
+        </section>
+      ) : null}
+
       {view.backlinks.length > 0 ? (
         <details className="mt-4 text-sm">
           <summary className="cursor-pointer text-muted-foreground">
@@ -336,7 +371,7 @@ function UpdatedAt({ value }: { value: string }) {
 const REDIRECT_STATE_MESSAGE: Record<RedirectInfo["state"], string> = {
   ok: "이 이름으로 들어오면 위 문서로 바로 넘어갑니다.",
   missing:
-    "넘겨줄 문서가 없습니다. 대상을 바꾸거나 그 문서를 먼저 만들어 주세요.",
+    "넘겨줄 문서가 없습니다. 대상을 바꾸거나 해당 문서를 먼저 만들어 주세요.",
   redirect:
     "넘겨줄 문서도 넘겨주기 문서입니다. 최종 문서로 대상을 바꿔 주세요.",
 };

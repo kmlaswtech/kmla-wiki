@@ -254,7 +254,7 @@ function EditNotice() {
         <li>저장한 글은 다른 회원이 고치고, 판 기록에 계속 남습니다.</li>
       </ul>
       <p className="mt-1.5">
-        쓰는 법과 규칙은{" "}
+        작성하는 방법과 규칙은{" "}
         <Link
           to={pageHref("위키:편집 도움말")}
           target="_blank"

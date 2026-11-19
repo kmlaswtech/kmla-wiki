@@ -64,6 +64,12 @@ export interface FoundPage extends Viewer {
   resolved: ResolvedBody;
   /** 본문에 쓰인 이미지의 경로와 크기. 키는 이미지 id. 지워졌거나 등록되지 않은 이미지는 없다. */
   images: ReadonlyMap<string, ImageInfo>;
+  /**
+   * 이 문서로 넘겨주는 문서의 제목: 이 문서의 다른 이름. 넘겨주기 문서를 볼 때는 비어 있다(그리로 오는
+   * 넘겨주기는 다른 이름이 아니라 이중 넘겨주기라 `backlinks`에 남는다).
+   */
+  aliases: string[];
+  /** 이 문서를 가리키는 문서. `aliases`에 든 것은 빠진다. */
   backlinks: Backlink[];
   /** 하위 문서 제목. */
   children: string[];
