@@ -123,6 +123,18 @@ select is_empty($$select 1 from public.pages where title = '점호'$$,
 select is((select redirect_target from public.pages where title = '점호 시간'), '저녁 점호',
   'but redirects to it are still updated');
 
+-- 넘겨주기 문서를 옮기면 남기는 넘겨주기와 따라오는 넘겨주기가 그 대상을 가리킨다.
+select * from public.save_revision('야자', null, wiki('야자 본문'));
+select * from public.save_revision('야간 자습', null, wiki('#넘겨주기 [[야자]]'));
+select * from public.save_revision('야자습', null, wiki('#넘겨주기 [[야간 자습]]'));
+select * from public.move_page('야간 자습', '야간자습');
+select is((select redirect_target from public.pages where title = '야간 자습'), '야자',
+  'moving a redirect leaves a redirect to its target, not a double redirect');
+select is((select redirect_target from public.pages where title = '야자습'), '야자',
+  'and redirects to it skip straight to the target');
+select throws_ok($$select * from public.move_page('야간자습', '야자')$$, 'WK015', 'redirect to itself',
+  'a redirect cannot be moved onto its own target');
+
 -- 내용이 있던 적이 있는 넘겨주기는 지우지 않는다.
 select * from public.save_revision('귀가', null, wiki('귀가 본문'));
 select revision_id as homecoming_rev

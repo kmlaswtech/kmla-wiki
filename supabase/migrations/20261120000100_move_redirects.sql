@@ -10,6 +10,9 @@
 --     (대상 이름만 따라 바꾸는 기계적인 수정이다).
 --  4. 바라면 옛 이름에 새 이름으로 가는 넘겨주기를 남긴다.
 --
+-- 넘겨주기 문서 자체를 옮길 때는 3·4의 대상이 새 이름이 아니라 그 문서의 대상이다. 새 이름을 가리키면
+-- 곧바로 이중 넘겨주기가 된다. 대상의 이름으로 옮기면 자기 자신으로 넘겨주게 되므로 막는다.
+--
 -- 특수 기능에 끊긴 넘겨주기와 이중 넘겨주기 목록(`redirect_issues`)을 더한다.
 
 create or replace function public.move_page(
@@ -27,6 +30,8 @@ declare
   v_taken public.pages;
   v_old_title text;
   v_old_key text;
+  -- 3·4에서 넘겨줄 곳. 일반 문서면 새 이름, 넘겨주기 문서면 그 대상.
+  v_destination text;
   v_body jsonb;
   v_alias record;
   v_redirect_page_id bigint;
@@ -48,6 +53,10 @@ begin
   if v_new_title = v_old_title then
     raise exception 'nothing to save' using errcode = 'WK007';
   end if;
+  if v_page.redirect_key = lower(v_new_title) then
+    raise exception 'redirect to itself' using errcode = 'WK015', detail = 'self';
+  end if;
+  v_destination := coalesce(v_page.redirect_target, v_new_title);
 
   -- 1. 새 이름 자리. 대소문자나 공백만 바꾸는 이동은 같은 문서라 건너뛴다.
   if lower(v_new_title) <> v_old_key then
@@ -85,8 +94,9 @@ begin
     format('%s → %s 이동', v_old_title, v_new_title), 'move'
   );
 
-  -- 3. 옛 이름으로 오던 넘겨주기를 새 이름으로. 대소문자만 바꿨다면 지금도 이 문서로 온다.
-  --    삭제된 넘겨주기는 두고, 복구하면 끊긴 넘겨주기 목록에서 찾아 고친다.
+  -- 3. 옛 이름으로 오던 넘겨주기를 넘겨줄 곳으로. 대소문자만 바꿨다면 지금도 이 문서로 온다.
+  --    삭제된 넘겨주기는 두고, 복구하면 끊긴 넘겨주기 목록에서 찾아 고친다. 넘겨줄 곳 자신은
+  --    (X → 이 넘겨주기 → X 고리) 자기 자신을 가리키게 되므로 건드리지 않는다.
   if lower(v_new_title) <> v_old_key then
     for v_alias in
       select alias.id, revision.body
@@ -95,13 +105,14 @@ begin
       where alias.redirect_key = v_old_key
         and alias.deleted_at is null
         and alias.id <> v_page.id
+        and alias.title_key <> lower(v_destination)
       order by alias.id
       for update of alias
     loop
       perform private.write_revision(
         v_alias.id, v_member_id,
-        jsonb_set(v_alias.body, '{attrs,redirect}', to_jsonb(v_new_title)),
-        format('%s 이동에 따라 대상을 %s(으)로 바꿈', v_old_title, v_new_title), 'edit'
+        jsonb_set(v_alias.body, '{attrs,redirect}', to_jsonb(v_destination)),
+        format('%s 이동에 따라 대상을 %s(으)로 바꿈', v_old_title, v_destination), 'edit'
       );
     end loop;
   end if;
@@ -113,7 +124,7 @@ begin
       v_redirect_page_id, v_member_id,
       jsonb_build_object(
         'type', 'doc',
-        'attrs', jsonb_build_object('redirect', v_new_title),
+        'attrs', jsonb_build_object('redirect', v_destination),
         'content', jsonb_build_array(jsonb_build_object('type', 'paragraph'))
       ),
       format('%s 이동으로 생긴 넘겨주기', v_new_title), 'edit'
