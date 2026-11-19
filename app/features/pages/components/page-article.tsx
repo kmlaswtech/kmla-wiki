@@ -78,8 +78,13 @@ export function PageArticle({
 
   const ancestors = ancestorTitles(page.title);
   // 이 문서로 오는 넘겨주기는 링크가 아니라 이 문서의 다른 이름이다. 역링크와 따로 보여 준다.
-  const aliases = view.backlinks.filter((link) => link.isRedirect);
-  const linking = view.backlinks.filter((link) => !link.isRedirect);
+  // 넘겨주기 문서로 오는 넘겨주기는 다른 이름이 아니라 이중 넘겨주기다. 그때는 가리키는 문서에 둔다.
+  const aliases = view.redirect
+    ? []
+    : view.backlinks.filter((link) => link.isRedirect);
+  const linking = view.redirect
+    ? view.backlinks
+    : view.backlinks.filter((link) => !link.isRedirect);
 
   return (
     <article>
@@ -332,11 +337,14 @@ export function PageArticle({
             {linking.map((link) => (
               <li key={link.title}>
                 <Link
-                  to={pageHref(link.title)}
+                  to={`${pageHref(link.title)}${link.isRedirect ? "?redirect=no" : ""}`}
                   className="text-primary hover:underline"
                 >
                   {link.title}
                 </Link>
+                {link.isRedirect ? (
+                  <span className="text-muted-foreground"> (넘겨주기)</span>
+                ) : null}
               </li>
             ))}
           </ul>

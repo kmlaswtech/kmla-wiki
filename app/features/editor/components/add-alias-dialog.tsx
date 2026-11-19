@@ -78,7 +78,7 @@ export function AddAliasButton({
     setSaving(true);
     try {
       // 있는 이름이면 저장이 충돌로 거절된다. 먼저 찾아 어느 문서인지 알려 준다.
-      const existing = await getTitleInfo(alias).catch(() => null);
+      const existing = await getTitleInfo(alias);
       if (existing) {
         setTaken({
           title: existing.title,
