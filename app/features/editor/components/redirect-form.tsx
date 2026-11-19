@@ -2,12 +2,18 @@ import { CornerDownRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
-import type { EditTarget } from "../data/save";
-import { redirectDoc } from "../model/doc-io";
-import { clearDraft } from "../storage/drafts";
+import { loadLatest, type EditTarget } from "../data/save";
+import { redirectDoc, sameDoc } from "../model/doc-io";
+import { clearDraft, loadDraft } from "../storage/drafts";
 import { TitleInput } from "./title-input";
 import { loginHref } from "~/features/auth";
-import { docToText, pageHref, parseTitle, titleKey } from "~/features/markup";
+import {
+  pageHref,
+  parseTitle,
+  titleKey,
+  visibleTextLength,
+  type WikiDoc,
+} from "~/features/markup";
 import {
   describeWriteError,
   getTitleInfo,
@@ -34,7 +40,7 @@ type TargetCheck =
  * 넘겨주기 문서 편집. 본문 편집기 대신 대상 하나만 고른다.
  *
  * 넘겨주기를 따라가면 넘겨주기 문서의 본문은 아무도 보지 못한다. 그래서 본문 칸을 두지 않는다.
- * 일반 문서를 넘겨주기로 바꾸는 중이면 사라질 본문의 양을 알린다.
+ * 저장하면 사라지는 것(지금 판의 본문·분류, 본문 편집기에서 쓰던 글)을 미리 알린다.
  */
 export function RedirectForm({
   target,
@@ -45,20 +51,23 @@ export function RedirectForm({
   onWriteDocument: () => void;
 }) {
   const navigate = useNavigate();
-  const savedTarget = target.baseBody.attrs?.redirect ?? "";
+  const key = titleKey(target.title);
+  // 충돌이 나면 최신 판이 새 기준이 된다.
+  const [base, setBase] = useState(target);
+  const savedTarget = base.baseBody.attrs?.redirect ?? "";
   const [value, setValue] = useState(savedTarget);
   const [summary, setSummary] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const check = useTargetCheck(value, target.title);
+  const check = useTargetCheck(value, base.title);
 
-  // 일반 문서를 넘겨주기로 바꾸는 중이면, 화면에서 사라질 글의 양.
-  const droppedLength =
-    savedTarget === "" ? docToText(target.baseBody).trim().length : 0;
+  const [dropped] = useState(() => droppedContent(base.baseBody, key));
 
   const chosen =
     check.status === "ok" || check.status === "unknown" ? check.title : null;
-  const unchanged = chosen !== null && chosen === parseTitle(savedTarget);
+  // 대상이 같아도 저장된 본문이 넘겨주기 모양이 아니면(규칙 이전에 본문이 붙은 것) 저장해 정리한다.
+  const unchanged =
+    chosen !== null && sameDoc(redirectDoc(chosen), base.baseBody);
   const canSave = chosen !== null && !unchanged && !saving;
 
   async function save() {
@@ -67,13 +76,13 @@ export function RedirectForm({
     setError(null);
     try {
       const saved = await saveRevision({
-        title: target.title,
-        baseRevisionId: target.baseRevisionId,
+        title: base.title,
+        baseRevisionId: base.baseRevisionId,
         body: redirectDoc(chosen),
         summary,
       });
       // 본문 편집기에서 넘어왔다면 그쪽 임시 저장이 남아 있다. 본문은 이제 쓰지 않는다.
-      clearDraft(titleKey(target.title), null);
+      clearDraft(key, null);
       await navigate(`${pageHref(saved.title)}?redirect=no`);
     } catch (caught) {
       if (isWikiError(caught, NOT_VERIFIED)) {
@@ -82,11 +91,28 @@ export function RedirectForm({
         );
         return;
       }
-      setError(
-        isWikiError(caught, WRITE_ERROR.conflict)
-          ? "그 사이 다른 사람이 이 문서를 고쳤습니다. 새로 고친 뒤 다시 시도해 주세요."
-          : describeWriteError(caught),
-      );
+      if (isWikiError(caught, WRITE_ERROR.conflict)) {
+        // 최신 판을 새 기준으로 삼는다. 쓴 대상은 그대로 두어 확인 뒤 다시 저장하게 한다.
+        const latest = await loadLatest(base.title).catch(() => null);
+        if (latest) {
+          setBase({
+            ...base,
+            baseRevisionId: latest.revisionId,
+            baseBody: latest.body,
+          });
+        }
+        setError(
+          latest
+            ? `그 사이 다른 사람이 이 문서를 고쳤습니다${
+                latest.body.attrs?.redirect
+                  ? `(지금 대상: ${latest.body.attrs.redirect})`
+                  : ""
+              }. 확인한 뒤 다시 저장해 주세요.`
+            : "그 사이 다른 사람이 이 문서를 고쳤습니다. 새로 고친 뒤 다시 시도해 주세요.",
+        );
+        return;
+      }
+      setError(describeWriteError(caught));
     } finally {
       setSaving(false);
     }
@@ -100,11 +126,15 @@ export function RedirectForm({
         void save();
       }}
     >
-      {droppedLength > 0 ? (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm break-keep">
-          넘겨주기로 바꾸면 지금 본문 {droppedLength.toLocaleString("ko")}자가
-          화면에서 사라집니다. 판 기록에는 남아 언제든 되돌릴 수 있습니다.
-        </p>
+      {dropped.length > 0 ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm break-keep">
+          <p>넘겨주기로 저장하면</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {dropped.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       <div className="grid gap-1.5">
@@ -155,7 +185,7 @@ export function RedirectForm({
           {saving ? <Spinner /> : null}
           저장
         </Button>
-        <LinkButton variant="ghost" to={pageHref(target.title)}>
+        <LinkButton variant="ghost" to={pageHref(base.title)}>
           취소
         </LinkButton>
         <Button
@@ -169,6 +199,33 @@ export function RedirectForm({
       </div>
     </form>
   );
+}
+
+/**
+ * 넘겨주기로 저장하면 사라지는 것. 지금 판의 본문·분류는 판 기록에 남지만, 본문 편집기에서 쓰다가
+ * 넘어온 글(임시 저장)은 저장한 적이 없어 남지 않는다.
+ */
+function droppedContent(baseBody: WikiDoc, key: string): string[] {
+  const lines: string[] = [];
+  const storedLength = visibleTextLength(baseBody);
+  if (storedLength > 0) {
+    lines.push(
+      `지금 판의 본문 ${storedLength.toLocaleString("ko")}자가 화면에서 사라집니다(판 기록에는 남습니다).`,
+    );
+  }
+  const categories = baseBody.attrs?.categories?.length ?? 0;
+  if (categories > 0) {
+    lines.push(`분류 ${categories}개가 빠집니다.`);
+  }
+  // 본문 편집기에서 쓰다가 넘어왔다면 임시 저장이 있다. 넘겨주기로 저장하면 지운다.
+  const draft = loadDraft(key, null);
+  const draftLength = draft ? visibleTextLength(draft.body) : 0;
+  if (draftLength > 0) {
+    lines.push(
+      `저장하지 않고 쓰던 글 ${draftLength.toLocaleString("ko")}자는 지워지고, 판 기록에도 남지 않습니다.`,
+    );
+  }
+  return lines;
 }
 
 /** 쓴 이름이 쓸 수 있는 대상인지. 입력이 잠깐 멈추면 DB에서 확인한다. */

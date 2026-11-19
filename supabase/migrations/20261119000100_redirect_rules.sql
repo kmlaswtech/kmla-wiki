@@ -3,7 +3,7 @@
 -- 넘겨주기를 따라가면 넘겨주기 문서의 본문은 아무도 보지 못한다. 그런데도 편집기가 일반 문서와
 -- 같아 본문을 채우는 일이 생겼다. 화면은 넘겨주기 전용 입력으로 바꾸고, 여기서 저장을 막는다.
 --
--- 오류 코드(`20261116000200_pages.sql`의 표에 더한다)
+-- 오류 코드. `20261116000200_pages.sql`의 표는 배포된 migration이라 고치지 않고, WK015는 여기에 둔다.
 --   WK015  넘겨주기 문서 규칙 위반. detail:
 --            content     본문이 있다
 --            categories  분류가 있다
@@ -108,10 +108,10 @@ $$;
 
 -- ── 문서 보기 ────────────────────────────────────────────────────────────────
 -- 바뀐 것:
---  * 넘겨주기를 3단계까지 따라간다. 순환하거나 대상이 없으면 거기서 멈춘다.
+--  * 넘겨주기를 3단계까지 따라간다. 순환하거나 대상이 없거나 삭제됐으면 거기서 멈춘다.
 --    `redirected_from`은 처음 요청한 제목이다.
 --  * 보여 줄 판이 넘겨주기면 `redirect`에 대상과 상태를 싣는다. 화면이 본문 대신 넘겨주기 카드를
---    그린다. 상태: ok(대상이 일반 문서), missing(대상이 없음), redirect(대상도 넘겨주기).
+--    그린다. 상태: ok(대상이 일반 문서), missing(대상이 없거나 삭제됨), redirect(대상도 넘겨주기).
 create or replace function public.get_page_view(
   p_title text,
   p_follow_redirect boolean default true,
@@ -141,7 +141,9 @@ begin
     v_seen := array[v_page.id];
     for hop in 1..3 loop
       exit when v_page.redirect_key is null;
-      select * into v_target from public.pages as page where page.title_key = v_page.redirect_key;
+      -- 삭제된 문서는 없는 문서로 친다(관리자에게는 RLS가 삭제된 문서도 보여 준다).
+      select * into v_target from public.pages as page
+      where page.title_key = v_page.redirect_key and page.deleted_at is null;
       exit when v_target.id is null or v_target.id = any(v_seen);
       v_seen := v_seen || v_target.id;
       v_redirected_from := coalesce(v_redirected_from, v_page.title);
@@ -171,7 +173,8 @@ begin
   where ref.kind = 'redirect'
   limit 1;
   if v_redirect_title is not null then
-    select * into v_target from public.pages as page where page.title_key = lower(v_redirect_title);
+    select * into v_target from public.pages as page
+    where page.title_key = lower(v_redirect_title) and page.deleted_at is null;
     v_redirect := jsonb_build_object(
       'target', coalesce(v_target.title, v_redirect_title),
       'state', case

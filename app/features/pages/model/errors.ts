@@ -1,7 +1,8 @@
 import { isWikiError } from "~/shared/supabase/errors";
 
 /**
- * 쓰기 RPC의 오류 코드. DB 마이그레이션(`*_pages.sql`) 머리말의 표와 같다.
+ * 쓰기 RPC의 오류 코드. DB 마이그레이션(`*_pages.sql`) 머리말의 표와 같다. WK015(넘겨주기 규칙)는
+ * `*_redirect_rules.sql` 머리말에 있다.
  */
 export const WRITE_ERROR = {
   conflict: "WK001",

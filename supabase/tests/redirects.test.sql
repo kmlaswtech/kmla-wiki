@@ -73,6 +73,17 @@ select is(public.get_page_view('긱사', false) #>> '{redirect,state}', 'ok',
 select is(public.get_page_view('기숙', false) #>> '{redirect,next}', '기숙사',
   'a redirect to a redirect says where that one goes');
 
+-- 삭제된 대상은 없는 문서로 친다. 관리자도 따라가지 않는다.
+select page_id as gone_id from public.save_revision('사라질 문서', null, wiki('본문')) \gset
+select * from public.save_revision('사라짐', null, wiki('#넘겨주기 [[사라질 문서]]'));
+select logout();
+select login(:admin);
+select public.delete_page(:gone_id, '정리');
+select is(public.get_page_view('사라짐') ->> 'title', '사라짐',
+  'a redirect to a deleted page is not followed');
+select is(public.get_page_view('사라짐') #>> '{redirect,state}', 'missing',
+  'and its target is reported as missing');
+
 select logout();
 select * from finish();
 rollback;

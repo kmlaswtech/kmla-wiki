@@ -297,17 +297,7 @@ export async function searchPages(query: string): Promise<SearchHit[]> {
  * 잡히고, 넘겨주기는 문서 보기가 따라간다.
  */
 export async function findExactTitle(query: string): Promise<string | null> {
-  const title = parseTitle(query);
-  if (!title) return null;
-  const rows = unwrap(
-    await getSupabase()
-      .from("pages")
-      .select("title")
-      .is("deleted_at", null)
-      .eq("title_key", titleKey(title))
-      .limit(1),
-  );
-  return rows[0]?.title ?? null;
+  return (await getTitleInfo(query))?.title ?? null;
 }
 
 /** 그 제목의 문서가 있는지, 넘겨주기인지. 없거나 쓸 수 없는 제목이면 `null`. */

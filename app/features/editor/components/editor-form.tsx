@@ -141,7 +141,16 @@ export function EditorForm({
     [content, meta, sectionMode],
   );
   const baseline = useMemo(() => normalizeDoc(editingPart(base)), [base]);
-  const baselineJson = useMemo(() => JSON.stringify(baseline), [baseline]);
+  // 넘겨주기 문서를 일반 문서로 바꿔 여는 중인가. 그러면 넘겨주기를 뺀 문서와 비교한다. 아무것도
+  // 쓰지 않았으면 바뀐 것이 없어서, 빈 문서로 저장되거나 임시 저장·나가기 경고가 생기지 않는다.
+  const releasingRedirect = !sectionMode && Boolean(baseline.attrs?.redirect);
+  const baselineJson = useMemo(() => {
+    if (!releasingRedirect) return JSON.stringify(baseline);
+    const { content: released, meta: releasedMeta } = withoutRedirect(
+      splitDoc(baseline),
+    );
+    return JSON.stringify(joinDoc(released, releasedMeta));
+  }, [baseline, releasingRedirect]);
   // 양쪽 다 편집기 스키마를 거친 값이라 키 순서가 같다. 그래서 키를 정렬하지 않고 바로 비교한다
   // (글자를 칠 때마다 계산하므로 큰 문서에서 정렬 비용이 크다).
   const dirty = useMemo(
@@ -427,6 +436,13 @@ export function EditorForm({
           </p>
           <DiffView before={conflictText} after={currentText} />
         </section>
+      ) : null}
+
+      {releasingRedirect ? (
+        <p className="rounded-md bg-muted px-3 py-2 text-sm break-keep text-muted-foreground">
+          넘겨주기 문서를 일반 문서로 바꿉니다. 본문을 쓰고 저장하면 넘겨주기가
+          풀립니다.
+        </p>
       ) : null}
 
       <div role="tablist" aria-label="편집과 변경 사항" className="flex gap-1">
