@@ -1,11 +1,10 @@
-import { nonNegativeInt } from "./title-param";
 import type { Namespace } from "~/features/markup";
-import { SPECIAL_PAGE_SIZE } from "~/features/pages";
 
-// 특수 기능 화면의 탭과 주소. loader와 화면이 같이 쓰므로 라우트 모듈 밖에 둔다. 라우트 모듈 안에 두면
-// loader를 따로 떼어 내지 못한다(`react-router.config.ts`의 `splitRouteModules`).
+// 특수 기능 화면(`/special`)의 탭과 주소.
 
-export const TABS = [
+export const SPECIAL_PAGE_SIZE = 100;
+
+export const SPECIAL_TABS = [
   {
     key: "wanted",
     label: "작성이 필요한 문서",
@@ -40,23 +39,23 @@ export const TABS = [
 ] as const;
 
 /** 이름공간을 골라 볼 수 있는 탭. */
-export const NAMESPACE_TABS: readonly Tab[] = ["all", "short", "long"];
+export const SPECIAL_NAMESPACE_TABS: readonly SpecialTab[] = ["all", "short", "long"];
 
-export type Tab = (typeof TABS)[number]["key"];
+export type SpecialTab = (typeof SPECIAL_TABS)[number]["key"];
 
-export const NAMESPACES: { key: Namespace; label: string }[] = [
+export const SPECIAL_NAMESPACES: { key: Namespace; label: string }[] = [
   { key: "main", label: "일반" },
   { key: "template", label: "틀" },
   { key: "category", label: "분류" },
   { key: "wiki", label: "위키" },
 ];
 
-export function readTab(value: string | null): Tab {
-  return TABS.some((tab) => tab.key === value) ? (value as Tab) : "wanted";
+export function readSpecialTab(value: string | null): SpecialTab {
+  return SPECIAL_TABS.some((tab) => tab.key === value) ? (value as SpecialTab) : "wanted";
 }
 
-export function readNamespace(value: string | null): Namespace {
-  return NAMESPACES.some((ns) => ns.key === value)
+export function readSpecialNamespace(value: string | null): Namespace {
+  return SPECIAL_NAMESPACES.some((ns) => ns.key === value)
     ? (value as Namespace)
     : "main";
 }
@@ -64,14 +63,14 @@ export function readNamespace(value: string | null): Namespace {
 /** RPC의 `integer` 인자가 받는 가장 큰 값. 넘으면 RPC가 실패한다. */
 const MAX_OFFSET = 2_147_483_647 - SPECIAL_PAGE_SIZE;
 
-/** 크기 순 목록의 건너뛸 개수. 잘못된 값이면 처음부터다. */
-export function readOffset(value: string | null): number {
-  const offset = nonNegativeInt(value) ?? 0;
+/** 크기 순 목록의 건너뛸 개수. 없거나 너무 크면 처음부터다. */
+export function sizeListOffset(requested: number | null): number {
+  const offset = requested ?? 0;
   return offset <= MAX_OFFSET ? offset : 0;
 }
 
 export function specialHref(
-  tab: Tab,
+  tab: SpecialTab,
   extra: Record<string, string> = {},
 ): string {
   return `/special?${new URLSearchParams({ tab, ...extra }).toString()}`;

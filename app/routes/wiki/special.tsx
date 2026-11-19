@@ -2,15 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import type { Route } from "./+types/special";
-import {
-  NAMESPACE_TABS,
-  NAMESPACES,
-  readNamespace,
-  readOffset,
-  readTab,
-  specialHref,
-  TABS,
-} from "./special-params";
+import { nonNegativeInt } from "./title-param";
 import { withVerifiedMember } from "~/features/auth";
 import { pageHref, redirectPageHref } from "~/features/markup";
 import {
@@ -19,18 +11,25 @@ import {
   listPagesBySize,
   listRedirectIssues,
   listWantedPages,
+  SPECIAL_NAMESPACE_TABS,
+  SPECIAL_NAMESPACES,
+  readSpecialNamespace,
+  readSpecialTab,
+  sizeListOffset,
   SPECIAL_PAGE_SIZE,
+  specialHref,
+  SPECIAL_TABS,
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
 import { cn } from "~/shared/lib/utils";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const params = new URL(request.url).searchParams;
-  const tab = readTab(params.get("tab"));
-  const namespace = readNamespace(params.get("ns"));
+  const tab = readSpecialTab(params.get("tab"));
+  const namespace = readSpecialNamespace(params.get("ns"));
   const after = params.get("after") || undefined;
 
-  const offset = readOffset(params.get("offset"));
+  const offset = sizeListOffset(nonNegativeInt(params.get("offset")));
   const empty = { wanted: [], redirects: [], titles: [], sized: [], offset };
 
   return withVerifiedMember(request, async () => {
@@ -61,7 +60,7 @@ export const meta: Route.MetaFunction = () => [
 export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
   const { tab, namespace, wanted, redirects, titles, sized, offset } =
     loaderData;
-  const current = TABS.find((item) => item.key === tab)!;
+  const current = SPECIAL_TABS.find((item) => item.key === tab)!;
   const last = titles.at(-1);
   const sizedTab = tab === "short" || tab === "long";
   // 다음 묶음. 제목 순 목록은 마지막 제목 다음부터, 크기 순 목록은 건너뛸 개수로 잇는다.
@@ -85,7 +84,7 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
       <h1 className="mb-4 border-b pb-3 text-2xl font-bold">특수 기능</h1>
 
       <nav aria-label="특수 기능 목록" className="mb-3 flex flex-wrap gap-1">
-        {TABS.map((item) => (
+        {SPECIAL_TABS.map((item) => (
           <LinkButton
             key={item.key}
             to={specialHref(item.key)}
@@ -104,9 +103,9 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
         </p>
       ) : null}
 
-      {NAMESPACE_TABS.includes(tab) ? (
+      {SPECIAL_NAMESPACE_TABS.includes(tab) ? (
         <div className="mb-4 flex flex-wrap gap-1 text-sm">
-          {NAMESPACES.map((ns) => (
+          {SPECIAL_NAMESPACES.map((ns) => (
             <Link
               key={ns.key}
               to={specialHref(tab, { ns: ns.key })}

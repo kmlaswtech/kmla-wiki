@@ -11,6 +11,7 @@ import type {
 } from "../model/types";
 import { headingTargets, type HeadingTarget } from "../model/headings";
 import { titleMatchPattern } from "../model/hangul-match";
+import { SPECIAL_PAGE_SIZE } from "../model/special";
 import {
   asWikiDoc,
   parseTitle,
@@ -355,8 +356,6 @@ export async function resolveRedirect(
     row?.status === "loop" || row?.status === "stop" ? row.status : "missing";
   return { status, via };
 }
-
-export const SPECIAL_PAGE_SIZE = 100;
 
 /** 링크는 걸려 있는데 아직 없는 문서. 많이 가리켜진 순. 영문 제목은 소문자로 온다. */
 export async function listWantedPages(): Promise<

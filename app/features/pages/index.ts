@@ -27,7 +27,6 @@ export {
   listRecentlyChangedPages,
   listRedirectIssues,
   listWantedPages,
-  SPECIAL_PAGE_SIZE,
   resolveBody,
   resolveRedirect,
   searchPages,
@@ -41,6 +40,17 @@ export {
 export type { RedirectResolution, TitleSuggestion } from "./data/queries";
 export type { HeadingTarget } from "./model/headings";
 export { MAIN_PAGE_TITLE } from "./model/main-page";
+export {
+  SPECIAL_NAMESPACE_TABS,
+  SPECIAL_NAMESPACES,
+  readSpecialNamespace,
+  readSpecialTab,
+  sizeListOffset,
+  SPECIAL_PAGE_SIZE,
+  specialHref,
+  SPECIAL_TABS,
+  type SpecialTab,
+} from "./model/special";
 export { redirectsHere } from "./model/view";
 export type {
   FoundPage,

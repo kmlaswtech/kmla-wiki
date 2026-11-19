@@ -132,11 +132,14 @@ export function PageArticle({
         </div>
         {/* 화면에서 가장 눈에 띄는 것은 제목이어야 한다. 버튼은 모두 차분한 외곽선으로 둔다. */}
         <div className="flex shrink-0 gap-1.5">
+          {/* 편집·기록 단추는 마우스를 올리거나 누르기 시작하면 갈 화면의 코드를 미리 받는다. 문서를
+           * 읽다가 가장 많이 가는 곳이다. 편집 화면은 편집기 때문에 코드가 크다. */}
           {viewingOldRevision ? null : editable ? (
             <LinkButton
               size="sm"
               variant="outline"
               to={pageHref(page.title, "edit")}
+              prefetch="intent"
             >
               <Pencil aria-hidden />
               편집
@@ -147,6 +150,7 @@ export function PageArticle({
               size="sm"
               variant="outline"
               to={pageHref(page.title, "edit")}
+              prefetch="intent"
               title={
                 page.protection === "admin"
                   ? "보호된 문서라 관리자만 편집할 수 있습니다."
@@ -162,6 +166,7 @@ export function PageArticle({
             variant="outline"
             className="max-sm:hidden"
             to={pageHref(page.title, "history")}
+            prefetch="intent"
           >
             기록
           </LinkButton>
