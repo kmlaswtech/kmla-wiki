@@ -47,6 +47,7 @@ export {
   normalizeTitle,
   pageHref,
   parseTitle,
+  redirectPageHref,
   searchKey,
   titleKey,
   titleToPath,

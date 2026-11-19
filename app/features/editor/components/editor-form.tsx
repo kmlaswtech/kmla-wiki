@@ -18,7 +18,7 @@ import { EditorDialogs } from "./editor-dialogs";
 import type { EditorRequest } from "./editor-ui";
 import { Toolbar } from "./toolbar";
 import { useWikiEditor, WikiEditorContent } from "./wiki-editor";
-import { loginHref } from "~/features/auth";
+import { useLoginOnExpiry } from "~/features/auth";
 import {
   IMAGE_INPUT_ACCEPT,
   resolveImages,
@@ -44,7 +44,6 @@ import {
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
 import { cn } from "~/shared/lib/utils";
-import { isWikiError, NOT_VERIFIED } from "~/shared/supabase/errors";
 import { Button } from "~/shared/ui/button";
 import {
   Dialog,
@@ -104,6 +103,7 @@ export function EditorForm({
   onConvertToRedirect,
 }: EditorFormProps) {
   const navigate = useNavigate();
+  const loginOnExpiry = useLoginOnExpiry();
   const key = titleKey(target.title);
   const sectionMode = target.sectionIndex !== null;
 
@@ -374,19 +374,16 @@ export function EditorForm({
       });
       setConflict(normalizeDoc(latestPart));
     } catch (caught) {
-      if (isWikiError(caught, NOT_VERIFIED)) {
-        // 쓰던 글은 임시 저장에 있다. 로그인하고 돌아오면 복원된다.
+      // 쓰던 글은 임시 저장에 둔다. 로그인하고 돌아오면 복원된다.
+      const expired = await loginOnExpiry(caught, () => {
         saveDraft(key, target.sectionIndex, {
           body: current,
           summary,
           baseRevisionId: base.baseRevisionId,
         });
         allowLeave.current = true;
-        await navigate(
-          loginHref(`${location.pathname}${location.search}`, "expired"),
-        );
-        return;
-      }
+      });
+      if (expired) return;
       setError(describeWriteError(caught));
     } finally {
       setSaving(false);

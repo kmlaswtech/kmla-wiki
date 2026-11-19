@@ -102,6 +102,14 @@ select is_empty(format('select 1 from public.pages where id = %s', :alias_id),
   'the redirect that held the title is removed');
 select is((select redirect_target from public.pages where title = '외출'), '외출 신청',
   'the old title becomes a redirect to the new one');
+-- 화면의 `redirectDoc`(app/features/editor/model/doc-io.ts)과 같은 모양이어야 한다.
+select is(
+  (select revision.body from public.pages as page
+   join public.revisions as revision on revision.id = page.current_revision_id
+   where page.title = '외출'),
+  '{"type": "doc", "attrs": {"redirect": "외출 신청"}, "content": [{"type": "paragraph"}]}'::jsonb,
+  'and its body has the same shape the redirect form saves'
+);
 select is((select redirect_target from public.pages where id = :other_alias_id), '외출 신청',
   'other redirects to the old title follow the move');
 select is(

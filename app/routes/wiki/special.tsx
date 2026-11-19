@@ -3,7 +3,7 @@ import { Link } from "react-router";
 
 import type { Route } from "./+types/special";
 import { withVerifiedMember } from "~/features/auth";
-import { pageHref, type Namespace } from "~/features/markup";
+import { pageHref, redirectPageHref, type Namespace } from "~/features/markup";
 import {
   listAllPages,
   listOrphanPages,
@@ -265,7 +265,7 @@ function IssueRow({ title, children }: { title: string; children: ReactNode }) {
 function RedirectLink({ title }: { title: string }) {
   return (
     <Link
-      to={`${pageHref(title)}?redirect=no`}
+      to={redirectPageHref(title)}
       className="font-medium text-primary hover:underline"
     >
       {title}

@@ -15,6 +15,7 @@ import {
   emptyDoc,
   pageHref,
   parseWiki,
+  redirectPageHref,
   TableOfContents,
   titleKey,
   WikiContent,
@@ -237,7 +238,7 @@ export function PageArticle({
             <CornerDownRight className="size-4 shrink-0" aria-hidden />
             <span>
               <Link
-                to={`${pageHref(view.redirectedFrom)}?redirect=no`}
+                to={redirectPageHref(view.redirectedFrom)}
                 className="text-primary hover:underline"
               >
                 {view.redirectedFrom}
@@ -324,7 +325,7 @@ export function PageArticle({
             <Badge
               key={alias}
               variant="secondary"
-              render={<Link to={`${pageHref(alias)}?redirect=no`} />}
+              render={<Link to={redirectPageHref(alias)} />}
             >
               {alias}
             </Badge>
@@ -342,7 +343,11 @@ export function PageArticle({
             {view.backlinks.map((link) => (
               <li key={link.title}>
                 <Link
-                  to={`${pageHref(link.title)}${link.isRedirect ? "?redirect=no" : ""}`}
+                  to={
+                    link.isRedirect
+                      ? redirectPageHref(link.title)
+                      : pageHref(link.title)
+                  }
                   className="text-primary hover:underline"
                 >
                   {link.title}

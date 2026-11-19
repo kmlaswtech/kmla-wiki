@@ -1,10 +1,10 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 
 import { redirectDoc } from "../model/doc-io";
-import { loginHref } from "~/features/auth";
-import { pageHref, parseTitle, titleKey } from "~/features/markup";
+import { useLoginOnExpiry } from "~/features/auth";
+import { parseTitle, redirectPageHref, titleKey } from "~/features/markup";
 import {
   describeWriteError,
   getTitleInfo,
@@ -12,7 +12,7 @@ import {
   saveRevision,
   WRITE_ERROR,
 } from "~/features/pages";
-import { isWikiError, NOT_VERIFIED } from "~/shared/supabase/errors";
+import { isWikiError } from "~/shared/supabase/errors";
 import { Button } from "~/shared/ui/button";
 import {
   Dialog,
@@ -85,7 +85,7 @@ function AliasForm({
   onCancel: () => void;
   onAdded: () => void;
 }) {
-  const navigate = useNavigate();
+  const loginOnExpiry = useLoginOnExpiry();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -114,12 +114,7 @@ function AliasForm({
       });
       onAdded();
     } catch (caught) {
-      if (isWikiError(caught, NOT_VERIFIED)) {
-        await navigate(
-          loginHref(`${location.pathname}${location.search}`, "expired"),
-        );
-        return;
-      }
+      if (await loginOnExpiry(caught)) return;
       setProblem(
         isWikiError(caught, WRITE_ERROR.conflict)
           ? await takenBy(alias, title)
@@ -170,10 +165,7 @@ function AliasForm({
             problem.message
           ) : (
             <>
-              <Link
-                to={`${pageHref(problem.title)}?redirect=no`}
-                className="underline"
-              >
+              <Link to={redirectPageHref(problem.title)} className="underline">
                 {problem.title}
               </Link>
               {problem.ours

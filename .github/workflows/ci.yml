@@ -43,12 +43,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
 
-      # The stack's ports (547xx) sit inside Linux's ephemeral range. While
-      # `supabase start` pulls images in parallel, an outgoing connection can
-      # take one as its source port and a container then fails to bind it.
-      # Reserving them removes them from the ephemeral pool.
+      # The stack's ports (547xx) sit inside Linux's ephemeral range, so an
+      # outgoing connection can take one and a container then fails to bind
+      # it. Reserving only affects later connections, so this runs before setup.
       - name: Reserve Supabase ports
         run: |
           ports="$(sed -nE 's/^[[:space:]]*[a-z_]*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' supabase/config.toml \
@@ -60,10 +58,21 @@ jobs:
           current="$(cat /proc/sys/net/ipv4/ip_local_reserved_ports)"
           sudo sysctl -w net.ipv4.ip_local_reserved_ports="${current:+$current,}$ports"
 
+      - uses: ./.github/actions/setup
+
       # A fresh runner has no volume, so `start` applies every migration and
-      # the seed. Services the app and tests never touch are left out.
+      # the seed. Services the app and tests never touch are left out. A port
+      # held by a connection from before this job can still clash: log who
+      # holds 547xx and retry once (images are already pulled by then).
       - name: Start Supabase
-        run: pnpm exec supabase start -x studio,edge-runtime,imgproxy,mailpit,logflare,vector,realtime,supavisor
+        env:
+          EXCLUDE: studio,edge-runtime,imgproxy,mailpit,logflare,vector,realtime,supavisor
+        run: |
+          pnpm exec supabase start -x "$EXCLUDE" && exit 0
+          echo "::warning::supabase start failed. Sockets on 547xx:"
+          sudo ss -tanp | grep -E ':547[0-9]{2}\b' || true
+          pnpm exec supabase stop --no-backup || true
+          pnpm exec supabase start -x "$EXCLUDE"
 
       - name: Test database (pgTAP)
         run: pnpm test:db
