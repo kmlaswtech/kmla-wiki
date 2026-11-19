@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-import { formatByteDelta, revisionKindLabel } from "../model/errors";
+import { ByteDelta } from "./byte-delta";
+import { revisionKindLabel } from "../model/errors";
 import type { RevisionSummary } from "../model/types";
 import { pageHref } from "~/features/markup";
 import { RelativeTime } from "~/shared/components/relative-time";
@@ -71,17 +72,7 @@ export function RevisionList<Row extends RevisionSummary>({
               </Link>
             )}
 
-            <span
-              className={cn(
-                "tabular-nums",
-                revision.byteDelta > 0 &&
-                  "text-emerald-600 dark:text-emerald-400",
-                revision.byteDelta < 0 && "text-destructive",
-                revision.byteDelta === 0 && "text-muted-foreground",
-              )}
-            >
-              {formatByteDelta(revision.byteDelta)}
-            </span>
+            <ByteDelta delta={revision.byteDelta} />
 
             <span className="font-mono text-xs text-muted-foreground">
               {revision.authorPseudonym}

@@ -232,7 +232,8 @@ export function PageArticle({
         </nav>
       ) : null}
 
-      <div className="space-y-2">
+      {/* 안내가 있으면 본문과 띄운다. 없으면 빈 칸이라 여백도 두지 않는다. */}
+      <div className="mb-4 space-y-2 empty:mb-0">
         {view.redirectedFrom ? (
           <Notice>
             <CornerDownRight className="size-4 shrink-0" aria-hidden />

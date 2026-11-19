@@ -278,7 +278,7 @@
   }
   /* 각주 미리보기. 본문 규칙을 쓰되 상자 안에 맞게 여백을 줄인다. */
   .wiki-content.wiki-footnote {
-    @apply text-sm leading-6;
+    @apply text-sm leading-5;
   }
   .wiki-content.wiki-footnote p {
     @apply my-0;

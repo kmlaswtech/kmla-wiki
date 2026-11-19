@@ -510,9 +510,9 @@ function FootnoteRef({
         >
           [{number}]
         </PopoverTrigger>
-        <PopoverContent side="top" className="wiki-content wiki-footnote">
+        <PopoverContent side="top" className="wiki-content wiki-footnote py-2">
           <p>
-            <span className="mr-1 text-primary tabular-nums">[{number}]</span>
+            <span className="mr-2 text-primary tabular-nums">[{number}]</span>
             <NoteText note={note} />
           </p>
         </PopoverContent>
