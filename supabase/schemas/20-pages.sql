@@ -219,6 +219,8 @@ begin
     when 'text' then return coalesce(p_body ->> 'text', '');
     when 'footnote' then return ' ' || coalesce(p_body -> 'attrs' ->> 'note', '');
     when 'hardBreak' then return E'\n';
+    -- 이미지·영상은 아래에 보이는 캡션이 글자다(`markup/model/text.ts`의 `visibleTextLength`와 같다).
+    when 'image', 'youtube' then return btrim(coalesce(p_body -> 'attrs' ->> 'caption', ''));
     else null;
   end case;
 

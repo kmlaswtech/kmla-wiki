@@ -46,12 +46,42 @@ select results_eq(
   $$values ('틀:안내'::text)$$,
   'all pages can list another namespace'
 );
+select is(
+  (select title from public.page_sizes() limit 1),
+  '귀가/정기 귀가',
+  'short pages start with the smallest page'
+);
+select is(
+  (select title from public.page_sizes('main', true) limit 1),
+  '고립',
+  'long pages start with the largest page'
+);
+select set_eq(
+  $$select title from public.page_sizes()$$,
+  $$values ('고립'::text), ('귀가'::text), ('귀가/정기 귀가'::text), ('기숙사'::text), ('넘겨받음'::text)$$,
+  'page sizes list main pages without redirects or deleted pages'
+);
+select ok(
+  (select bool_and(byte_size > 0) from public.page_sizes()),
+  'page sizes come with the byte size'
+);
+select results_eq(
+  $$select title from public.page_sizes('main', false, 1, 2)$$,
+  $$select title from public.page_sizes() offset 1 limit 2$$,
+  'page sizes continue from the given offset'
+);
+select results_eq(
+  $$select title from public.page_sizes('template')$$,
+  $$values ('틀:안내'::text)$$,
+  'page sizes can list another namespace'
+);
 select logout();
 
 -- 회원 확인이 없으면 RLS 때문에 아무것도 보이지 않는다.
 select login(:expired);
 select is_empty($$select * from public.wanted_pages()$$, 'an expired member sees no wanted pages');
 select is_empty($$select * from public.list_all_pages()$$, 'an expired member sees no pages');
+select is_empty($$select * from public.page_sizes()$$, 'an expired member sees no page sizes');
 select logout();
 
 select * from finish();

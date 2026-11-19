@@ -17,6 +17,7 @@ import {
   Puzzle,
   Quote,
   Redo2,
+  SquarePlay,
   Strikethrough,
   Superscript,
   Table,
@@ -202,6 +203,12 @@ export function Toolbar({
           <Image />
         </ToolButton>
       ) : null}
+      <ToolButton
+        label="유튜브 영상"
+        onClick={() => request({ kind: "youtube" })}
+      >
+        <SquarePlay />
+      </ToolButton>
       <ToolButton label="각주" onClick={() => request({ kind: "footnote" })}>
         <Superscript />
       </ToolButton>

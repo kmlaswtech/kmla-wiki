@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 
@@ -26,6 +26,14 @@ function show(
       />
     </MemoryRouter>,
   );
+}
+
+/** 손가락이나 마우스로 누른다. jsdom에는 `PointerEvent`가 없어 종류를 직접 붙인다. */
+function tap(element: Element, pointerType: "touch" | "mouse") {
+  const down = new MouseEvent("pointerdown", { bubbles: true });
+  Object.defineProperty(down, "pointerType", { value: pointerType });
+  fireEvent(element, down);
+  fireEvent.click(element);
 }
 
 const external = (label: string, href: string) => ({
@@ -133,5 +141,96 @@ describe("WikiContent", () => {
     expect(container.querySelector("section[data-footnotes]")).toBeNull();
     expect(container.querySelector("[id]")).toBeNull();
     expect(screen.getByRole("button", { name: "각주 1" })).toBeInTheDocument();
+  });
+
+  it("lifts the strike line on a finger tap, but not on a mouse click or a link", () => {
+    const { container } = show(
+      doc(
+        para(
+          { type: "text", text: "취소", marks: [{ type: "strike" }] },
+          {
+            type: "text",
+            text: "링크",
+            marks: [
+              { type: "strike" },
+              { type: "link", attrs: { href: "https://kmla.online" } },
+            ],
+          },
+        ),
+      ),
+    );
+    const [plain, linked] = container.querySelectorAll("s");
+    tap(plain!, "mouse");
+    expect(plain).not.toHaveAttribute("data-revealed");
+    tap(plain!, "touch");
+    expect(plain).toHaveAttribute("data-revealed");
+    tap(plain!, "touch");
+    expect(plain).not.toHaveAttribute("data-revealed");
+    tap(linked!, "touch");
+    expect(linked).not.toHaveAttribute("data-revealed");
+  });
+
+  it("plays YouTube videos from the no-cookie address with their layout", () => {
+    const { container } = show(
+      doc(
+        {
+          type: "youtube",
+          attrs: {
+            videoId: "dQw4w9WgXcQ",
+            start: 90,
+            size: "small",
+            align: "center",
+          },
+        },
+        { type: "youtube", attrs: { videoId: 'x" onload="alert(1)' } },
+      ),
+    );
+    const frames = container.querySelectorAll("iframe");
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toHaveAttribute(
+      "src",
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=90",
+    );
+    const figure = container.querySelector("figure[data-youtube]");
+    expect(figure).toHaveAttribute("data-size", "small");
+    expect(figure).toHaveAttribute("data-align", "center");
+  });
+
+  it("gives images their chosen layout", () => {
+    const { container } = show(
+      doc({
+        type: "image",
+        attrs: {
+          id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a",
+          alt: "지도",
+          size: "full",
+          align: "right",
+        },
+      }),
+    );
+    const figure = container.querySelector("figure[data-wiki-image]");
+    expect(figure).toHaveAttribute("data-size", "full");
+    expect(figure).toHaveAttribute("data-align", "right");
+  });
+
+  it("shows a caption under images and videos only when there is one", () => {
+    const { container } = show(
+      doc(
+        {
+          type: "image",
+          attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a", caption: "" },
+        },
+        {
+          type: "youtube",
+          attrs: { videoId: "dQw4w9WgXcQ", caption: "학교 소개" },
+        },
+      ),
+    );
+    const captions = container.querySelectorAll("figcaption");
+    expect(captions).toHaveLength(1);
+    expect(captions[0]).toHaveTextContent("학교 소개");
+    expect(
+      container.querySelector("figure[data-youtube] figcaption"),
+    ).not.toBeNull();
   });
 });

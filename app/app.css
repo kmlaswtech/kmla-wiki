@@ -333,6 +333,24 @@
   .wiki-content blockquote > :last-child {
     @apply mb-0;
   }
+  /* 취소선은 흐리게 그린다(나무위키와 같다). 링크 안에서도 링크 색을 살리려고 색 대신 불투명도를
+   * 낮춘다. */
+  .wiki-content s {
+    @apply opacity-60;
+  }
+  /* 문서 보기에서는 마우스를 올리면 선을 걷어 지운 글자를 읽게 한다. 손가락으로 쓰는 화면은
+   * 누를 때마다 `data-revealed`가 바뀐다(`useRevealStrikeOnTap`). 손가락으로 누른 취소선은
+   * (`data-touched`) 터치 노트북에서 남는 `:hover`를 따르지 않는다. 편집기(그 안의 틀 미리보기도)에서는
+   * 쓰는 글자라 걷지 않는다. */
+  @media (hover: hover) {
+    .wiki-content:not(.wiki-editor, .wiki-editor *)
+      s:not([data-touched]):hover {
+      @apply no-underline;
+    }
+  }
+  .wiki-content:not(.wiki-editor, .wiki-editor *) s[data-revealed] {
+    @apply no-underline;
+  }
   .wiki-content code {
     @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.9em];
   }
@@ -393,8 +411,64 @@
   .wiki-content li > p {
     @apply my-1;
   }
-  .wiki-content figure.wiki-image {
+  /* 이미지·영상 상자(`model/media.ts`). 상자는 본문 폭이고, 안의 그림이 고른 크기만큼 차지한다.
+   * 어느 크기든 본문 폭을 넘지 않는다. 크기를 고르지 않은 이미지는 원본 크기다. */
+  .wiki-content .wiki-media {
+    @apply flex flex-col items-start;
+  }
+  /* 여백은 문서 보기의 상자에만 준다. 편집기에서는 바깥 노드 상자(`wiki-image-edit`)가 준다. */
+  .wiki-content figure.wiki-media {
     @apply my-3;
+  }
+  .wiki-content .wiki-media[data-align="center"] {
+    @apply items-center;
+  }
+  .wiki-content .wiki-media[data-align="right"] {
+    @apply items-end;
+  }
+  /* 그림과 캡션을 함께 담는 칸. 폭은 그림 폭이다(`min-content`: 고정 폭인 이미지가 정하고, 캡션은
+   * 그 안에서 줄을 바꾼다). 크기 고르기는 이 칸의 최대 폭으로 준다. */
+  .wiki-content .wiki-media-item {
+    @apply flex w-min max-w-full flex-col;
+  }
+  /* 올린 이미지. 원본 폭(`--image-width`, `WikiImage`)이 기본이고 칸보다 넓어지지 않는다. */
+  .wiki-content .wiki-image-frame {
+    @apply block max-w-full overflow-hidden rounded-md bg-muted;
+    width: var(--image-width);
+  }
+  .wiki-content .wiki-media[data-size="small"] > .wiki-media-item {
+    @apply max-w-[min(100%,20rem)];
+  }
+  .wiki-content .wiki-media[data-size="medium"] > .wiki-media-item {
+    @apply max-w-[min(100%,30rem)];
+  }
+  .wiki-content .wiki-media[data-size="large"] > .wiki-media-item {
+    @apply max-w-[min(100%,45rem)];
+  }
+  /* 영상에는 원본 폭이 없으므로 고른 크기(최대 폭)만큼 채운다. 이미지는 원본 폭(`--image-width`)을
+   * 넘어 키우지 않고, 본문 폭만 늘린다. */
+  .wiki-content .wiki-media[data-youtube] > .wiki-media-item,
+  .wiki-content .wiki-media[data-size="full"] > .wiki-media-item {
+    @apply w-full;
+  }
+  .wiki-content .wiki-media[data-size="full"] .wiki-image-frame {
+    @apply w-full;
+  }
+  /* 캡션. 비어 있으면 그리지 않는다. 그림 바로 아래에 붙은 띠로 그려 그림의 일부로 읽히게 한다.
+   * 띠가 붙는 그림은 아래 모서리를 둥글리지 않는다. */
+  .wiki-content .wiki-media-caption {
+    @apply rounded-b-md bg-muted px-3 py-1.5 text-center text-sm leading-5 text-foreground/80;
+  }
+  .wiki-content
+    .wiki-media-item:has(> .wiki-media-caption)
+    > :is(.wiki-image-frame, .wiki-youtube) {
+    @apply rounded-b-none;
+  }
+  .wiki-content .wiki-youtube {
+    @apply block aspect-video w-full overflow-hidden rounded-md bg-muted;
+  }
+  .wiki-content .wiki-youtube iframe {
+    @apply size-full border-0;
   }
   /* 없는 문서로 가는 링크(편집기에서는 링크 안의 글자에 표시가 붙는다). */
   .wiki-content .wiki-link-missing {

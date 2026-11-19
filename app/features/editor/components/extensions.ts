@@ -10,9 +10,16 @@ import {
   schemaExtensions,
   Template,
   WikiImage,
+  Youtube,
 } from "../model/schema";
 import type { EditorRequest } from "./editor-ui";
-import { FoldView, FootnoteView, ImageView, TemplateView } from "./node-views";
+import {
+  FoldView,
+  FootnoteView,
+  ImageView,
+  TemplateView,
+  YoutubeView,
+} from "./node-views";
 import { MARK, parseTitle, titleKey } from "~/features/markup";
 
 export interface WikiEditorOptions {
@@ -138,6 +145,10 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
     [
       WikiImage.name,
       WikiImage.extend({ addNodeView: () => ReactNodeViewRenderer(ImageView) }),
+    ],
+    [
+      Youtube.name,
+      Youtube.extend({ addNodeView: () => ReactNodeViewRenderer(YoutubeView) }),
     ],
     [
       Footnote.name,

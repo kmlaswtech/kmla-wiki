@@ -372,6 +372,18 @@ export type Database = {
         }[]
       }
       page_backlinks: { Args: { p_title_key: string }; Returns: Json }
+      page_sizes: {
+        Args: {
+          p_limit?: number
+          p_longest?: boolean
+          p_namespace?: string
+          p_offset?: number
+        }
+        Returns: {
+          byte_size: number
+          title: string
+        }[]
+      }
       random_page: { Args: Record<PropertyKey, never>; Returns: string }
       record_member_verification: {
         Args: {

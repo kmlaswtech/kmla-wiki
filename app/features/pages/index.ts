@@ -17,6 +17,7 @@ export {
   getTitleInfo,
   HISTORY_PAGE_SIZE,
   listAllPages,
+  listPagesBySize,
   listHeadings,
   listHistory,
   listOrphanPages,

@@ -1,5 +1,5 @@
 import { ImageOff } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { loadImageUrl } from "../data/files";
 import type { ImageInfo } from "../data/queries";
@@ -73,11 +73,15 @@ export function WikiImage({ info, alt }: WikiImageProps) {
   return (
     <span
       ref={frame}
-      className="block max-w-full overflow-hidden rounded-md bg-muted"
-      style={{
-        width: info.width,
-        aspectRatio: `${info.width} / ${info.height}`,
-      }}
+      // 폭·모서리는 본문의 크기 고르기·캡션(`.wiki-image-frame`, app.css)이 정한다. 원본 폭은 변수로만
+      // 넘긴다. 폭을 인라인 스타일이나 유틸리티 클래스로 주면 그 규칙들이 이기지 못한다.
+      className="wiki-image-frame"
+      style={
+        {
+          "--image-width": `${info.width}px`,
+          aspectRatio: `${info.width} / ${info.height}`,
+        } as CSSProperties
+      }
     >
       {url ? (
         <img

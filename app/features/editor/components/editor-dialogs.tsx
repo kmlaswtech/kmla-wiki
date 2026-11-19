@@ -8,8 +8,10 @@ import {
   baseName,
   MARK,
   NODE,
+  parseYoutubeUrl,
   SAFE_HREF,
   templateTitle,
+  youtubeWatchUrl,
 } from "~/features/markup";
 import { resolveRedirect } from "~/features/pages";
 import { Button } from "~/shared/ui/button";
@@ -67,6 +69,8 @@ export function EditorDialogs({
           <FootnoteForm editor={editor} pos={shown.pos} onDone={close} />
         ) : shown?.kind === "table" ? (
           <TableForm editor={editor} onDone={close} />
+        ) : shown?.kind === "youtube" ? (
+          <YoutubeForm editor={editor} pos={shown.pos} onDone={close} />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -463,6 +467,86 @@ function FootnoteForm({
             }
           }}
         />
+      </div>
+    </DialogForm>
+  );
+}
+
+/**
+ * 유튜브 영상 넣기·고치기. 주소의 시작 시각(`t=90`)도 읽는다. 크기와 정렬은 넣은 뒤 영상 아래에서
+ * 고른다.
+ */
+function YoutubeForm({
+  editor,
+  pos,
+  onDone,
+}: {
+  editor: Editor;
+  pos?: number;
+  onDone: () => void;
+}) {
+  const current = nodeTargetAt(editor, pos, NODE.youtube);
+  const [address, setAddress] = useState(
+    current
+      ? youtubeWatchUrl({
+          videoId: String(current.node.attrs.videoId ?? ""),
+          start: Number(current.node.attrs.start ?? 0),
+        })
+      : "",
+  );
+  const video = parseYoutubeUrl(address);
+  const invalid = address.trim() !== "" && video === null;
+
+  const submit = () => {
+    if (!video) return;
+    // 고칠 때는 고른 크기·정렬을 그대로 둔다.
+    upsertNode(editor, current, NODE.youtube, {
+      ...current?.node.attrs,
+      videoId: video.videoId,
+      start: video.start,
+    });
+    onDone();
+  };
+
+  return (
+    <DialogForm
+      title={current ? "유튜브 영상 고치기" : "유튜브 영상 넣기"}
+      description="유튜브 영상 주소를 붙여넣습니다. 주소에 시작 시각(예: ?t=90)이 있으면 그때부터 재생합니다."
+      onSubmit={submit}
+      footer={
+        <>
+          {current ? (
+            <RemoveNodeButton editor={editor} target={current} onDone={onDone}>
+              영상 빼기
+            </RemoveNodeButton>
+          ) : null}
+          <Button type="submit" disabled={video === null}>
+            {current ? "고치기" : "넣기"}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-1.5">
+        <Label htmlFor="youtube-address">영상 주소</Label>
+        <Input
+          id="youtube-address"
+          // `type="url"`이면 `https://`를 뺀 주소(`youtu.be/…`)를 브라우저가 막는다. 주소는
+          // `parseYoutubeUrl`이 검사한다.
+          type="text"
+          inputMode="url"
+          value={address}
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- 대화상자를 열자마자 붙여넣을 수 있게 한다.
+          autoFocus
+          placeholder="예: https://youtu.be/…"
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? "youtube-address-error" : undefined}
+          onChange={(event) => setAddress(event.target.value)}
+        />
+        {invalid ? (
+          <p id="youtube-address-error" className="text-sm text-destructive">
+            유튜브 영상 주소가 아닙니다.
+          </p>
+        ) : null}
       </div>
     </DialogForm>
   );

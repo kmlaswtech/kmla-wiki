@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { Link, replace, useRevalidator } from "react-router";
 
+import type { WikiShellHandle } from "./gate";
 import type { Route } from "./+types/page";
 import { LinkButton } from "~/shared/components/link-button";
 import { positiveInt, titleFromParams } from "./title-param";
@@ -16,6 +17,8 @@ import {
   redirectsHere,
   type MissingPage,
 } from "~/features/pages";
+
+export const handle: WikiShellHandle = { reading: true };
 
 export async function clientLoader({
   request,
