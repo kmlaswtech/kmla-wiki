@@ -282,11 +282,11 @@ export type Database = {
     Functions: {
       admin_count: { Args: Record<PropertyKey, never>; Returns: number }
       ban_editor: {
-        Args: { p_ends_at: string; p_reason: string; p_revision_id: number }
+        Args: { p_length: string; p_reason: string; p_revision_id: number }
         Returns: number
       }
       change_ban_end: {
-        Args: { p_ban_log_id: number; p_ends_at: string; p_reason: string }
+        Args: { p_ban_log_id: number; p_length: string; p_reason: string }
         Returns: undefined
       }
       delete_page: {

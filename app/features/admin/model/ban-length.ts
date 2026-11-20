@@ -1,6 +1,6 @@
 /**
- * 차단 기간. 관리자는 길이(3일, 2주)로 고르고, 서버에는 끝나는 시각을 보낸다. 범위(5분 뒤 ~ 10년
- * 안)는 서버(`private.check_ban_end`)가 다시 검사한다.
+ * 차단 기간. 관리자는 길이(3일, 2주)로 고르고, 서버에는 Postgres interval 글(`3 day`)로 보낸다.
+ * 끝나는 시각과 범위(1시간 ~ 10년)는 서버(`private.ban_end`)가 서버 시계로 정한다.
  */
 
 export type BanUnit = "hour" | "day" | "week" | "month";
@@ -40,55 +40,20 @@ export const DEFAULT_BAN_INPUT: BanLengthInput = {
   unit: "day",
 };
 
-/** 단위마다 넣을 수 있는 가장 큰 수. 10년보다 조금 짧게 잡는다. */
-const MAX_AMOUNT: Record<BanUnit, number> = {
-  hour: 24 * 365 * 10 - 1,
-  day: 365 * 10 - 3,
-  week: 52 * 10 - 1,
-  month: 12 * 10 - 1,
-};
-
-/** 입력을 길이로. 올바르지 않으면 `undefined`. */
+/** 입력을 길이로. 올바르지 않으면 `undefined`. 10년 상한은 서버가 본다. */
 export function parseBanLength(input: BanLengthInput): BanLength | undefined {
   if (input.preset !== CUSTOM_PRESET) {
     const preset = BAN_PRESETS.find((option) => option.key === input.preset);
     return preset ? preset.length : undefined;
   }
-  if (!/^\d+$/.test(input.amount.trim())) return undefined;
+  if (!/^\d{1,6}$/.test(input.amount.trim())) return undefined;
   const amount = Number(input.amount);
-  if (amount < 1 || amount > MAX_AMOUNT[input.unit]) return undefined;
-  return { amount, unit: input.unit };
+  return amount < 1 ? undefined : { amount, unit: input.unit };
 }
 
-/** 끝나는 시각(ISO). 기한 없음은 `null`. */
-export function banEndsAt(length: BanLength, now: number): string | null {
-  if (length === null) return null;
-  const end = new Date(now);
-  switch (length.unit) {
-    case "hour":
-      end.setTime(now + length.amount * 3_600_000);
-      break;
-    case "day":
-      end.setDate(end.getDate() + length.amount);
-      break;
-    case "week":
-      end.setDate(end.getDate() + length.amount * 7);
-      break;
-    case "month": {
-      // 1월 31일 + 1개월은 3월 초가 아니라 2월의 마지막 날이다.
-      const day = end.getDate();
-      end.setDate(1);
-      end.setMonth(end.getMonth() + length.amount);
-      const lastDay = new Date(
-        end.getFullYear(),
-        end.getMonth() + 1,
-        0,
-      ).getDate();
-      end.setDate(Math.min(day, lastDay));
-      break;
-    }
-  }
-  return end.toISOString();
+/** 서버에 보낼 Postgres interval 글. 기한 없음은 `null`. */
+export function banInterval(length: BanLength): string | null {
+  return length === null ? null : `${length.amount} ${length.unit}`;
 }
 
 export function describeBanLength(length: BanLength): string {

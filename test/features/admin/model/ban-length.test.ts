@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  banEndsAt,
+  banInterval,
   CUSTOM_PRESET,
   describeBanLength,
   parseBanLength,
@@ -24,18 +24,12 @@ describe("parseBanLength", () => {
     ).toEqual({ amount: 2, unit: "week" });
   });
 
-  it("rejects empty, zero, fractional and too long custom values", () => {
-    for (const amount of ["", "0", "1.5", "-3", "abc"]) {
+  it("rejects empty, zero, fractional and absurd custom values", () => {
+    for (const amount of ["", "0", "1.5", "-3", "abc", "1234567"]) {
       expect(
         parseBanLength({ preset: CUSTOM_PRESET, amount, unit: "day" }),
       ).toBeUndefined();
     }
-    expect(
-      parseBanLength({ preset: CUSTOM_PRESET, amount: "120", unit: "month" }),
-    ).toBeUndefined();
-    expect(
-      parseBanLength({ preset: CUSTOM_PRESET, amount: "119", unit: "month" }),
-    ).toEqual({ amount: 119, unit: "month" });
   });
 
   it("rejects an unknown preset", () => {
@@ -45,32 +39,11 @@ describe("parseBanLength", () => {
   });
 });
 
-describe("banEndsAt", () => {
-  const now = Date.UTC(2026, 0, 31, 3, 0);
-
-  it("returns null for an indefinite ban", () => {
-    expect(banEndsAt(null, now)).toBeNull();
-  });
-
-  it("adds hours, days and weeks", () => {
-    expect(banEndsAt({ amount: 5, unit: "hour" }, now)).toBe(
-      "2026-01-31T08:00:00.000Z",
-    );
-    expect(banEndsAt({ amount: 1, unit: "day" }, now)).toBe(
-      "2026-02-01T03:00:00.000Z",
-    );
-    expect(banEndsAt({ amount: 2, unit: "week" }, now)).toBe(
-      "2026-02-14T03:00:00.000Z",
-    );
-  });
-
-  it("adds calendar months, clamped to the end of a short month", () => {
-    expect(banEndsAt({ amount: 1, unit: "month" }, now)?.slice(0, 10)).toBe(
-      "2026-02-28",
-    );
-    expect(banEndsAt({ amount: 3, unit: "month" }, now)?.slice(0, 10)).toBe(
-      "2026-04-30",
-    );
+describe("banInterval", () => {
+  it("writes a Postgres interval, or null for an indefinite ban", () => {
+    expect(banInterval({ amount: 3, unit: "day" })).toBe("3 day");
+    expect(banInterval({ amount: 2, unit: "month" })).toBe("2 month");
+    expect(banInterval(null)).toBeNull();
   });
 });
 

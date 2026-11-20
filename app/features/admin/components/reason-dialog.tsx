@@ -52,13 +52,21 @@ export function ReasonDialog({
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 열 때마다 빈 사유로 시작한다. 취소한 뒤 다른 대상에 열어도 앞의 사유가 남지 않는다.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setReason("");
+      setError(null);
+    }
+  }
 
   async function submit() {
     setPending(true);
     setError(null);
     try {
       await onConfirm(reason);
-      setReason("");
       onOpenChange(false);
       onDone();
     } catch (caught) {

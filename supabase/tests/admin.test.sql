@@ -14,7 +14,7 @@ select logout();
 
 -- ── 일반 사용자는 관리 기능을 쓸 수 없다 ─────────────────────────────────────
 select login(:alice);
-select throws_ok(format($$select public.ban_editor(%s, now() + interval '7 days', '도배')$$, :b1), '42501', null,
+select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '도배')$$, :b1), '42501', null,
   'a member cannot ban');
 select throws_ok(format($$select public.open_author_lookup(%s, '확인')$$, :b1), '42501', null,
   'a member cannot open a lookup of another author''s edits');
@@ -73,6 +73,9 @@ select is(
 select throws_ok(
   format($$select * from public.list_author_edits(%L)$$, gen_random_uuid()), 'WK016', null,
   'an unknown lookup cannot be read');
+select throws_ok(
+  $$select * from public.get_author_lookup('not-a-uuid')$$, 'WK016', null,
+  'a malformed lookup id reads as an expired lookup');
 select logout();
 update private.author_lookups set expires_at = now() + interval '1 minute' where id = :'lookup1';
 select login(:admin);
@@ -106,10 +109,10 @@ update private.members set is_admin = false, admin_handle = null where auth_user
 select login(:admin);
 
 -- ── 차단 ─────────────────────────────────────────────────────────────────────
-select throws_ok(format($$select public.ban_editor(%s, now() + interval '7 days', '')$$, :b1), 'WK014', null,
+select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '')$$, :b1), 'WK014', null,
   'a ban requires a reason');
-select ban_editor as ban1 from public.ban_editor(:b1, now() + interval '7 days', '여러 문서 훼손') \gset
-select throws_ok(format($$select public.ban_editor(%s, now() + interval '7 days', '또 차단')$$, :b2), 'WK011', null,
+select ban_editor as ban1 from public.ban_editor(:b1, interval '7 days', '여러 문서 훼손') \gset
+select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '또 차단')$$, :b2), 'WK011', null,
   'an already banned author cannot be banned again');
 select results_eq(
   format($$select pseudonym, page_title, reason, lifted_at is null from public.ban_log where id = %s$$, :ban1),
@@ -118,13 +121,13 @@ select results_eq(
   'the public ban log shows only the pseudonym on the source page'
 );
 select throws_ok(
-  format($$select public.change_ban_end(%s, now() + interval '1 minute', '짧게')$$, :ban1), '22023', null,
-  'a ban cannot end within minutes');
+  format($$select public.change_ban_end(%s, interval '30 minutes', '짧게')$$, :ban1), 'WK017', null,
+  'a ban is at least an hour');
 select throws_ok(
-  format($$select public.change_ban_end(%s, now() + interval '11 years', '길게')$$, :ban1), '22023', null,
+  format($$select public.change_ban_end(%s, interval '11 years', '길게')$$, :ban1), 'WK017', null,
   'a ban cannot end more than ten years ahead');
 select lives_ok(
-  format($$select public.change_ban_end(%s, now() + interval '3 hours', '줄임')$$, :ban1),
+  format($$select public.change_ban_end(%s, interval '3 hours', '줄임')$$, :ban1),
   'an admin shortens an active ban');
 select logout();
 select ok(
@@ -223,7 +226,7 @@ select results_eq(
   $$values (null::text, null::text)$$,
   'the grant is public but does not reveal which pseudonym became an admin'
 );
-select throws_ok(format($$select public.ban_editor(%s, now() + interval '7 days', '관리자 차단')$$, :a1), 'WK010', null,
+select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '관리자 차단')$$, :a1), 'WK010', null,
   'an admin cannot be banned');
 select logout();
 

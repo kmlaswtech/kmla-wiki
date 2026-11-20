@@ -2,7 +2,11 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { openAuthorLookup } from "../data/mutations";
-import { listAuthorEdits, type AuthorEdit } from "../data/queries";
+import {
+  AUTHOR_EDITS_PAGE_SIZE,
+  listAuthorEdits,
+  type AuthorEdit,
+} from "../data/queries";
 import { describeAdminError } from "../model/log";
 import { RevisionAdminMenu } from "./revision-admin-menu";
 import { pageHref } from "~/features/markup";
@@ -13,8 +17,6 @@ import { Button } from "~/shared/ui/button";
 import { Label } from "~/shared/ui/label";
 import { Spinner } from "~/shared/ui/spinner";
 import { Textarea } from "~/shared/ui/textarea";
-
-const PAGE_SIZE = 50;
 
 /** 열린 조회 허가와 첫 쪽. */
 export interface AuthorLookupView {
@@ -116,22 +118,19 @@ export function AuthorEditsResult({
   /** 관리 조치가 끝났다. 첫 쪽을 다시 읽는다. */
   onChanged: () => void;
 }) {
-  // 첫 쪽은 loader가 읽고, 더 보기로 읽은 쪽은 여기에 붙인다. loader가 다시 읽으면(조치 뒤) 붙인
-  // 쪽을 버린다.
-  const [first, setFirst] = useState(lookup.edits);
-  const [more, setMore] = useState<AuthorEdit[]>([]);
-  const [lastPageFull, setLastPageFull] = useState(
-    lookup.edits.length === PAGE_SIZE,
-  );
-  if (first !== lookup.edits) {
-    setFirst(lookup.edits);
-    setMore([]);
-    setLastPageFull(lookup.edits.length === PAGE_SIZE);
-  }
+  // 첫 쪽은 loader가 읽고, 더 보기로 읽은 쪽은 그 첫 쪽에 묶어 둔다. loader가 다시 읽으면(조치 뒤)
+  // 묶음이 맞지 않으므로 붙인 쪽은 버려진다.
+  const [loaded, setLoaded] = useState({
+    base: lookup.edits,
+    pages: [] as AuthorEdit[][],
+  });
+  const pages = loaded.base === lookup.edits ? loaded.pages : [];
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const edits = [...lookup.edits, ...more];
+  const edits = [lookup.edits, ...pages].flat();
+  const lastPageFull =
+    (pages.at(-1) ?? lookup.edits).length === AUTHOR_EDITS_PAGE_SIZE;
   const source = edits.find((edit) => edit.id === lookup.sourceRevisionId);
 
   async function loadMore() {
@@ -139,8 +138,7 @@ export function AuthorEditsResult({
     setError(null);
     try {
       const next = await listAuthorEdits(lookup.id, edits.at(-1)?.id);
-      setMore((current) => [...current, ...next]);
-      setLastPageFull(next.length === PAGE_SIZE);
+      setLoaded({ base: lookup.edits, pages: [...pages, next] });
     } catch (caught) {
       setError(describeAdminError(caught));
     } finally {

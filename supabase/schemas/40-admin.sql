@@ -120,24 +120,28 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."revision_target"(bigint) FROM PUBLIC;
 
--- 차단이 끝나는 시각. NULL은 기한 없음이다. 너무 짧은 값은 시계 차이로 이미 지났을 수 있어 막는다.
-CREATE OR REPLACE FUNCTION private.check_ban_end (
-  p_ends_at timestamptz
+-- 차단 길이에서 끝나는 시각을 낸다. NULL은 기한 없음이다. 서버 시계로 세고, 개월은 Postgres가 그
+-- 달의 마지막 날로 맞춘다(1월 31일 + 1개월 = 2월 28일).
+CREATE OR REPLACE FUNCTION private.ban_end (
+  p_length interval
 )
-  RETURNS void
+  RETURNS timestamp with time zone
   LANGUAGE plpgsql
   STABLE
   SET search_path TO ''
   AS $function$
 begin
-  if p_ends_at is not null
-     and (p_ends_at < now() + interval '5 minutes' or p_ends_at > now() + interval '10 years') then
-    raise exception 'invalid duration' using errcode = '22023';
+  if p_length is null then
+    return null;
   end if;
+  if p_length < interval '1 hour' or now() + p_length > now() + interval '10 years' then
+    raise exception 'invalid ban length' using errcode = 'WK017';
+  end if;
+  return now() + p_length;
 end;
 $function$;
 
-REVOKE ALL ON FUNCTION "private"."check_ban_end"(timestamp with time zone) FROM PUBLIC;
+REVOKE ALL ON FUNCTION "private"."ban_end"(interval) FROM PUBLIC;
 
 -- 공개 기록의 덧붙임. 학교 시간(KST)으로 적는다.
 CREATE OR REPLACE FUNCTION private.ban_end_note (
@@ -155,33 +159,6 @@ CREATE OR REPLACE FUNCTION private.ban_end_note (
 $function$;
 
 REVOKE ALL ON FUNCTION "private"."ban_end_note"(timestamp with time zone) FROM PUBLIC;
-
--- 관리자 본인이 연, 아직 유효한 조회 허가의 대상. 없거나 끝났으면 WK016.
-CREATE OR REPLACE FUNCTION private.author_lookup_target (
-  p_lookup_id uuid
-)
-  RETURNS bigint
-  LANGUAGE plpgsql
-  STABLE
-  SECURITY DEFINER
-  SET search_path TO ''
-  AS $function$
-declare
-  v_target_id bigint;
-begin
-  select lookup.target_member_id into v_target_id
-  from private.author_lookups as lookup
-  where lookup.id = p_lookup_id
-    and lookup.admin_member_id = private.current_member_id()
-    and lookup.expires_at > now();
-  if v_target_id is null then
-    raise exception 'lookup expired' using errcode = 'WK016';
-  end if;
-  return v_target_id;
-end;
-$function$;
-
-REVOKE ALL ON FUNCTION "private"."author_lookup_target"(uuid) FROM PUBLIC;
 
 -- 일반 사용자에게는 "관리자 N명"만 보인다.
 CREATE OR REPLACE FUNCTION public.admin_count()
@@ -206,10 +183,10 @@ GRANT EXECUTE ON FUNCTION "public"."admin_count"() TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."admin_count"() FROM PUBLIC, "anon";
 
--- `p_ends_at`이 NULL이면 기한 없음. 기간 계산(시간, 일, 개월)은 화면이 하고, 서버는 범위만 본다.
+-- `p_length`가 NULL이면 기한 없음.
 CREATE OR REPLACE FUNCTION public.ban_editor (
   p_revision_id bigint,
-  p_ends_at     timestamp with time zone,
+  p_length      interval,
   p_reason      text
 )
   RETURNS bigint
@@ -220,10 +197,10 @@ CREATE OR REPLACE FUNCTION public.ban_editor (
 declare
   v_admin_id bigint := private.require_admin();
   v_reason text := private.require_reason(p_reason);
+  v_ends_at timestamptz := private.ban_end(p_length);
   v_target record;
   v_ban_log_id bigint;
 begin
-  perform private.check_ban_end(p_ends_at);
 
   select * into v_target from private.revision_target(p_revision_id);
   if v_target.member_id is null then
@@ -237,34 +214,35 @@ begin
   end if;
 
   insert into public.ban_log (pseudonym, page_title, revision_id, ends_at, reason)
-  values (v_target.pseudonym, v_target.page_title, p_revision_id, p_ends_at, v_reason)
+  values (v_target.pseudonym, v_target.page_title, p_revision_id, v_ends_at, v_reason)
   returning id into v_ban_log_id;
 
   insert into private.bans (member_id, ends_at, reason, created_by_member_id, ban_log_id)
-  values (v_target.member_id, p_ends_at, v_reason, v_admin_id, v_ban_log_id);
+  values (v_target.member_id, v_ends_at, v_reason, v_admin_id, v_ban_log_id);
 
   perform private.log_admin_action(
     'ban', v_reason, v_target.page_title, p_revision_id, v_target.pseudonym,
-    private.ban_end_note(p_ends_at)
+    private.ban_end_note(v_ends_at)
   );
   return v_ban_log_id;
 end;
 $function$;
 
-GRANT EXECUTE ON FUNCTION "public"."ban_editor"(bigint, timestamp with time zone, text) TO "authenticated";
+GRANT EXECUTE ON FUNCTION "public"."ban_editor"(bigint, interval, text) TO "authenticated";
 
-GRANT EXECUTE ON FUNCTION "public"."ban_editor"(bigint, timestamp with time zone, text) TO "service_role";
+GRANT EXECUTE ON FUNCTION "public"."ban_editor"(bigint, interval, text) TO "service_role";
 
-REVOKE ALL ON FUNCTION "public"."ban_editor"(bigint, timestamp with time zone, text) FROM "postgres";
+REVOKE ALL ON FUNCTION "public"."ban_editor"(bigint, interval, text) FROM "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."ban_editor"(bigint, timestamp with time zone, text) TO "postgres";
+GRANT EXECUTE ON FUNCTION "public"."ban_editor"(bigint, interval, text) TO "postgres";
 
-REVOKE ALL ON FUNCTION "public"."ban_editor"(bigint, timestamp with time zone, text) FROM PUBLIC, "anon";
+REVOKE ALL ON FUNCTION "public"."ban_editor"(bigint, interval, text) FROM PUBLIC, "anon";
 
--- 진행 중인 차단의 끝나는 시각을 바꾼다(연장, 단축, 기한 없음으로). 해제했다 다시 차단하지 않아도 된다.
+-- 진행 중인 차단의 기간을 지금부터 다시 정한다(연장, 단축, 기한 없음으로). 해제했다 다시 차단하지
+-- 않아도 된다.
 CREATE OR REPLACE FUNCTION public.change_ban_end (
   p_ban_log_id bigint,
-  p_ends_at    timestamp with time zone,
+  p_length     interval,
   p_reason     text
 )
   RETURNS void
@@ -274,42 +252,36 @@ CREATE OR REPLACE FUNCTION public.change_ban_end (
   AS $function$
 declare
   v_reason text;
+  v_ends_at timestamptz;
   v_log public.ban_log;
 begin
   perform private.require_admin();
   v_reason := private.require_reason(p_reason);
-  perform private.check_ban_end(p_ends_at);
-
-  select * into v_log from public.ban_log where id = p_ban_log_id for update;
-  if v_log.id is null then
-    raise exception 'ban not found' using errcode = 'WK006';
-  end if;
-  if v_log.lifted_at is not null or (v_log.ends_at is not null and v_log.ends_at <= now()) then
-    raise exception 'ban is not active' using errcode = 'WK011';
-  end if;
-  if v_log.ends_at is not distinct from p_ends_at then
-    raise exception 'already at that end' using errcode = 'WK011';
+  v_ends_at := private.ban_end(p_length);
+  v_log := private.lock_active_ban(p_ban_log_id);
+  if v_log.ends_at is null and v_ends_at is null then
+    raise exception 'already without end' using errcode = 'WK011';
   end if;
 
-  update public.ban_log set ends_at = p_ends_at where id = p_ban_log_id;
-  update private.bans set ends_at = p_ends_at where ban_log_id = p_ban_log_id;
+  update public.ban_log set ends_at = v_ends_at where id = p_ban_log_id;
+  update private.bans set ends_at = v_ends_at where ban_log_id = p_ban_log_id;
 
   perform private.log_admin_action(
     'change_ban', v_reason, v_log.page_title, v_log.revision_id, v_log.pseudonym,
-    private.ban_end_note(p_ends_at)
+    private.ban_end_note(v_ends_at)
   );
 end;
 $function$;
 
-GRANT EXECUTE ON FUNCTION "public"."change_ban_end"(bigint, timestamp with time zone, text) TO "authenticated";
+GRANT EXECUTE ON FUNCTION "public"."change_ban_end"(bigint, interval, text) TO "authenticated";
 
-GRANT EXECUTE ON FUNCTION "public"."change_ban_end"(bigint, timestamp with time zone, text) TO "service_role";
+GRANT EXECUTE ON FUNCTION "public"."change_ban_end"(bigint, interval, text) TO "service_role";
 
-REVOKE ALL ON FUNCTION "public"."change_ban_end"(bigint, timestamp with time zone, text) FROM "postgres";
+REVOKE ALL ON FUNCTION "public"."change_ban_end"(bigint, interval, text) FROM "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."change_ban_end"(bigint, timestamp with time zone, text) TO "postgres";
+GRANT EXECUTE ON FUNCTION "public"."change_ban_end"(bigint, interval, text) TO "postgres";
 
-REVOKE ALL ON FUNCTION "public"."change_ban_end"(bigint, timestamp with time zone, text) FROM PUBLIC, "anon";
+REVOKE ALL ON FUNCTION "public"."change_ban_end"(bigint, interval, text) FROM PUBLIC, "anon";
 
 CREATE OR REPLACE FUNCTION public.delete_page (
   p_page_id bigint,
@@ -409,16 +381,8 @@ CREATE OR REPLACE FUNCTION public.lift_ban (
 declare
   v_admin_id bigint := private.require_admin();
   v_reason text := private.require_reason(p_reason);
-  v_log public.ban_log;
+  v_log public.ban_log := private.lock_active_ban(p_ban_log_id);
 begin
-  select * into v_log from public.ban_log where id = p_ban_log_id for update;
-  if v_log.id is null then
-    raise exception 'ban not found' using errcode = 'WK006';
-  end if;
-  if v_log.lifted_at is not null or (v_log.ends_at is not null and v_log.ends_at <= now()) then
-    raise exception 'ban is not active' using errcode = 'WK011';
-  end if;
-
   update public.ban_log set lifted_at = now() where id = p_ban_log_id;
   update private.bans
      set lifted_at = now(), lifted_by_member_id = v_admin_id
@@ -529,7 +493,7 @@ REVOKE ALL ON FUNCTION "public"."open_author_lookup"(bigint, text) FROM PUBLIC, 
 
 -- 허가의 근거 판과 끝나는 시각.
 CREATE OR REPLACE FUNCTION public.get_author_lookup (
-  p_lookup_id uuid
+  p_lookup_id text
 )
   RETURNS TABLE (
     source_revision_id bigint,
@@ -540,29 +504,30 @@ CREATE OR REPLACE FUNCTION public.get_author_lookup (
   SECURITY DEFINER
   SET search_path TO ''
   AS $function$
+declare
+  v_lookup private.author_lookups;
 begin
   perform private.require_admin();
-  perform private.author_lookup_target(p_lookup_id);
-  return query
-  select lookup.source_revision_id, lookup.expires_at
-  from private.author_lookups as lookup
-  where lookup.id = p_lookup_id;
+  v_lookup := private.author_lookup(p_lookup_id);
+  source_revision_id := v_lookup.source_revision_id;
+  expires_at := v_lookup.expires_at;
+  return next;
 end;
 $function$;
 
-GRANT EXECUTE ON FUNCTION "public"."get_author_lookup"(uuid) TO "authenticated";
+GRANT EXECUTE ON FUNCTION "public"."get_author_lookup"(text) TO "authenticated";
 
-GRANT EXECUTE ON FUNCTION "public"."get_author_lookup"(uuid) TO "service_role";
+GRANT EXECUTE ON FUNCTION "public"."get_author_lookup"(text) TO "service_role";
 
-REVOKE ALL ON FUNCTION "public"."get_author_lookup"(uuid) FROM "postgres";
+REVOKE ALL ON FUNCTION "public"."get_author_lookup"(text) FROM "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."get_author_lookup"(uuid) TO "postgres";
+GRANT EXECUTE ON FUNCTION "public"."get_author_lookup"(text) TO "postgres";
 
-REVOKE ALL ON FUNCTION "public"."get_author_lookup"(uuid) FROM PUBLIC, "anon";
+REVOKE ALL ON FUNCTION "public"."get_author_lookup"(text) FROM PUBLIC, "anon";
 
 -- 유효한 허가로만 읽는다. 사유와 기록은 허가를 열 때 이미 남았다.
 CREATE OR REPLACE FUNCTION public.list_author_edits (
-  p_lookup_id          uuid,
+  p_lookup_id          text,
   p_before_revision_id bigint DEFAULT NULL::bigint
 )
   RETURNS TABLE (
@@ -587,7 +552,7 @@ declare
   v_target_id bigint;
 begin
   perform private.require_admin();
-  v_target_id := private.author_lookup_target(p_lookup_id);
+  v_target_id := (private.author_lookup(p_lookup_id)).target_member_id;
 
   return query
   select
@@ -604,15 +569,15 @@ begin
 end;
 $function$;
 
-GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(uuid, bigint) TO "authenticated";
+GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint) TO "authenticated";
 
-GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(uuid, bigint) TO "service_role";
+GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint) TO "service_role";
 
-REVOKE ALL ON FUNCTION "public"."list_author_edits"(uuid, bigint) FROM "postgres";
+REVOKE ALL ON FUNCTION "public"."list_author_edits"(text, bigint) FROM "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(uuid, bigint) TO "postgres";
+GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint) TO "postgres";
 
-REVOKE ALL ON FUNCTION "public"."list_author_edits"(uuid, bigint) FROM PUBLIC, "anon";
+REVOKE ALL ON FUNCTION "public"."list_author_edits"(text, bigint) FROM PUBLIC, "anon";
 
 CREATE OR REPLACE FUNCTION public.restore_page (
   p_page_id bigint,
@@ -923,6 +888,62 @@ ALTER TABLE "private"."author_lookups"
   ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX author_lookups_admin_target_idx ON private.author_lookups USING btree (admin_member_id, target_member_id, expires_at);
+
+-- 관리자 본인이 연, 아직 유효한 조회 허가. 없거나, 끝났거나, ID 꼴이 아니면(손으로 고친 주소) WK016.
+CREATE OR REPLACE FUNCTION private.author_lookup (
+  p_lookup_id text
+)
+  RETURNS private.author_lookups
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_lookup private.author_lookups;
+begin
+  begin
+    select * into v_lookup
+    from private.author_lookups as lookup
+    where lookup.id = p_lookup_id::uuid
+      and lookup.admin_member_id = private.current_member_id()
+      and lookup.expires_at > now();
+  exception when invalid_text_representation then
+    v_lookup := null;
+  end;
+  if v_lookup.id is null then
+    raise exception 'lookup expired' using errcode = 'WK016';
+  end if;
+  return v_lookup;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."author_lookup"(text) FROM PUBLIC;
+
+-- 진행 중인 차단 기록을 잠그고 돌려준다. 없으면 WK006, 이미 끝났거나 해제됐으면 WK011.
+CREATE OR REPLACE FUNCTION private.lock_active_ban (
+  p_ban_log_id bigint
+)
+  RETURNS public.ban_log
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_log public.ban_log;
+begin
+  select * into v_log from public.ban_log where id = p_ban_log_id for update;
+  if v_log.id is null then
+    raise exception 'ban not found' using errcode = 'WK006';
+  end if;
+  if v_log.lifted_at is not null or (v_log.ends_at is not null and v_log.ends_at <= now()) then
+    raise exception 'ban is not active' using errcode = 'WK011';
+  end if;
+  return v_log;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."lock_active_ban"(bigint) FROM PUBLIC;
 
 -- 이 파일의 테이블을 가리키는 외래 키. 참조하는 테이블이 앞 파일에 있거나 서로를 참조하므로 두 테이블이
 -- 모두 생긴 뒤에 붙인다.

@@ -10,8 +10,6 @@ import {
 } from "~/features/admin";
 import { loadMemberStatus, withVerifiedMember } from "~/features/auth";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   // 화면을 가리는 검사다. 실제 권한은 RPC가 검사한다.
   const status = await loadMemberStatus();
@@ -23,23 +21,17 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const revisionId = Number(from);
 
   const lookupId = params.get("lookup");
-  if (!lookupId) return { revisionId, lookup: null, expired: false };
-  // 손으로 고친 주소. DB의 uuid 형 오류로 오류 화면에 가지 않고 끝난 허가처럼 다룬다.
-  if (!UUID.test(lookupId)) return { revisionId, lookup: null, expired: true };
+  if (!lookupId) return { revisionId, lookup: null };
 
   try {
     const [lookup, edits] = await withVerifiedMember(request, () =>
       Promise.all([getAuthorLookup(lookupId), listAuthorEdits(lookupId)]),
     );
-    return {
-      revisionId,
-      lookup: { id: lookupId, ...lookup, edits },
-      expired: false,
-    };
+    return { revisionId, lookup: { id: lookupId, ...lookup, edits } };
   } catch (error) {
-    if (isLookupExpired(error)) {
-      return { revisionId, lookup: null, expired: true };
-    }
+    // 끝났거나 남의 허가거나 손으로 고친 ID다. 모두 사유를 다시 받는다.
+    if (isLookupExpired(error))
+      return { revisionId, lookup: "expired" as const };
     throw error;
   }
 }
@@ -56,16 +48,16 @@ export const meta: Route.MetaFunction = () => [
  * 그 허가의 ID가 들어간다. 허가가 끝나기 전에는 새로 고치거나 다른 화면에 다녀와도 다시 적지 않는다.
  */
 export default function AuthorEditsRoute({ loaderData }: Route.ComponentProps) {
-  const { revisionId, lookup, expired } = loaderData;
+  const { revisionId, lookup } = loaderData;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const formHref = `/admin/author-edits?from=${revisionId}`;
 
-  if (!lookup) {
+  if (lookup === null || lookup === "expired") {
     return (
       <AuthorLookupForm
         revisionId={revisionId}
-        expired={expired}
+        expired={lookup === "expired"}
         onOpened={(lookupId) =>
           navigate(`${formHref}&lookup=${lookupId}`, { replace: true })
         }

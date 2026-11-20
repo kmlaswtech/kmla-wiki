@@ -3,12 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { banEditor, grantAdmin, setRevisionHidden } from "../data/mutations";
-import {
-  banEndsAt,
-  DEFAULT_BAN_INPUT,
-  parseBanLength,
-} from "../model/ban-length";
-import { BanLengthField } from "./ban-length-field";
+import { BanLengthDialog } from "./ban-length-dialog";
 import { ReasonDialog } from "./reason-dialog";
 import { Button } from "~/shared/ui/button";
 import {
@@ -47,8 +42,6 @@ export function RevisionAdminMenu({
   onDone,
 }: RevisionAdminMenuProps) {
   const [open, setOpen] = useState<Open>(null);
-  const [banInput, setBanInput] = useState(DEFAULT_BAN_INPUT);
-  const banLength = parseBanLength(banInput);
   const target = `${revision.authorPseudonym} (${pageTitle})`;
   const close = (next: boolean) =>
     setOpen((current) => (next ? current : null));
@@ -90,29 +83,16 @@ export function RevisionAdminMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ReasonDialog
+      <BanLengthDialog
         open={open === "ban"}
         onOpenChange={close}
         title="편집 차단"
         description={`${target}를 쓴 사람의 편집을 모든 문서에서 막습니다. 열람은 계속할 수 있습니다.`}
         confirmLabel="차단"
         destructive
-        canConfirm={banLength !== undefined}
-        onConfirm={(reason) =>
-          banEditor(
-            revision.id,
-            banEndsAt(banLength ?? null, Date.now()),
-            reason,
-          )
-        }
+        onConfirm={(length, reason) => banEditor(revision.id, length, reason)}
         onDone={onDone}
-      >
-        <BanLengthField
-          id="ban-length"
-          value={banInput}
-          onChange={setBanInput}
-        />
-      </ReasonDialog>
+      />
 
       <ReasonDialog
         open={open === "hide"}

@@ -1,9 +1,12 @@
 import type { AdminAction, AdminLogEntry, BanEntry } from "../model/log";
 import type { RecentChange } from "~/features/pages";
 import { getSupabase } from "~/shared/supabase/client";
-import { unwrap } from "~/shared/supabase/errors";
+import { unwrap, WikiError } from "~/shared/supabase/errors";
 
 const PAGE_SIZE = 50;
+
+/** `list_author_edits`의 `limit`과 같다. 한 쪽이 꽉 차면 더 볼 것이 있다. */
+export const AUTHOR_EDITS_PAGE_SIZE = 50;
 
 /** 공개 관리 기록, 최신순. 승인 회원 누구나 읽는다. */
 export async function listAdminLog(before?: number): Promise<AdminLogEntry[]> {
@@ -60,11 +63,11 @@ export interface AuthorEdit extends RecentChange {
 export async function getAuthorLookup(
   lookupId: string,
 ): Promise<{ sourceRevisionId: number; expiresAt: string }> {
-  const rows = unwrap(
+  const [row] = unwrap(
     await getSupabase().rpc("get_author_lookup", { p_lookup_id: lookupId }),
   );
-  const row = rows[0];
-  if (!row) throw new Error("lookup not found");
+  // RPC는 행 하나를 돌려주거나 WK016으로 던진다. 타입을 좁히려고 같은 오류로 맞춘다.
+  if (!row) throw new WikiError("WK016", "lookup expired");
   return {
     sourceRevisionId: row.source_revision_id,
     expiresAt: row.expires_at,
