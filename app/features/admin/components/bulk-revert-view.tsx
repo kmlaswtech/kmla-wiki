@@ -129,7 +129,7 @@ export function BulkRevertView({
         before = oldest.id;
       }
       if (first === null) {
-        setError("그 시간 안에 이 사람이 쓴 편집이 없습니다.");
+        setError("선택한 시간대에 작성자의 편집이 없습니다.");
         return;
       }
       void navigate(bulkRevertHref(lookupId, sourceRevisionId, first));
@@ -147,8 +147,8 @@ export function BulkRevertView({
       <div className="mb-4 space-y-2 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-muted-foreground">
-            대상: {source.authorPseudonym} ({source.pageTitle})를 쓴 사람의
-            편집. 조회 허가는 {formatDateTime(expiresAt)}까지입니다.
+            대상 · ‘{source.pageTitle}’의 가명 ‘{source.authorPseudonym}’으로
+            편집한 작성자. {formatDateTime(expiresAt)}까지 조회 가능.
           </p>
           {banned ? (
             <span role="status">차단했습니다.</span>
@@ -158,7 +158,7 @@ export function BulkRevertView({
               variant="outline"
               onClick={() => setBanning(true)}
             >
-              이 사람 차단
+              작성자 차단
             </Button>
           )}
         </div>
@@ -171,7 +171,7 @@ export function BulkRevertView({
                   fromEdit
                     ? `(${fromEdit.pageTitle}, ${formatDateTime(fromEdit.createdAt)})`
                     : ""
-                }부터 그 뒤의 편집`}
+                }부터의 편집`}
           </span>
           <Button
             size="xs"
@@ -202,18 +202,18 @@ export function BulkRevertView({
             to={authorEditsHref(sourceRevisionId, lookupId)}
             className="text-primary hover:underline"
           >
-            목록에서 시작점 고르기
+            목록에서 시작 판 선택
           </Link>
         </div>
         <p className="text-muted-foreground">
-          문서마다 시작점 앞의 마지막 판으로 돌아갑니다. 본문만 되돌리고, 이동한
-          제목은 그대로 둡니다.
+          문서마다 시작점 직전 판의 내용으로 되돌립니다. 이동한 문서의 제목은
+          유지됩니다.
         </p>
       </div>
 
       {result ? (
         <p role="status" className="mb-3 rounded-md bg-muted px-3 py-2 text-sm">
-          처리했습니다: {result}
+          작업 완료 · {result}
         </p>
       ) : null}
       {error ? (
@@ -224,15 +224,14 @@ export function BulkRevertView({
 
       {rows.length >= BULK_REVERT_PREVIEW_LIMIT ? (
         <p role="status" className="mb-3 text-sm">
-          문서가 {BULK_REVERT_PREVIEW_LIMIT}개를 넘을 수 있어 최근 것만
-          보입니다. 처리한 뒤 다시 읽으면 나머지가 나옵니다.
+          최근에 편집한 문서 {BULK_REVERT_PREVIEW_LIMIT}개까지 표시합니다.
+          처리한 뒤 다음 문서를 확인할 수 있습니다.
         </p>
       ) : null}
       {selectableCount > 0 ? (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
           <span>
-            고른 문서 {selected.length}개 / 고를 수 있는 문서 {selectableCount}
-            개
+            {selected.length}개 선택됨{" / "}선택 가능 {selectableCount}개
           </span>
           <Button
             size="xs"
@@ -246,19 +245,19 @@ export function BulkRevertView({
             variant="outline"
             onClick={() => setOverrides(clearSelection(rows))}
           >
-            모두 풀기
+            전체 선택 해제
           </Button>
           {selectableCount > BULK_REVERT_MAX ? (
             <span className="text-muted-foreground">
-              처음에는 위에서 {BULK_REVERT_MAX}개까지 고릅니다. 처리하면 다음
-              문서가 골라집니다.
+              목록 위에서부터 최대 {BULK_REVERT_MAX}개를 자동 선택합니다. 처리
+              후 다음 문서를 선택합니다.
             </span>
           ) : null}
         </div>
       ) : null}
       {rows.length === 0 ? (
         <p className="py-6 text-center text-muted-foreground">
-          이 범위에 되돌릴 편집이 없습니다.
+          선택한 범위에서 되돌릴 편집이 없습니다.
         </p>
       ) : (
         <ul className="divide-y rounded-md border text-sm">
@@ -271,7 +270,7 @@ export function BulkRevertView({
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     type="checkbox"
-                    aria-label={`${row.pageTitle} 처리`}
+                    aria-label={`‘${row.pageTitle}’ 선택`}
                     checked={checked}
                     disabled={!selectable}
                     onChange={(event) =>
@@ -333,7 +332,7 @@ export function BulkRevertView({
           disabled={selected.length === 0 || tooMany}
           onClick={() => setConfirming(true)}
         >
-          고른 문서 {selected.length}개 처리
+          선택한 문서 {selected.length}개 적용
         </Button>
         {tooMany ? (
           <span className="text-sm text-destructive">
@@ -346,7 +345,7 @@ export function BulkRevertView({
         open={confirming}
         onOpenChange={setConfirming}
         title="일괄 되돌리기"
-        description={`고른 문서 ${selected.length}개를 되돌리거나 삭제합니다. 판은 "관리자" 이름으로 남고, 관리 기록에는 한 줄로 남습니다. 여러 문서가 같은 때에 함께 되돌려지므로, 기록을 보는 사람은 이 가명들이 한 사람이라고 짐작할 수 있습니다.`}
+        description={`선택한 문서 ${selected.length}개를 되돌리거나 삭제합니다. 새 판의 작성자는 ‘관리자’로 표시되며, 관리 기록에는 한 건으로 남습니다. 여러 문서가 동시에 변경되므로 기록을 보는 사람이 문서별 가명을 같은 작성자로 추정할 수 있습니다.`}
         confirmLabel="처리"
         destructive
         onConfirm={async (reason) => {
@@ -396,7 +395,7 @@ function StatusBadge({ row }: { row: BulkRevertRow }) {
     case "delete":
       return <Badge variant="destructive">삭제</Badge>;
     case "same":
-      return <Badge variant="outline">바뀌는 것 없음</Badge>;
+      return <Badge variant="outline">변경 없음</Badge>;
     case "clean":
       return <Badge variant="outline">이미 되돌려짐</Badge>;
     case "hidden":
@@ -406,7 +405,7 @@ function StatusBadge({ row }: { row: BulkRevertRow }) {
     case "deleted":
       return <Badge variant="outline">삭제됨</Badge>;
     case "reverted":
-      return <Badge variant="outline">방금 되돌림</Badge>;
+      return <Badge variant="outline">되돌리기 완료</Badge>;
   }
 }
 
@@ -415,29 +414,29 @@ function RowNote({ row }: { row: BulkRevertRow }) {
   const notes: string[] = [];
   if (row.status === "conflict") {
     notes.push(
-      "이 사람의 편집 뒤에 다른 사람이 편집했습니다. 기록에서 직접 확인해 주세요.",
+      "작성자의 편집 뒤에 다른 편집이 있습니다. 편집 기록에서 확인해 주세요.",
     );
   }
   if (row.status === "delete") {
     notes.push(
       row.moveLeftover
-        ? "이 사람이 문서를 옮기며 옛 이름에 남긴 넘겨주기입니다. 옮겨진 문서를 다시 옮길 때 덮어쓸 수 있어 처음에는 고르지 않습니다."
+        ? "문서 이동 시 이전 제목에 남긴 넘겨주기입니다. 이동으로 대체할 수 있어 자동 선택에서 제외합니다."
         : "이 사람이 만든 문서입니다. 삭제한 뒤에도 관리자는 복구할 수 있습니다.",
     );
   }
   if (row.status === "hidden") {
     notes.push(
-      `돌아갈 판(r${row.restoreRevisionId})이 숨긴 판이라, 숨긴 내용을 다시 공개하지 않도록 건너뜁니다. 기록에서 직접 고쳐 주세요.`,
+      `되돌릴 판 r${row.restoreRevisionId}가 숨겨져 있어 이 문서를 건너뜁니다. 편집 기록에서 확인해 주세요.`,
     );
   }
   if (row.keptCount > 0) {
     notes.push(
-      `이 사람의 앞선 편집 ${row.keptCount}개는 다른 사람의 편집 아래에 있어 되돌린 뒤에도 남습니다. 기록에서 확인해 주세요.`,
+      `다른 작성자가 그 뒤에 편집한 기록이 있어 앞선 편집 ${row.keptCount}건은 남습니다.`,
     );
   }
   if (row.hasMove) {
     notes.push(
-      "이동이 있습니다. 제목은 되돌리지 않으니 필요하면 손으로 다시 옮겨 주세요.",
+      "문서 이동 기록이 있습니다. 제목을 되돌리려면 문서 이동 기능을 사용해 주세요.",
     );
   }
   if (notes.length === 0) return null;

@@ -68,8 +68,8 @@ export function PageAdminMenu({
         title={isProtected ? "보호 해제" : "문서 보호"}
         description={
           isProtected
-            ? `${page.title} 문서를 다시 누구나 고칠 수 있게 합니다.`
-            : `${page.title} 문서를 관리자만 고칠 수 있게 합니다.`
+            ? `‘${page.title}’의 문서별 편집 제한을 해제합니다.`
+            : `‘${page.title}’는 관리자만 편집할 수 있습니다.`
         }
         confirmLabel={isProtected ? "보호 해제" : "보호"}
         onConfirm={(reason) =>
@@ -85,7 +85,7 @@ export function PageAdminMenu({
         description={
           deleted
             ? `${page.title} 문서와 판 기록을 다시 모두에게 보이게 합니다.`
-            : `${page.title} 문서와 판 기록을 일반 사용자에게 보이지 않게 합니다. 기록은 지워지지 않고 관리자가 복구할 수 있습니다.${
+            : `삭제하면 일반 회원은 ‘${page.title}’와 편집 기록을 볼 수 없습니다. 관리자는 문서를 복구할 수 있습니다.${
                 aliasCount > 0
                   ? ` 이 문서로 오는 넘겨주기 ${aliasCount}개가 끊깁니다.`
                   : ""

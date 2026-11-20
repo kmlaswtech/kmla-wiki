@@ -69,7 +69,7 @@ export interface FoundPage extends Viewer {
    * 넘겨주기는 다른 이름이 아니라 이중 넘겨주기라 `backlinks`에 남는다).
    */
   aliases: string[];
-  /** 이 문서를 가리키는 문서. `aliases`에 든 것은 빠진다. */
+  /** 이 문서로 연결되는 문서. `aliases`에 든 것은 빠진다. */
   backlinks: Backlink[];
   /** 하위 문서 제목. */
   children: string[];

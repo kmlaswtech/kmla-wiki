@@ -61,44 +61,44 @@ export function describeAdminLog(entry: AdminLogEntry): string {
 
   switch (entry.action) {
     case "ban":
-      return `관리자가 ${who}의 편집을 차단함${note}`;
+      return `${who} 편집 차단${note}`;
     case "lift_ban":
-      return `관리자가 ${who}의 차단을 해제함`;
+      return `${who} 차단 해제`;
     case "change_ban":
-      return `관리자가 ${who}의 차단 기간을 바꿈${note}`;
+      return `${who} 차단 기간 변경${note}`;
     case "grant_admin":
-      return "관리자가 관리자 1명을 지정함";
+      return "관리자 1명 지정";
     case "revoke_admin":
-      return "관리자가 관리자 1명을 해제함";
+      return "관리자 권한 1건 해제";
     case "protect":
-      return `관리자가 ${page} 문서를 보호함`;
+      return `‘${page}’ 문서 보호`;
     case "unprotect":
-      return `관리자가 ${page} 문서의 보호를 해제함`;
+      return `‘${page}’ 문서 보호 해제`;
     case "delete_page":
-      return `관리자가 ${page} 문서를 삭제함`;
+      return `‘${page}’ 문서 삭제`;
     case "restore_page":
-      return `관리자가 ${page} 문서를 복구함`;
+      return `‘${page}’ 문서 복구`;
     case "hide_revision":
-      return `관리자가 ${page} 문서의 판(r${entry.revisionId})을 숨김`;
+      return `‘${page}’ r${entry.revisionId} 숨김`;
     case "unhide_revision":
-      return `관리자가 ${page} 문서의 판(r${entry.revisionId}) 숨김을 해제함`;
+      return `‘${page}’ r${entry.revisionId} 숨김 해제`;
     case "view_author_edits":
-      return `관리자가 ${who}의 다른 편집을 조회함`;
+      return `${who}의 다른 편집 조회`;
     case "bulk_revert":
-      return `관리자가 ${who}의 편집을 여러 문서에서 되돌림${note}`;
+      return `${who}의 편집 일괄 되돌림${note}`;
   }
 }
 
 // DB 마이그레이션(`*_admin.sql`, `*_admin_lookups_ban_end.sql`, `*_admin_bulk_revert_reports.sql`)
 // 머리말의 표와 같다.
 const MESSAGE: Record<string, string> = {
-  "42501": "관리자만 할 수 있습니다.",
-  WK010: "관리자는 차단할 수 없습니다. 먼저 관리자에서 해제해 주세요.",
+  "42501": "관리자 권한이 필요합니다.",
+  WK010: "관리자를 차단하려면 먼저 관리자 권한을 해제해 주세요.",
   WK011: "이미 처리된 상태입니다.",
   WK012: "현재 판은 숨길 수 없습니다. [되돌리고 숨기기]를 써 주세요.",
-  WK013: "마지막 관리자는 해제할 수 없습니다.",
+  WK013: "마지막 관리자의 권한은 해제할 수 없습니다.",
   WK014: "사유를 2자 이상 적어 주세요.",
-  WK016: "조회 허가가 끝났습니다. 사유를 적고 다시 조회해 주세요.",
+  WK016: "조회 시간이 만료되었습니다. 사유를 입력한 뒤 다시 조회해 주세요.",
   WK017: "차단 기간은 1시간부터 10년까지 정할 수 있습니다.",
   WK018: "일괄 되돌리기는 한 번에 200개 문서까지 할 수 있습니다.",
 };

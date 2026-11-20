@@ -348,9 +348,7 @@ export function EditorForm({
         clearDraft(key, target.sectionIndex);
         allowLeave.current = true;
         if (outcome.rebased) {
-          toast.success(
-            "그 사이 다른 문단이 바뀌어, 최신 판에 합쳐 저장했습니다.",
-          );
+          toast.success("편집한 문단을 최신 판에 반영했습니다.");
         }
         await navigate(pageHref(outcome.saved.title));
         return;
@@ -363,7 +361,7 @@ export function EditorForm({
           : getSection(outcome.latest.body, base.sectionIndex);
       if (latestPart === null) {
         setError(
-          "그 사이 문단 구성이 바뀌어 문단 편집을 이어 갈 수 없습니다. 쓰던 글을 복사해 두고 전체 편집으로 다시 시도해 주세요.",
+          "문단 구성이 바뀌었습니다. 편집 내용을 복사한 뒤 문서 전체 편집에서 다시 저장해 주세요.",
         );
         return;
       }
@@ -401,7 +399,7 @@ export function EditorForm({
     >
       {draftNotice ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-          <span>이 브라우저에 남아 있던, 저장하지 않은 글을 불러왔습니다.</span>
+          <span>이 브라우저의 임시 저장 내용을 불러왔습니다.</span>
           <Button
             type="button"
             size="xs"
@@ -413,18 +411,18 @@ export function EditorForm({
               setDraftNotice(false);
             }}
           >
-            버리고 현재 판으로
+            임시 저장 내용 버리기
           </Button>
         </div>
       ) : null}
 
       {conflict !== null ? (
         <section className="space-y-2 rounded-md border border-destructive/40 p-3">
-          <h2 className="font-semibold">다른 사람이 먼저 고쳤습니다</h2>
+          <h2 className="font-semibold">편집 중에 문서가 변경되었습니다</h2>
           <p className="text-sm text-muted-foreground">
-            아래는 최신 판(−)과 내 글(+)의 차이입니다. 다른 사람이 고친 내용이
-            빠지지 않게 편집기에서 맞춘 뒤 다시 저장해 주세요. 지금 그대로
-            저장하면 아래 차이대로 저장됩니다.
+            최신 판(−)과 내 편집 내용(+)을 비교해 주세요. 그대로 저장하면 최신
+            판에 추가된 내용이 빠질 수 있습니다. 필요한 내용을 편집기에 반영한
+            뒤 저장해 주세요.
           </p>
           <DiffView before={conflictText} after={currentText} />
         </section>
@@ -432,8 +430,7 @@ export function EditorForm({
 
       {releasingRedirect ? (
         <p className="rounded-md bg-muted px-3 py-2 text-sm break-keep text-muted-foreground">
-          넘겨주기 문서를 일반 문서로 바꿉니다. 본문을 쓰고 저장하면 넘겨주기가
-          풀립니다.
+          본문을 저장하면 넘겨주기가 해제됩니다.
         </p>
       ) : null}
 
@@ -498,7 +495,7 @@ export function EditorForm({
             role="status"
             className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground"
           >
-            <Spinner /> 이미지를 올리는 중입니다…
+            <Spinner /> 이미지 업로드 중…
           </p>
         ) : null}
       </div>
@@ -509,7 +506,7 @@ export function EditorForm({
             <DiffView before={baselineText} after={currentText} />
           ) : (
             <p className="rounded-md border p-4 text-sm text-muted-foreground">
-              아직 바꾼 것이 없습니다.
+              변경 사항이 없습니다.
             </p>
           )}
         </section>
@@ -524,7 +521,7 @@ export function EditorForm({
           type="text"
           value={summary}
           maxLength={200}
-          placeholder="무엇을 왜 고쳤는지 한 줄로"
+          placeholder="변경 내용이나 이유"
           onChange={(event) => setSummary(event.target.value)}
         />
       </div>
@@ -572,9 +569,9 @@ export function EditorForm({
       <Dialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>쓰던 글을 버릴까요?</DialogTitle>
+            <DialogTitle>편집 내용을 버릴까요?</DialogTitle>
             <DialogDescription>
-              저장하지 않은 내용과 이 브라우저의 임시 저장이 모두 사라집니다.
+              저장하지 않은 내용이 이 브라우저에서도 삭제됩니다.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -583,7 +580,7 @@ export function EditorForm({
               variant="outline"
               onClick={() => setConfirmDiscard(false)}
             >
-              계속 쓰기
+              계속 편집
             </Button>
             <Button
               type="button"
@@ -609,10 +606,9 @@ export function EditorForm({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>편집을 그만두고 나갈까요?</DialogTitle>
+            <DialogTitle>편집 화면에서 나갈까요?</DialogTitle>
             <DialogDescription>
-              쓰던 글은 이 브라우저에 임시 저장되어, 이 문서를 다시 편집하면
-              이어서 쓸 수 있습니다.
+              이 브라우저에서 문서를 다시 편집하면 이어서 작성할 수 있습니다.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -639,10 +635,10 @@ export function EditorForm({
       <Dialog open={confirmDeletion} onOpenChange={setConfirmDeletion}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>내용을 절반 넘게 지웁니다</DialogTitle>
+            <DialogTitle>문서 내용이 크게 줄어듭니다</DialogTitle>
             <DialogDescription>
-              이 편집은 문서의 절반 이상을 지웁니다. 의도한 것이 맞다면 편집
-              요약에 이유를 적어 주세요. 판 기록에서 언제든 되돌릴 수 있습니다.
+              문서 내용의 절반 이상이 삭제됩니다. 의도한 편집이라면 편집 요약에
+              이유를 적어 주세요.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -651,7 +647,7 @@ export function EditorForm({
               variant="outline"
               onClick={() => setConfirmDeletion(false)}
             >
-              다시 보기
+              편집으로 돌아가기
             </Button>
             <Button
               type="button"

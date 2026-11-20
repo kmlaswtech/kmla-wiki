@@ -72,16 +72,16 @@ export function AuthorLookupForm({
       >
         {expired ? (
           <p role="status" className="text-sm font-medium">
-            조회 허가가 끝났습니다. 다시 보려면 사유를 적어 주세요.
+            조회 시간이 만료되었습니다. 사유를 입력한 뒤 다시 조회해 주세요.
           </p>
         ) : null}
         <p className="text-sm text-muted-foreground">
-          r{revisionId} 판을 쓴 사람이 다른 문서에 한 편집을 봅니다. 여러 문서에
-          걸친 훼손을 찾을 때만 씁니다. 조회하면{" "}
+          r{revisionId} 작성자가 다른 문서를 편집한 기록입니다. 여러 문서에 걸친
+          훼손을 조사할 때만 조회해 주세요.{" "}
           <strong className="text-foreground">
-            사유와 함께 공개 관리 기록에 남습니다.
+            조회 사유는 공개 관리 기록에 남습니다.
           </strong>{" "}
-          허가는 10분 동안 유지됩니다.
+          조회는 10분 동안 가능합니다.
         </p>
         <div className="grid gap-1.5">
           <Label htmlFor="lookup-reason">조회 사유</Label>
@@ -108,7 +108,7 @@ export function AuthorLookupForm({
   );
 }
 
-/** 열린 허가로 본 편집 목록과 "이 사람에 대한 조치". */
+/** 열린 허가로 본 편집 목록과 "작성자 관리". */
 export function AuthorEditsResult({
   revisionId,
   lookup,
@@ -169,8 +169,9 @@ export function AuthorEditsResult({
       <Heading />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-muted-foreground">
-          편집 {edits.length}건{hasMore ? " 이상" : ""}. 가명은 문서마다
-          다릅니다. 조회 허가는 {formatDateTime(lookup.expiresAt)}까지입니다.
+          편집 {edits.length}건{hasMore ? " 이상" : ""} ·{" "}
+          {formatDateTime(lookup.expiresAt)}까지 조회 가능. 편집자 가명은
+          문서마다 다릅니다.
         </span>
         <span className="ml-auto flex items-center gap-1">
           <Link
@@ -179,7 +180,7 @@ export function AuthorEditsResult({
           >
             일괄 되돌리기
           </Link>
-          이 사람에 대한 조치
+          작성자 관리
           <RevisionAdminMenu
             revision={source}
             pageTitle={source.pageTitle}
@@ -224,7 +225,7 @@ export function AuthorEditsResult({
                 className="rounded px-1.5 py-0.5 text-primary hover:bg-muted"
                 aria-label={`r${edit.id}부터 일괄 되돌리기`}
               >
-                여기부터 되돌리기
+                이 판부터 되돌리기
               </Link>
               <Button
                 type="button"
@@ -277,7 +278,7 @@ export function AuthorEditsResult({
 function Heading() {
   return (
     <h1 className="mb-4 border-b pb-3 text-2xl font-bold">
-      같은 사람의 다른 편집
+      작성자의 다른 편집
     </h1>
   );
 }

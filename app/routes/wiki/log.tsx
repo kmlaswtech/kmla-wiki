@@ -31,13 +31,12 @@ export default function LogRoute({ loaderData }: Route.ComponentProps) {
     <div>
       <h1 className="mb-2 border-b pb-3 text-2xl font-bold">관리 기록</h1>
       <p className="mb-4 text-sm text-muted-foreground">
-        관리자는 {adminCount}명입니다. 관리자가 한 조치는 모두 사유와 함께
-        여기에 남습니다.
+        관리자 {adminCount}명 · 공개 관리 기록
       </p>
 
       {entries.length === 0 ? (
         <p className="py-8 text-center text-muted-foreground">
-          아직 기록이 없습니다.
+          관리 기록이 없습니다.
         </p>
       ) : (
         <ul className="divide-y text-sm">

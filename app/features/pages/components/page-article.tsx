@@ -131,12 +131,12 @@ export function PageArticle({
               prefetch="intent"
               title={
                 page.protection === "admin"
-                  ? "보호된 문서라 관리자만 편집할 수 있습니다."
+                  ? "보호된 문서입니다. 관리자만 편집할 수 있습니다."
                   : "지금은 편집할 수 없습니다."
               }
             >
               <Lock aria-hidden />
-              <span className="max-sm:sr-only">편집기로 보기</span>
+              <span className="max-sm:sr-only">편집 화면 보기</span>
             </LinkButton>
           )}
           <LinkButton
@@ -240,12 +240,12 @@ export function PageArticle({
         {viewingOldRevision ? (
           <Notice>
             <span>
-              예전 판(r{revision.id})을 보고 있습니다.{" "}
+              이전 판(r{revision.id})을 보고 있습니다.{" "}
               <Link
                 to={pageHref(page.title)}
                 className="text-primary hover:underline"
               >
-                현재 판 보기
+                최신 판 보기
               </Link>
             </span>
           </Notice>
@@ -321,7 +321,7 @@ export function PageArticle({
       {view.backlinks.length > 0 ? (
         <details className="mt-4 text-sm">
           <summary className="cursor-pointer text-muted-foreground">
-            이 문서를 가리키는 문서 {view.backlinks.length}개
+            이 문서로 연결되는 문서 {view.backlinks.length}개
           </summary>
           <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
             {view.backlinks.map((link) => (
@@ -360,9 +360,8 @@ function UpdatedAt({ value }: { value: string }) {
 const REDIRECT_STATE_MESSAGE: Record<RedirectInfo["state"], string> = {
   ok: "이 이름으로 들어오면 위 문서로 바로 넘어갑니다.",
   missing:
-    "넘겨줄 문서가 없습니다. 대상을 바꾸거나 해당 문서를 먼저 만들어 주세요.",
-  redirect:
-    "넘겨줄 문서도 넘겨주기 문서입니다. 최종 문서로 대상을 바꿔 주세요.",
+    "넘겨줄 문서가 없습니다. 다른 문서로 연결하거나 해당 문서를 만들어 주세요.",
+  redirect: "넘겨주기가 이어져 있습니다. 최종 문서에 바로 연결해 주세요.",
 };
 
 /** 넘겨주기 문서 자체를 볼 때(`?redirect=no`, 예전 판, 끊긴 넘겨주기). */
@@ -410,12 +409,12 @@ function RedirectCard({
       <div className="mt-3 flex flex-wrap gap-2">
         {redirect.state === "missing" ? null : (
           <LinkButton size="sm" to={pageHref(redirect.target)}>
-            대상으로 가기
+            연결된 문서 보기
           </LinkButton>
         )}
         {editHref ? (
           <LinkButton size="sm" variant="outline" to={editHref}>
-            대상 바꾸기
+            연결될 문서 변경
           </LinkButton>
         ) : null}
       </div>

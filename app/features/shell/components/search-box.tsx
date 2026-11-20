@@ -234,7 +234,7 @@ export function SearchBox({
                     >
                       <Search className="size-4 shrink-0" aria-hidden />
                       <span className="truncate">
-                        &lsquo;{item.query}&rsquo; 전체 검색
+                        &lsquo;{item.query}&rsquo; 검색 결과 보기
                       </span>
                     </Autocomplete.Item>
                   )

@@ -27,7 +27,7 @@ interface RevisionAdminMenuProps {
   isCurrent: boolean;
   /** 조치가 끝난 뒤 목록을 다시 읽는다. */
   onDone: () => void;
-  /** "이 사람의 다른 편집 보기"를 보일지. 그 화면 안에서는 끈다. */
+  /** "작성자의 다른 편집 조회"를 보일지. 그 화면 안에서는 끈다. */
   showAuthorEdits?: boolean;
 }
 
@@ -71,11 +71,11 @@ export function RevisionAdminMenu({
             <DropdownMenuItem
               render={<Link to={authorEditsHref(revision.id)} />}
             >
-              이 사람의 다른 편집 보기
+              작성자의 다른 편집 조회
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuItem onClick={() => setOpen("ban")}>
-            이 사람 차단
+            작성자 차단
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setOpen("hide")}>
             {hideLabel(revision, isCurrent)}

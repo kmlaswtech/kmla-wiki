@@ -20,7 +20,7 @@ export function ChangeBanDialog({
       open={ban !== null}
       onOpenChange={(open) => !open && onClose()}
       title="차단 기간 변경"
-      description={`${ban?.pseudonym ?? ""} (${ban?.pageTitle ?? ""})의 차단이 끝나는 때를 바꿉니다. 새 기간은 지금부터 셉니다.`}
+      description={`‘${ban?.pageTitle ?? ""}’의 가명 ‘${ban?.pseudonym ?? ""}’에 적용된 차단 기간을 변경합니다. 새 기간은 변경 시점부터 적용됩니다.`}
       confirmLabel="변경"
       onConfirm={(length, reason) =>
         ban ? changeBanEnd(ban.id, length, reason) : Promise.resolve()

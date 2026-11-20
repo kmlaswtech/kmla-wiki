@@ -21,8 +21,8 @@ export default function MeRoute() {
       <dl className="divide-y text-sm">
         <Row label="회원 확인">
           {status.verifiedUntil
-            ? `${formatDateTime(status.verifiedUntil)}까지 유효`
-            : "없음"}
+            ? `${formatDateTime(status.verifiedUntil)}까지`
+            : "미확인"}
         </Row>
         <Row label="편집">
           {status.ban ? (
@@ -37,7 +37,7 @@ export default function MeRoute() {
                 사유: {status.ban.reason}
               </p>
               <p className="mt-1 text-muted-foreground">
-                차단 중에도 문서는 볼 수 있습니다.
+                문서는 계속 읽을 수 있습니다.
               </p>
             </>
           ) : (
@@ -46,7 +46,7 @@ export default function MeRoute() {
         </Row>
         <Row label="가명">
           <p className="text-muted-foreground">
-            편집 기록의 가명은 문서마다 다릅니다.
+            편집자 가명은 문서마다 다릅니다.
           </p>
         </Row>
         {status.isAdmin ? <Row label="권한">관리자</Row> : null}

@@ -18,7 +18,7 @@ import { Button } from "~/shared/ui/button";
 /**
  * 처리되지 않은 신고를 판별로 보인다(관리자 전용). 판을 펼쳐 바로 전 판과 비교하고, 판 기록과 같은
  * 관리 메뉴로 조치한다. 숨기기(현재 판이면 되돌리고 숨기기)는 단추로 바로 보이고, 숨기면 신고도
- * 닫힌다. 다른 조치를 했거나 조치할 일이 없으면 [처리함]이나 [기각]으로 닫는다. 신고자는 오지 않는다.
+ * 닫힌다. 다른 조치를 했거나 조치할 일이 없으면 [처리 완료]이나 [기각]으로 닫는다. 신고자는 오지 않는다.
  */
 export function OpenReportList({
   reports,
@@ -95,9 +95,7 @@ function OpenReportItem({
           <Badge variant="outline">삭제된 문서</Badge>
         ) : null}
         {report.dismissedCount > 0 ? (
-          <Badge variant="outline">
-            전에 기각한 신고 {report.dismissedCount}건
-          </Badge>
+          <Badge variant="outline">이전 기각 {report.dismissedCount}건</Badge>
         ) : null}
         <span className="ml-auto flex items-center gap-1">
           <Button
@@ -142,7 +140,7 @@ function OpenReportItem({
             disabled={pending}
             onClick={() => void resolve("handled")}
           >
-            처리함
+            처리 완료
           </Button>
           <Button
             size="xs"

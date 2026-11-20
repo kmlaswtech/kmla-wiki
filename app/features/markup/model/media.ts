@@ -4,7 +4,7 @@ import { NODE, stringAttr, type WikiNode } from "./doc";
  * 이미지·영상의 크기와 정렬. 이미지 노드와 유튜브 노드가 같은 값을 쓴다.
  *
  * 크기는 고른 몇 가지만 둔다. 숫자를 마음대로 넣게 하면 좁은 화면에서 깨지기 쉽다. 어느 크기든
- * 본문 폭을 넘지 않는다. 글자가 옆으로 흐르게 하는 배치(float)는 두지 않는다. 폰에서는 옆에 둘
+ * 본문 너비에 맞춤을 넘지 않는다. 글자가 옆으로 흐르게 하는 배치(float)는 두지 않는다. 폰에서는 옆에 둘
  * 자리가 없다.
  */
 export const MEDIA_SIZES = ["small", "medium", "large", "full"] as const;
@@ -17,7 +17,7 @@ export const MEDIA_SIZE_LABEL: Record<MediaSize, string> = {
   small: "작게",
   medium: "중간",
   large: "크게",
-  full: "본문 폭",
+  full: "본문 너비에 맞춤",
 };
 
 export const MEDIA_ALIGN_LABEL: Record<MediaAlign, string> = {
@@ -38,7 +38,7 @@ export function isMediaAlign(value: unknown): value is MediaAlign {
 }
 
 /**
- * 노드의 크기. 이미지는 고르지 않았으면 `null`(올린 원본 크기, 본문 폭 안)이다. 영상에는 원본
+ * 노드의 크기. 이미지는 고르지 않았으면 `null`(올린 원본 크기, 본문 너비에 맞춤 안)이다. 영상에는 원본
  * 크기가 없으므로 기본 크기를 쓴다. 모르는 값도 고르지 않은 것으로 본다.
  */
 export function mediaSize(node: WikiNode): MediaSize | null {

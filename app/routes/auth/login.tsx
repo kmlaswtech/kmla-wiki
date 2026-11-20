@@ -26,18 +26,16 @@ const DEV_ACCOUNTS = [
   { email: "alice@wiki.test", label: "앨리스 (회원)" },
   { email: "bob@wiki.test", label: "밥 (회원)" },
   { email: "admin@wiki.test", label: "관리자" },
-  { email: "expired@wiki.test", label: "확인 기간이 지난 회원" },
-  { email: "outsider@wiki.test", label: "회원 확인이 없는 계정" },
+  { email: "expired@wiki.test", label: "회원 확인 만료" },
+  { email: "outsider@wiki.test", label: "미확인 계정" },
 ];
 const DEV_PASSWORD = "password123";
 
 // URL의 `reason`은 아무 값이나 올 수 있어 `string`으로 찾는다. 알려진 사유는 빠짐없이 둔다.
 const REASON_MESSAGE: Record<string, string> = {
-  expired:
-    "회원 확인 기간이 지났습니다. 다시 로그인하면 보던 곳으로 돌아갑니다.",
-  "not-member": "승인된 KMLA Online 회원만 이용할 수 있습니다.",
-  denied:
-    "kmla.online에서 허용하지 않아 로그인하지 않았습니다. 승인된 회원만 허용할 수 있습니다.",
+  expired: "회원 확인 기간이 만료되었습니다. 다시 로그인해 주세요.",
+  "not-member": "KMLA Online 회원만 이용할 수 있습니다.",
+  denied: "KMLA Online에서 로그인을 승인하지 않았습니다.",
   failed: "로그인하지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
 } satisfies Record<LoginReason, string>;
 
@@ -68,7 +66,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     return data(
       {
         error:
-          "로그인하지 못했습니다. 로컬 DB에 seed 계정이 있는지 확인해 주세요.",
+          "개발용 계정으로 로그인하지 못했습니다. 로컬 DB의 초기 계정을 확인해 주세요.",
       },
       { status: 400 },
     );
@@ -105,8 +103,8 @@ export default function LoginPage({
         <CardHeader>
           <CardTitle className="text-xl">큼온 위키</CardTitle>
           <CardDescription>
-            민사고 학교생활 정보를 함께 쓰고 고치는 위키입니다. KMLA Online 승인
-            회원만 볼 수 있습니다.
+            민족사관고등학교의 정보를 함께 작성하고 고치는 위키입니다. KMLA
+            Online 승인 회원만 이용할 수 있습니다.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -128,9 +126,6 @@ export default function LoginPage({
               kmla.online으로 이동하지 못했습니다. 잠시 뒤에 다시 시도해 주세요.
             </p>
           ) : null}
-          <p className="text-xs text-muted-foreground">
-            비밀번호는 kmla.online에서만 입력합니다.
-          </p>
 
           {env.devLogin ? (
             <Form
@@ -155,7 +150,7 @@ export default function LoginPage({
                 className="w-full"
                 disabled={pending}
               >
-                {pending ? <Spinner /> : null}이 계정으로 들어가기
+                {pending ? <Spinner /> : null}로그인
               </Button>
               {actionData?.error ? (
                 <p role="alert" className="text-sm text-destructive">

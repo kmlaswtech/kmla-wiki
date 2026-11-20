@@ -44,7 +44,7 @@ export function ReportButton({
         size={size}
         variant="ghost"
         aria-label={`r${revisionId} 신고`}
-        title="관리자에게 신고"
+        title="신고"
         onClick={() => setOpen(true)}
       >
         <Flag />
@@ -80,9 +80,10 @@ function ReportForm({
     return (
       <>
         <DialogHeader>
-          <DialogTitle>신고했습니다</DialogTitle>
+          <DialogTitle>신고가 접수되었습니다</DialogTitle>
           <DialogDescription>
-            관리자만 봅니다. 누가 신고했는지는 관리자에게도 보이지 않습니다.
+            신고 내용은 관리자만 확인하며, 신고자 정보는 관리자에게도 표시되지
+            않습니다.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -118,16 +119,15 @@ function ReportForm({
       }}
     >
       <DialogHeader>
-        <DialogTitle>관리자에게 신고</DialogTitle>
+        <DialogTitle>신고</DialogTitle>
         <DialogDescription>
-          {pageTitle} 문서의 r{revisionId} 판을 알립니다. 내용이 틀렸다면 직접
-          고쳐 주세요. 신고는 기록에서 판을 숨기거나 편집을 막는 것처럼 관리자만
-          할 수 있는 일을 부탁할 때 씁니다.
+          신고 대상 · ‘{pageTitle}’ r{revisionId}. 판 숨김이나 편집 차단 등 관리
+          조치가 필요할 때 신고해 주세요.
         </DialogDescription>
       </DialogHeader>
 
       <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium">종류</legend>
+        <legend className="mb-1 text-sm font-medium">신고 유형</legend>
         {REPORT_CATEGORIES.map((entry) => (
           <label
             key={entry.value}
@@ -143,9 +143,11 @@ function ReportForm({
             />
             <span>
               {entry.label}
-              <span className="block text-xs text-muted-foreground">
-                {entry.hint}
-              </span>
+              {entry.hint ? (
+                <span className="block text-xs text-muted-foreground">
+                  {entry.hint}
+                </span>
+              ) : null}
             </span>
           </label>
         ))}
@@ -153,7 +155,7 @@ function ReportForm({
 
       <div className="grid gap-1.5">
         <Label htmlFor="report-note">
-          덧붙임{category === "other" ? "" : " (선택)"}
+          상세 내용{category === "other" ? "" : " (선택)"}
         </Label>
         <Textarea
           id="report-note"
@@ -163,7 +165,7 @@ function ReportForm({
           onChange={(event) => setNote(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          개인정보를 여기에 다시 적지 마세요. 관리자는 판을 직접 봅니다.
+          신고하려는 판의 개인정보를 여기에 옮겨 적지 마세요.
         </p>
       </div>
 

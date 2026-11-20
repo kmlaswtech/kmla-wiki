@@ -21,20 +21,19 @@ export const WRITE_ERROR = {
 const LIMIT_MESSAGE: Record<string, string> = {
   body: "문서가 너무 깁니다. 하위 문서로 나눠 주세요.",
   summary: "편집 요약은 200자까지 쓸 수 있습니다.",
-  rate: "짧은 시간에 너무 많이 저장했습니다. 잠시 뒤에 다시 시도해 주세요.",
+  rate: "저장 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
 };
 
 const MESSAGE: Record<string, string> = {
   [WRITE_ERROR.conflict]:
     "편집하는 동안 다른 사람이 이 문서를 고쳤습니다. 아래에서 바뀐 내용을 확인해 주세요.",
   [WRITE_ERROR.banned]: "차단 기간에는 편집할 수 없습니다.",
-  [WRITE_ERROR.protected]: "보호된 문서라 관리자만 편집할 수 있습니다.",
+  [WRITE_ERROR.protected]: "보호된 문서입니다. 관리자만 편집할 수 있습니다.",
   [WRITE_ERROR.invalidTitle]:
-    "쓸 수 없는 제목입니다. [ ] { } | # < > 는 제목에 쓸 수 없습니다.",
+    "문서 제목에는 [ ] { } | # < > 문자를 사용할 수 없습니다.",
   [WRITE_ERROR.notFound]: "대상을 찾을 수 없습니다.",
   [WRITE_ERROR.unchanged]: "바뀐 내용이 없습니다.",
-  [WRITE_ERROR.deleted]:
-    "삭제된 문서입니다. 다시 만들려면 관리자에게 복구를 요청해 주세요.",
+  [WRITE_ERROR.deleted]: "삭제된 문서입니다. 관리자에게 복구를 요청해 주세요.",
   [WRITE_ERROR.titleTaken]: "그 제목의 문서가 이미 있습니다.",
 };
 
@@ -42,13 +41,11 @@ const MESSAGE: Record<string, string> = {
 export const REDIRECT_MESSAGE: Record<string, string> = {
   content: "넘겨주기 문서에는 본문을 쓸 수 없습니다.",
   categories: "넘겨주기 문서에는 분류를 달 수 없습니다.",
-  self: "자기 자신으로 넘겨줄 수 없습니다.",
+  self: "같은 문서로 넘겨줄 수 없습니다.",
   // 저장할 때 DB가 넘겨주기를 끝까지 따라가 최종 문서로 바꾼다. 그러지 못할 때다.
-  broken:
-    "넘겨줄 문서가 넘겨주기 문서인데, 그 대상이 없는 문서입니다. 현존하는 문서로만 넘겨줄 수 있습니다.",
-  loop: "넘겨주기가 돌고 돌아 최종 문서를 찾지 못했습니다. 다른 문서를 골라 주세요.",
-  target:
-    "넘겨줄 문서 이름을 쓸 수 없습니다. [ ] { } | # < > 는 제목에 쓸 수 없습니다.",
+  broken: "넘겨주기가 연결하는 문서가 없습니다. 다른 문서를 선택해 주세요.",
+  loop: "넘겨주기가 순환합니다. 다른 문서를 선택해 주세요.",
+  target: "연결할 문서 제목에는 [ ] { } | # < > 문자를 사용할 수 없습니다.",
 };
 
 const INVALID_BODY_MESSAGE: Record<string, string> = {

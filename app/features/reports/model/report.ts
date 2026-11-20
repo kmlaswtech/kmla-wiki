@@ -7,20 +7,20 @@ export type ReportCategory = "privacy" | "abuse" | "vandalism" | "other";
 export const REPORT_CATEGORIES: readonly {
   value: ReportCategory;
   label: string;
-  hint: string;
+  hint?: string;
 }[] = [
   {
     value: "privacy",
     label: "개인정보·사생활",
-    hint: "실명, 연락처, 사생활처럼 기록에도 남으면 안 되는 내용",
+    hint: "실명, 연락처 또는 공개하기 어려운 사생활 정보",
   },
-  { value: "abuse", label: "욕설·비방", hint: "특정 사람을 깎아내리는 내용" },
+  { value: "abuse", label: "욕설·비방" },
   {
     value: "vandalism",
     label: "훼손·장난",
-    hint: "내용을 지우거나 망가뜨림. 되돌려도 반복될 때",
+    hint: "되돌려도 반복되는 문서 훼손",
   },
-  { value: "other", label: "기타", hint: "내용을 적어 주세요" },
+  { value: "other", label: "기타", hint: "신고 사유를 입력해 주세요." },
 ];
 
 export function reportCategoryLabel(category: string): string {
@@ -46,11 +46,11 @@ export function canSubmitReport(
 
 // DB migration(`*_admin_bulk_revert_reports.sql`) 머리말의 표와 같다.
 const MESSAGE: Record<string, string> = {
-  WK005: `덧붙임은 ${REPORT_NOTE_MAX}자까지 적을 수 있습니다.`,
-  WK006: "신고할 수 없는 판입니다. 숨겨졌거나 삭제되었을 수 있습니다.",
+  WK005: `상세 내용은 ${REPORT_NOTE_MAX}자까지 입력할 수 있습니다.`,
+  WK006: "이 판은 신고할 수 없습니다.",
   WK011:
-    "이미 신고한 판입니다. 처리되기 전이나 기각된 뒤에는 같은 판을 다시 신고할 수 없습니다.",
-  WK014: "기타를 고르면 내용을 2자 이상 적어 주세요.",
+    "이미 신고한 판입니다. 신고가 처리되기 전이나 기각된 뒤에는 같은 판을 다시 신고할 수 없습니다.",
+  WK014: "‘기타’를 선택하면 상세 내용을 2자 이상 입력해 주세요.",
   WK019: "신고는 1시간에 10건까지 할 수 있습니다.",
 };
 

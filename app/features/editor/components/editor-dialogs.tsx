@@ -119,7 +119,7 @@ function asExternalHref(value: string): string | null {
 }
 
 /**
- * 링크 넣기·고치기. 문서 제목을 쓰면 위키 링크, `https://`로 시작하면 바깥 링크다.
+ * 링크 삽입·편집. 문서 제목을 쓰면 위키 링크, `https://`로 시작하면 바깥 링크다.
  * 글자를 골라 두었으면 그 글자에, 아니면 새 글자로 넣는다.
  */
 function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
@@ -142,7 +142,7 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
   const [label, setLabel] = useState("");
   const needsLabel = empty && !editing;
 
-  /** 넘겨주기를 확인하는 중인가. 그동안은 다시 넣지 않고 "넣기"를 막는다. */
+  /** 넘겨주기를 확인하는 중인가. 그동안은 다시 넣지 않고 "삽입"을 막는다. */
   const [checking, setChecking] = useState(false);
   /** 확인하는 사이 대화상자가 닫혔으면 넣지 않는다. */
   const closed = useRef(false);
@@ -195,7 +195,7 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
 
   return (
     <DialogForm
-      title={editing ? "링크 고치기" : "링크 넣기"}
+      title={editing ? "링크 편집" : "링크 삽입"}
       description="문서 이름을 쓰면 위키 문서로, https://로 시작하면 바깥 사이트로 갑니다. 문서의 한 문단으로 가려면 '문서 이름#문단 제목'처럼 씁니다."
       onSubmit={() => void apply(target)}
       footer={
@@ -215,12 +215,12 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
                 onDone();
               }}
             >
-              링크 없애기
+              링크 제거
             </Button>
           ) : null}
           <Button type="submit" disabled={target.trim() === "" || checking}>
             {checking ? <Spinner /> : null}
-            {editing ? "고치기" : "넣기"}
+            {editing ? "저장" : "삽입"}
           </Button>
         </>
       }
@@ -240,17 +240,16 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
       </div>
       {needsLabel ? (
         <div className="grid gap-1.5">
-          <Label htmlFor="link-label">보여 줄 글자 (선택)</Label>
+          <Label htmlFor="link-label">표시할 텍스트 (선택)</Label>
           <Input
             id="link-label"
             value={label}
-            placeholder="비워 두면 문서 이름이 보입니다"
             onChange={(event) => setLabel(event.target.value)}
           />
         </div>
       ) : selectedText ? (
         <p className="text-sm text-muted-foreground">
-          고른 글자:{" "}
+          선택한 텍스트:{" "}
           <span className="font-medium text-foreground">{selectedText}</span>
         </p>
       ) : null}
@@ -328,7 +327,7 @@ function RemoveNodeButton({
   );
 }
 
-/** 틀 넣기·고치기. 값은 한 줄에 하나씩 적는다(틀 문서의 {{{1}}}, {{{2}}} 자리에 차례로 들어간다). */
+/** 틀 삽입·편집. 값은 한 줄에 하나씩 적는다(틀 문서의 {{{1}}}, {{{2}}} 자리에 차례로 들어간다). */
 function TemplateForm({
   editor,
   pos,
@@ -362,18 +361,18 @@ function TemplateForm({
 
   return (
     <DialogForm
-      title={current ? "틀 고치기" : "틀 넣기"}
-      description="틀 문서의 내용이 이 자리에 들어갑니다. 내용을 고치려면 틀 문서를 고칩니다."
+      title={current ? "틀 설정" : "틀 삽입"}
+      description="틀의 공통 내용은 틀 문서에서 편집할 수 있습니다."
       onSubmit={submit}
       footer={
         <>
           {current ? (
             <RemoveNodeButton editor={editor} target={current} onDone={onDone}>
-              틀 빼기
+              틀 제거
             </RemoveNodeButton>
           ) : null}
           <Button type="submit" disabled={title === null}>
-            {current ? "고치기" : "넣기"}
+            {current ? "저장" : "삽입"}
           </Button>
         </>
       }
@@ -397,7 +396,7 @@ function TemplateForm({
         ) : null}
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="template-values">넘길 값 (선택, 한 줄에 하나)</Label>
+        <Label htmlFor="template-values">매개변수 (선택, 한 줄에 하나)</Label>
         <Textarea
           id="template-values"
           value={values}
@@ -409,7 +408,7 @@ function TemplateForm({
   );
 }
 
-/** 각주 넣기·고치기. 출처 주소를 적으면 문서에서 누를 수 있는 링크가 된다. */
+/** 각주 삽입·편집. 출처 주소를 적으면 문서에서 누를 수 있는 링크가 된다. */
 function FootnoteForm({
   editor,
   pos,
@@ -433,18 +432,17 @@ function FootnoteForm({
 
   return (
     <DialogForm
-      title={current ? "각주 고치기" : "각주 넣기"}
-      description="문장 끝에 번호가 붙고, 내용은 문서 맨 아래에 모입니다."
+      title={current ? "각주 편집" : "각주 삽입"}
       onSubmit={submit}
       footer={
         <>
           {current ? (
             <RemoveNodeButton editor={editor} target={current} onDone={onDone}>
-              각주 지우기
+              각주 삭제
             </RemoveNodeButton>
           ) : null}
           <Button type="submit" disabled={note.trim() === ""}>
-            {current ? "고치기" : "넣기"}
+            {current ? "저장" : "삽입"}
           </Button>
         </>
       }
@@ -473,7 +471,7 @@ function FootnoteForm({
 }
 
 /**
- * 유튜브 영상 넣기·고치기. 주소의 시작 시각(`t=90`)도 읽는다. 크기와 정렬은 넣은 뒤 영상 아래에서
+ * 유튜브 영상 삽입·편집. 주소의 시작 시각(`t=90`)도 읽는다. 크기와 정렬은 넣은 뒤 영상 아래에서
  * 고른다.
  */
 function YoutubeForm({
@@ -510,18 +508,18 @@ function YoutubeForm({
 
   return (
     <DialogForm
-      title={current ? "유튜브 영상 고치기" : "유튜브 영상 넣기"}
-      description="유튜브 영상 주소를 붙여넣습니다. 주소에 시작 시각(예: ?t=90)이 있으면 그때부터 재생합니다."
+      title={current ? "유튜브 영상 설정" : "유튜브 영상 삽입"}
+      description="주소에 시작 시간이 있으면 해당 위치부터 재생합니다. 예를 들어 ?t=90은 1분 30초부터 재생합니다."
       onSubmit={submit}
       footer={
         <>
           {current ? (
             <RemoveNodeButton editor={editor} target={current} onDone={onDone}>
-              영상 빼기
+              영상 제거
             </RemoveNodeButton>
           ) : null}
           <Button type="submit" disabled={video === null}>
-            {current ? "고치기" : "넣기"}
+            {current ? "저장" : "삽입"}
           </Button>
         </>
       }
@@ -563,8 +561,8 @@ function TableForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
 
   return (
     <DialogForm
-      title="표 넣기"
-      description="첫 줄은 제목 줄입니다. 줄과 칸은 나중에 표 메뉴에서 더하거나 뺄 수 있습니다."
+      title="표 삽입"
+      description="첫 행은 머리글입니다."
       onSubmit={() => {
         editor
           .chain()
@@ -577,11 +575,11 @@ function TableForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
           .run();
         onDone();
       }}
-      footer={<Button type="submit">넣기</Button>}
+      footer={<Button type="submit">삽입</Button>}
     >
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
-          <Label htmlFor="table-rows">줄</Label>
+          <Label htmlFor="table-rows">행</Label>
           <Input
             id="table-rows"
             type="number"
@@ -592,7 +590,7 @@ function TableForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="table-columns">칸</Label>
+          <Label htmlFor="table-columns">열</Label>
           <Input
             id="table-columns"
             type="number"

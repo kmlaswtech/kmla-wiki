@@ -107,12 +107,12 @@ export function RedirectForm({
           setBase({ revisionId: latest.revisionId, body: latest.body });
         setError(
           latest
-            ? `그 사이 다른 사람이 이 문서를 고쳤습니다${
+            ? `편집 중에 문서가 변경되었습니다. ${
                 latest.body.attrs?.redirect
-                  ? `(지금 대상: ${latest.body.attrs.redirect})`
-                  : ""
-              }. 확인한 뒤 다시 저장해 주세요.`
-            : "그 사이 다른 사람이 이 문서를 고쳤습니다. 새로 고친 뒤 다시 시도해 주세요.",
+                  ? `현재 연결 문서 ‘${latest.body.attrs.redirect}’를`
+                  : "변경 내용을"
+              } 확인한 뒤 다시 저장해 주세요.`
+            : "편집 중에 문서가 변경되었습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.",
         );
         return;
       }
@@ -170,7 +170,7 @@ export function RedirectForm({
           type="text"
           value={summary}
           maxLength={200}
-          placeholder="무엇을 왜 고쳤는지 한 줄로"
+          placeholder="변경 내용이나 이유"
           onChange={(event) => setSummary(event.target.value)}
         />
       </div>
@@ -211,19 +211,19 @@ function droppedContent(baseBody: WikiDoc, key: string): string[] {
   const storedLength = visibleTextLength(baseBody);
   if (storedLength > 0) {
     lines.push(
-      `지금 판의 본문 ${storedLength.toLocaleString("ko")}자가 화면에서 사라집니다(판 기록에는 남습니다).`,
+      `기존 본문 ${storedLength.toLocaleString("ko")}자는 편집 기록에만 남습니다.`,
     );
   }
   const categories = baseBody.attrs?.categories?.length ?? 0;
   if (categories > 0) {
-    lines.push(`분류 ${categories}개가 빠집니다.`);
+    lines.push(`분류 ${categories}개가 제거됩니다.`);
   }
   // 본문 편집기에서 쓰다가 넘어왔다면 임시 저장이 있다. 넘겨주기로 저장하면 지운다.
   const draft = loadDraft(key, null);
   const draftLength = draft ? visibleTextLength(draft.body) : 0;
   if (draftLength > 0) {
     lines.push(
-      `저장하지 않고 쓰던 글 ${draftLength.toLocaleString("ko")}자는 지워지고, 판 기록에도 남지 않습니다.`,
+      `저장하지 않은 내용 ${draftLength.toLocaleString("ko")}자가 삭제됩니다.`,
     );
   }
   return lines;
@@ -274,15 +274,15 @@ const STATUS_MESSAGE: Record<
   "checking" | "unknown" | "invalid" | "self" | "missing" | "loop",
   { text: string; error: boolean }
 > = {
-  checking: { text: "문서를 확인하는 중…", error: false },
+  checking: { text: "문서 확인 중…", error: false },
   unknown: {
-    text: "문서가 있는지 확인하지 못했습니다. 그대로 저장할 수는 있습니다.",
+    text: "연결할 문서를 확인하지 못했습니다. 저장을 시도할 수 있습니다.",
     error: false,
   },
   invalid: { text: REDIRECT_MESSAGE.target!, error: true },
   self: { text: REDIRECT_MESSAGE.self!, error: true },
   missing: {
-    text: "없는 문서입니다. 현존하는 문서로만 넘겨줄 수 있습니다.",
+    text: "연결할 문서가 없습니다.",
     error: true,
   },
   loop: { text: REDIRECT_MESSAGE.loop!, error: true },
@@ -297,14 +297,14 @@ function statusMessage(
       return null;
     case "ok":
       return check.via === null
-        ? { text: "있는 문서입니다.", error: false }
+        ? null
         : {
-            text: `${check.via}: 넘겨주기 문서입니다. 저장하면 최종 문서인 ${check.title}(으)로 넘겨줍니다.`,
+            text: `넘겨주기를 따라 최종 문서 ‘${check.title}’에 연결합니다.`,
             error: false,
           };
     case "broken":
       return {
-        text: `${check.via}: 넘겨주기 문서인데 그 대상이 없는 문서입니다. 현존하는 문서로만 넘겨줄 수 있습니다.`,
+        text: `‘${check.via}’가 연결하는 문서가 없습니다. 다른 문서를 선택해 주세요.`,
         error: true,
       };
     default:
