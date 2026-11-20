@@ -416,7 +416,11 @@ test("관리자가 훼손에 대응한다: 다른 편집 보기, 차단, 판 숨
   await expect(
     bob.getByRole("main").getByText("편집이 차단되었습니다."),
   ).toBeVisible();
-  await expect(editorOf(bob)).toHaveCount(0);
+  await expect(editorOf(bob)).toHaveText("다른 문서 내용");
+  await expect(editorOf(bob)).not.toBeEditable();
+  await expect(
+    bob.getByRole("main").getByRole("button", { name: "저장" }),
+  ).toHaveCount(0);
   await other.close();
 
   // 공개 기록과 차단 내역, 해제.
