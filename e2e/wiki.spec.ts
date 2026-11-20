@@ -417,7 +417,7 @@ test("관리자가 훼손에 대응한다: 다른 편집 보기, 차단, 판 숨
     bob.getByRole("main").getByText("편집이 차단되었습니다."),
   ).toBeVisible();
   await expect(editorOf(bob)).toHaveText("다른 문서 내용");
-  await expect(editorOf(bob)).not.toBeEditable();
+  await expect(editorOf(bob)).toHaveAttribute("contenteditable", "false");
   await expect(
     bob.getByRole("main").getByRole("button", { name: "저장" }),
   ).toHaveCount(0);
