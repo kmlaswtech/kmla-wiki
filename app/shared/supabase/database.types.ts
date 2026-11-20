@@ -282,12 +282,28 @@ export type Database = {
     Functions: {
       admin_count: { Args: Record<PropertyKey, never>; Returns: number }
       ban_editor: {
-        Args: { p_days: number; p_reason: string; p_revision_id: number }
+        Args: { p_length: string; p_reason: string; p_revision_id: number }
         Returns: number
+      }
+      change_ban_end: {
+        Args: { p_ban_log_id: number; p_length: string; p_reason: string }
+        Returns: undefined
       }
       delete_page: {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
+      }
+      find_author_lookup: { Args: { p_revision_id: number }; Returns: string }
+      get_author_lookup: {
+        Args: { p_lookup_id: string }
+        Returns: {
+          expires_at: string
+          hidden_at: string
+          is_current: boolean
+          page_title: string
+          pseudonym: string
+          source_revision_id: number
+        }[]
       }
       get_my_status: {
         Args: Record<PropertyKey, never>
@@ -334,8 +350,8 @@ export type Database = {
       list_author_edits: {
         Args: {
           p_before_revision_id?: number
-          p_reason: string
-          p_revision_id: number
+          p_limit?: number
+          p_lookup_id: string
         }
         Returns: {
           byte_delta: number
@@ -344,11 +360,22 @@ export type Database = {
           is_current: boolean
           kind: string
           page_deleted: boolean
+          page_id: number
           page_title: string
           parent_revision_id: number
           pseudonym: string
           revision_id: number
           summary: string
+        }[]
+      }
+      list_my_author_lookups: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          expires_at: string
+          lookup_id: string
+          page_title: string
+          pseudonym: string
+          source_revision_id: number
         }[]
       }
       mark_image_deleted: { Args: { p_image_id: string }; Returns: undefined }
@@ -365,6 +392,10 @@ export type Database = {
         }[]
       }
       my_pseudonym: { Args: { p_page_id: number }; Returns: string }
+      open_author_lookup: {
+        Args: { p_reason: string; p_revision_id: number }
+        Returns: string
+      }
       orphan_pages: {
         Args: { p_after?: string; p_limit?: number }
         Returns: {

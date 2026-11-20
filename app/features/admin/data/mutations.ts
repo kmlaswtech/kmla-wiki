@@ -8,17 +8,51 @@ import { unwrap } from "~/shared/supabase/errors";
  * 어떤 조치도 그 사람이 누구인지 돌려주지 않는다.
  */
 
-/** 판 작성자의 편집을 모든 문서에서 막는다. `days`가 `null`이면 기한 없음. */
+/**
+ * 판 작성자의 편집을 모든 문서에서 막는다. `length`는 Postgres interval 글(`3 day`)이고, `null`이면
+ * 기한 없음. 끝나는 시각은 서버가 정한다.
+ */
 export async function banEditor(
   revisionId: number,
-  days: number | null,
+  length: string | null,
   reason: string,
 ): Promise<void> {
   unwrap(
     await getSupabase().rpc("ban_editor", {
       p_revision_id: revisionId,
       // 생성된 타입은 NULL 가능 여부를 모른다. 기한 없는 차단은 NULL을 보낸다.
-      p_days: days as number,
+      p_length: length as string,
+      p_reason: reason,
+    }),
+  );
+}
+
+/** 진행 중인 차단의 기간을 지금부터 다시 정한다. `length`는 `banEditor`와 같다. */
+export async function changeBanEnd(
+  banId: number,
+  length: string | null,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("change_ban_end", {
+      p_ban_log_id: banId,
+      p_length: length as string,
+      p_reason: reason,
+    }),
+  );
+}
+
+/**
+ * 판 작성자의 다른 편집을 보는 허가를 연다. 사유와 함께 공개 기록에 남고, 10분 동안 유효하다.
+ * 같은 사람에 대해 2분 넘게 남은 허가가 있으면 그것을 돌려주고 다시 기록하지 않는다.
+ */
+export async function openAuthorLookup(
+  revisionId: number,
+  reason: string,
+): Promise<string> {
+  return unwrap(
+    await getSupabase().rpc("open_author_lookup", {
+      p_revision_id: revisionId,
       p_reason: reason,
     }),
   );

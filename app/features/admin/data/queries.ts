@@ -1,9 +1,12 @@
 import type { AdminAction, AdminLogEntry, BanEntry } from "../model/log";
 import type { RecentChange } from "~/features/pages";
 import { getSupabase } from "~/shared/supabase/client";
-import { unwrap } from "~/shared/supabase/errors";
+import { unwrap, WikiError } from "~/shared/supabase/errors";
 
 const PAGE_SIZE = 50;
+
+/** 다른 편집 목록의 한 쪽. 클라이언트가 늘 `p_limit`으로 보낸다. 한 쪽이 꽉 차면 더 볼 것이 있다. */
+export const AUTHOR_EDITS_PAGE_SIZE = 50;
 
 /** 공개 관리 기록, 최신순. 승인 회원 누구나 읽는다. */
 export async function listAdminLog(before?: number): Promise<AdminLogEntry[]> {
@@ -52,26 +55,55 @@ export async function listBans(): Promise<BanEntry[]> {
 }
 
 export interface AuthorEdit extends RecentChange {
+  pageId: number;
   isCurrent: boolean;
   pageDeleted: boolean;
 }
 
+/** 허가의 근거 판. "이 사람에 대한 조치" 메뉴의 대상이다. */
+export interface LookupSource {
+  id: number;
+  pageTitle: string;
+  authorPseudonym: string;
+  hiddenAt: string | null;
+  isCurrent: boolean;
+}
+
+/** 조회 허가의 근거 판과 끝나는 시각. 허가가 없거나 끝났으면 `WK016`으로 던진다. */
+export async function getAuthorLookup(
+  lookupId: string,
+): Promise<{ source: LookupSource; expiresAt: string }> {
+  const [row] = unwrap(
+    await getSupabase().rpc("get_author_lookup", { p_lookup_id: lookupId }),
+  );
+  // RPC는 행 하나를 돌려주거나 WK016으로 던진다. 생성 타입이 배열이라 타입을 좁히려고 같은 오류로 맞춘다.
+  if (!row) throw new WikiError("WK016", "lookup expired");
+  return {
+    source: {
+      id: row.source_revision_id,
+      pageTitle: row.page_title,
+      authorPseudonym: row.pseudonym,
+      hiddenAt: row.hidden_at,
+      isCurrent: row.is_current,
+    },
+    expiresAt: row.expires_at,
+  };
+}
+
 /**
- * 판 하나에서 시작해 같은 사람의 다른 편집을 본다(관리자 전용).
- *
- * 문서별 가명이 지키는 것을 푸는 기능이라, 첫 쪽을 볼 때 사유와 함께 공개 기록에 남는다.
- * 이어 보기(`before`)는 다시 기록하지 않는다.
+ * 같은 사람의 다른 편집, 최신순으로 `limit`개(관리자 전용). 유효한 조회 허가(`openAuthorLookup`)가
+ * 있어야 하고, 허가가 끝났으면 `WK016`으로 던진다.
  */
 export async function listAuthorEdits(
-  revisionId: number,
-  reason: string,
+  lookupId: string,
   before?: number,
+  limit: number = AUTHOR_EDITS_PAGE_SIZE,
 ): Promise<AuthorEdit[]> {
   const rows = unwrap(
     await getSupabase().rpc("list_author_edits", {
-      p_revision_id: revisionId,
-      p_reason: reason,
+      p_lookup_id: lookupId,
       p_before_revision_id: before,
+      p_limit: limit,
     }),
   );
   return rows.map((row) => ({
@@ -84,9 +116,45 @@ export async function listAuthorEdits(
     byteDelta: row.byte_delta,
     createdAt: row.created_at,
     hiddenAt: row.hidden_at,
+    pageId: row.page_id,
     pageTitle: row.page_title,
     isCurrent: row.is_current,
     pageDeleted: row.page_deleted,
+  }));
+}
+
+/**
+ * 이 판을 쓴 사람에 대해 내가 연, 다시 쓸 수 있는(2분 넘게 남은) 조회 허가. 없으면 `null`. 이미
+ * 사유를 적고 연 허가로 돌아가는 길이라 기록을 남기지 않는다.
+ */
+export async function findAuthorLookup(
+  revisionId: number,
+): Promise<string | null> {
+  return unwrap(
+    await getSupabase().rpc("find_author_lookup", {
+      p_revision_id: revisionId,
+    }),
+  );
+}
+
+export interface OpenLookup {
+  id: string;
+  sourceRevisionId: number;
+  /** 허가를 열 때 근거가 된 판의 문서와 가명(공개 기록과 같다). */
+  pageTitle: string | null;
+  pseudonym: string | null;
+  expiresAt: string;
+}
+
+/** 내가 연, 아직 유효한 조회 허가. 끝나는 때가 늦은 순. */
+export async function listMyAuthorLookups(): Promise<OpenLookup[]> {
+  const rows = unwrap(await getSupabase().rpc("list_my_author_lookups"));
+  return rows.map((row) => ({
+    id: row.lookup_id,
+    sourceRevisionId: row.source_revision_id,
+    pageTitle: row.page_title,
+    pseudonym: row.pseudonym,
+    expiresAt: row.expires_at,
   }));
 }
 

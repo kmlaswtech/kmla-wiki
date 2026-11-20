@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { banEditor, grantAdmin, setRevisionHidden } from "../data/mutations";
+import { authorEditsHref } from "../model/author-lookup";
+import { BanLengthDialog } from "./ban-length-dialog";
 import { ReasonDialog } from "./reason-dialog";
 import { Button } from "~/shared/ui/button";
 import {
@@ -12,8 +14,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/shared/ui/dropdown-menu";
-import { Label } from "~/shared/ui/label";
-import { NativeSelect, NativeSelectOption } from "~/shared/ui/native-select";
 
 interface RevisionAdminMenuProps {
   revision: {
@@ -26,14 +26,9 @@ interface RevisionAdminMenuProps {
   isCurrent: boolean;
   /** 조치가 끝난 뒤 목록을 다시 읽는다. */
   onDone: () => void;
+  /** "이 사람의 다른 편집 보기"를 보일지. 그 화면 안에서는 끈다. */
+  showAuthorEdits?: boolean;
 }
-
-const BAN_DAYS = [
-  { value: "1", label: "1일" },
-  { value: "7", label: "7일" },
-  { value: "30", label: "30일" },
-  { value: "", label: "기한 없음" },
-];
 
 type Open = "ban" | "hide" | "grant" | null;
 
@@ -48,9 +43,9 @@ export function RevisionAdminMenu({
   pageTitle,
   isCurrent,
   onDone,
+  showAuthorEdits = true,
 }: RevisionAdminMenuProps) {
   const [open, setOpen] = useState<Open>(null);
-  const [days, setDays] = useState("7");
   const target = `${revision.authorPseudonym} (${pageTitle})`;
   const close = (next: boolean) =>
     setOpen((current) => (next ? current : null));
@@ -71,11 +66,13 @@ export function RevisionAdminMenu({
           <ShieldAlert />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            render={<Link to={`/admin/author-edits?from=${revision.id}`} />}
-          >
-            이 사람의 다른 편집 보기
-          </DropdownMenuItem>
+          {showAuthorEdits ? (
+            <DropdownMenuItem
+              render={<Link to={authorEditsHref(revision.id)} />}
+            >
+              이 사람의 다른 편집 보기
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onClick={() => setOpen("ban")}>
             이 사람 차단
           </DropdownMenuItem>
@@ -92,33 +89,16 @@ export function RevisionAdminMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ReasonDialog
+      <BanLengthDialog
         open={open === "ban"}
         onOpenChange={close}
         title="편집 차단"
-        description={`${target}를 쓴 사람의 편집을 모든 문서에서 막습니다. 열람은 계속할 수 있습니다. 공개 차단 내역에는 이 문서의 가명만 나옵니다.`}
+        description={`${target}를 쓴 사람의 편집을 모든 문서에서 막습니다. 열람은 계속할 수 있습니다.`}
         confirmLabel="차단"
         destructive
-        onConfirm={(reason) =>
-          banEditor(revision.id, days === "" ? null : Number(days), reason)
-        }
+        onConfirm={(length, reason) => banEditor(revision.id, length, reason)}
         onDone={onDone}
-      >
-        <div className="grid gap-1.5">
-          <Label htmlFor="ban-days">기간</Label>
-          <NativeSelect
-            id="ban-days"
-            value={days}
-            onChange={(event) => setDays(event.target.value)}
-          >
-            {BAN_DAYS.map((option) => (
-              <NativeSelectOption key={option.value} value={option.value}>
-                {option.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
-      </ReasonDialog>
+      />
 
       <ReasonDialog
         open={open === "hide"}
@@ -127,7 +107,7 @@ export function RevisionAdminMenu({
         description={
           revision.hiddenAt
             ? `r${revision.id} 판을 다시 모두에게 보이게 합니다.`
-            : `r${revision.id} 판을 일반 사용자에게 보이지 않게 합니다. 실명이 나오는 사건, 비방, 개인정보처럼 기록에 남아 있으면 안 되는 내용에 씁니다. 숨긴 사실과 사유는 공개됩니다.`
+            : `r${revision.id} 판을 일반 사용자에게 보이지 않게 합니다. 실명이 나오는 사건, 비방, 개인정보처럼 기록에 남아 있으면 안 되는 내용에 사용합니다. 숨긴 사실과 사유는 공개됩니다.`
         }
         confirmLabel={revision.hiddenAt ? "숨김 해제" : "숨기기"}
         destructive={!revision.hiddenAt}
@@ -141,7 +121,7 @@ export function RevisionAdminMenu({
         open={open === "grant"}
         onOpenChange={close}
         title="관리자로 지정"
-        description={`${target}를 쓴 사람을 관리자로 지정합니다. 공개 기록에는 "관리자 1명을 지정함"으로만 남고, 어떤 가명인지는 남지 않습니다.`}
+        description={`${target}를 쓴 사람을 관리자로 지정합니다. 누가 관리자로 등록되었는지는 남지 않습니다.`}
         confirmLabel="지정"
         onConfirm={(reason) => grantAdmin(revision.id, reason)}
         onDone={onDone}

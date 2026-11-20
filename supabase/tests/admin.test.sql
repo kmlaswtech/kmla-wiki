@@ -14,10 +14,14 @@ select logout();
 
 -- ── 일반 사용자는 관리 기능을 쓸 수 없다 ─────────────────────────────────────
 select login(:alice);
-select throws_ok(format($$select public.ban_editor(%s, 7, '도배')$$, :b1), '42501', null,
+select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '도배')$$, :b1), '42501', null,
   'a member cannot ban');
-select throws_ok(format($$select * from public.list_author_edits(%s, '확인')$$, :b1), '42501', null,
-  'a member cannot list another author''s edits');
+select throws_ok(format($$select public.open_author_lookup(%s, '확인')$$, :b1), '42501', null,
+  'a member cannot open a lookup of another author''s edits');
+select throws_ok(format($$select public.find_author_lookup(%s)$$, :b1), '42501', null,
+  'a member cannot look for an open lookup');
+select throws_ok($$select * from public.list_my_author_lookups()$$, '42501', null,
+  'a member cannot list lookups');
 select throws_ok(format($$select public.set_protection(%s, 'admin', '보호')$$, :p1), '42501', null,
   'a member cannot protect a page');
 select throws_ok(format($$select public.delete_page(%s, '삭제')$$, :p1), '42501', null,
@@ -35,12 +39,22 @@ select logout();
 
 -- ── 같은 사람의 다른 편집 ────────────────────────────────────────────────────
 select login(:admin);
-select throws_ok(format($$select * from public.list_author_edits(%s, ' ')$$, :b1), 'WK014', null,
-  'listing an author''s edits requires a reason');
+select throws_ok(format($$select public.open_author_lookup(%s, ' ')$$, :b1), 'WK014', null,
+  'opening a lookup requires a reason');
+select open_author_lookup as lookup1 from public.open_author_lookup(:b1, '여러 문서 훼손 확인') \gset
 select set_eq(
-  format($$select revision_id from public.list_author_edits(%s, '여러 문서 훼손 확인')$$, :b1),
+  format($$select revision_id from public.list_author_edits(%L)$$, :'lookup1'),
   format($$values (%s::bigint), (%s::bigint)$$, :b1, :b2),
   'an admin sees the same author''s edits across pages, and nobody else''s'
+);
+select results_eq(
+  format($$select source_revision_id, page_title, pseudonym from public.get_author_lookup(%L)$$, :'lookup1'),
+  format($$select id, '훼손 문서 하나'::text, author_pseudonym from public.revisions where id = %s$$, :b1),
+  'the lookup remembers the revision it started from, with its page and pseudonym'
+);
+select is(
+  (select count(*) from public.list_author_edits(:'lookup1', null, 1)), 1::bigint,
+  'a caller can read fewer rows at once'
 );
 select results_eq(
   $$select action, page_title, pseudonym, reason from public.admin_log order by id desc limit 1$$,
@@ -54,24 +68,106 @@ select is(
   'the failed attempt without a reason was not recorded'
 );
 select lives_ok(
-  format($$select * from public.list_author_edits(%s, null, %s)$$, :b1, :b2),
+  format($$select * from public.list_author_edits(%L, %s)$$, :'lookup1', :b2),
   'paging further does not need the reason again');
 select is(
-  (select count(*) from public.admin_log where action = 'view_author_edits'), 1::bigint,
-  'and is not recorded a second time'
+  public.open_author_lookup(:b2, '다른 판에서 다시 조회'), :'lookup1'::uuid,
+  'opening again for the same author within the window reuses the lookup'
 );
+select is(
+  (select count(*) from public.admin_log where action = 'view_author_edits'), 1::bigint,
+  'and nothing more is recorded'
+);
+select is(
+  public.find_author_lookup(:b2), :'lookup1'::uuid,
+  'the open lookup is found from any revision by the same author, without a reason'
+);
+select is(public.find_author_lookup(:a1), null::uuid, 'but not from another author''s revision');
+select is(
+  (select count(*) from public.admin_log where action = 'view_author_edits'), 1::bigint,
+  'finding a lookup records nothing'
+);
+select results_eq(
+  $$select lookup_id, page_title from public.list_my_author_lookups()$$,
+  format($$values (%L::uuid, '훼손 문서 하나'::text)$$, :'lookup1'),
+  'an admin lists their own open lookups'
+);
+select throws_ok(
+  format($$select * from public.list_author_edits(%L)$$, gen_random_uuid()), 'WK016', null,
+  'an unknown lookup cannot be read');
+select throws_ok(
+  $$select * from public.get_author_lookup('not-a-uuid')$$, 'WK016', null,
+  'a malformed lookup id reads as an expired lookup');
+select logout();
+update private.author_lookups set expires_at = now() + interval '1 minute' where id = :'lookup1';
+select login(:admin);
+select isnt(
+  public.open_author_lookup(:b2, '곧 끝나서 새로 조회'), :'lookup1'::uuid,
+  'a lookup about to expire is not reused; a new one is opened'
+);
+select is(
+  (select count(*) from public.admin_log where action = 'view_author_edits'), 2::bigint,
+  'and the new lookup is recorded with its own reason'
+);
+select logout();
+update private.author_lookups set expires_at = now() - interval '1 second' where id = :'lookup1';
+select login(:admin);
+select throws_ok(
+  format($$select * from public.list_author_edits(%L)$$, :'lookup1'), 'WK016', null,
+  'an expired lookup cannot be read');
+select logout();
+
+-- 다른 관리자의 허가는 쓸 수 없다. 앨리스를 잠시 관리자로 만들어 확인한다.
+update private.members set is_admin = true, admin_handle = '관리자 Z' where auth_user_id = :alice;
+select login(:admin);
+select open_author_lookup as lookup2 from public.open_author_lookup(:b1, '다시 확인') \gset
+select logout();
+select login(:alice);
+select throws_ok(
+  format($$select * from public.list_author_edits(%L)$$, :'lookup2'), 'WK016', null,
+  'one admin cannot use another admin''s lookup');
+select logout();
+update private.members set is_admin = false, admin_handle = null where auth_user_id = :alice;
+select login(:admin);
 
 -- ── 차단 ─────────────────────────────────────────────────────────────────────
-select throws_ok(format($$select public.ban_editor(%s, 7, '')$$, :b1), 'WK014', null,
+select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '')$$, :b1), 'WK014', null,
   'a ban requires a reason');
-select ban_editor as ban1 from public.ban_editor(:b1, 7, '여러 문서 훼손') \gset
-select throws_ok(format($$select public.ban_editor(%s, 7, '또 차단')$$, :b2), 'WK011', null,
+select ban_editor as ban1 from public.ban_editor(:b1, interval '7 days', '여러 문서 훼손') \gset
+select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '또 차단')$$, :b2), 'WK011', null,
   'an already banned author cannot be banned again');
 select results_eq(
   format($$select pseudonym, page_title, reason, lifted_at is null from public.ban_log where id = %s$$, :ban1),
   format($$select author_pseudonym, '훼손 문서 하나'::text, '여러 문서 훼손'::text, true
            from public.revisions where id = %s$$, :b1),
   'the public ban log shows only the pseudonym on the source page'
+);
+select throws_ok(
+  format($$select public.change_ban_end(%s, interval '30 minutes', '짧게')$$, :ban1), 'WK017', null,
+  'a ban is at least an hour');
+select throws_ok(
+  format($$select public.change_ban_end(%s, interval '11 years', '길게')$$, :ban1), 'WK017', null,
+  'a ban cannot end more than ten years ahead');
+select lives_ok(
+  format($$select public.change_ban_end(%s, interval '3 hours', '줄임')$$, :ban1),
+  'an admin shortens an active ban');
+select logout();
+select ok(
+  (select ends_at < now() + interval '4 hours' from public.ban_log where id = :ban1)
+  and (select ends_at < now() + interval '4 hours' from private.bans where ban_log_id = :ban1),
+  'the public log and the private ban both get the new end');
+select login(:admin);
+select lives_ok(
+  format($$select public.change_ban_end(%s, null, '무기한으로')$$, :ban1),
+  'an admin makes a ban indefinite');
+select throws_ok(
+  format($$select public.change_ban_end(%s, null, '또 무기한')$$, :ban1), 'WK011', null,
+  'changing to the same end is rejected');
+select results_eq(
+  $$select note ~ '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}까지$', note = '기한 없음'
+    from public.admin_log where action = 'change_ban' order by id$$,
+  $$values (true, false), (false, true)$$,
+  'each change is recorded publicly with the new end'
 );
 select logout();
 
@@ -152,7 +248,7 @@ select results_eq(
   $$values (null::text, null::text)$$,
   'the grant is public but does not reveal which pseudonym became an admin'
 );
-select throws_ok(format($$select public.ban_editor(%s, 7, '관리자 차단')$$, :a1), 'WK010', null,
+select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '관리자 차단')$$, :a1), 'WK010', null,
   'an admin cannot be banned');
 select logout();
 

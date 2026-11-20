@@ -2,7 +2,13 @@ import { useState } from "react";
 import { Link, redirect, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/index";
-import { listAdmins, ReasonDialog, revokeAdmin } from "~/features/admin";
+import {
+  listAdmins,
+  listMyAuthorLookups,
+  OpenLookupList,
+  ReasonDialog,
+  revokeAdmin,
+} from "~/features/admin";
 import { loadMemberStatus, withVerifiedMember } from "~/features/auth";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
@@ -11,7 +17,10 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   // 화면을 가리는 검사다. 실제 권한은 각 RPC가 검사한다.
   const status = await loadMemberStatus();
   if (!status?.isAdmin) throw redirect("/");
-  return { admins: await withVerifiedMember(request, listAdmins) };
+  const [admins, lookups] = await withVerifiedMember(request, () =>
+    Promise.all([listAdmins(), listMyAuthorLookups()]),
+  );
+  return { admins, lookups };
 }
 
 export const meta: Route.MetaFunction = () => [{ title: "관리 - 큼온 위키" }];
@@ -21,7 +30,7 @@ export const meta: Route.MetaFunction = () => [{ title: "관리 - 큼온 위키"
  * 것(관리자 목록)과 다른 화면으로 가는 길만 둔다.
  */
 export default function AdminRoute({ loaderData }: Route.ComponentProps) {
-  const { admins } = loaderData;
+  const { admins, lookups } = loaderData;
   const revalidator = useRevalidator();
   const [revoking, setRevoking] = useState<string | null>(null);
 
@@ -55,6 +64,15 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
             (모든 회원에게 공개)
           </li>
         </ul>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-lg font-semibold">진행 중인 조회</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          내가 연 &quot;다른 편집 보기&quot; 허가입니다. 끝나기 전에는 사유를
+          다시 적지 않고 들어갈 수 있습니다.
+        </p>
+        <OpenLookupList lookups={lookups} />
       </section>
 
       <section>

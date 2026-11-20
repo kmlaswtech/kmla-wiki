@@ -129,8 +129,7 @@ export default function LoginPage({
             </p>
           ) : null}
           <p className="text-xs text-muted-foreground">
-            비밀번호는 kmla.online에서만 입력합니다. 위키는 회원 여부와 내부
-            식별 번호만 받고, 이름·이메일·기수는 받지 않습니다.
+            비밀번호는 kmla.online에서만 입력합니다.
           </p>
 
           {env.devLogin ? (
