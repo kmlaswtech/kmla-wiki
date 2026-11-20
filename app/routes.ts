@@ -34,6 +34,7 @@ export default [
     route("log", "routes/wiki/log.tsx"),
     route("admin", "routes/admin/index.tsx"),
     route("admin/author-edits", "routes/admin/author-edits.tsx"),
+    route("admin/bulk-revert", "routes/admin/bulk-revert.tsx"),
     route("*", "routes/wiki/not-found.tsx"),
   ]),
 ] satisfies RouteConfig;

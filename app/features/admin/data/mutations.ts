@@ -1,5 +1,17 @@
+import type { BulkRevertResult } from "../model/bulk-revert";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap } from "~/shared/supabase/errors";
+
+/** 신고가 닫혔을 수 있다는 알림. 머리띠의 신고 수(`useOpenReportCount`)가 받아 다시 센다. */
+export const OPEN_REPORTS_CHANGED = "wiki:open-reports-changed";
+
+/**
+ * 신고를 닫는 조치(신고 닫기, 판 숨기기, 문서 삭제, 일괄 되돌리기)가 성공한 뒤 알린다. 화면이 조치마다
+ * 따로 부르지 않게 이 파일의 함수들이 부른다.
+ */
+export function notifyOpenReportsChanged(): void {
+  window.dispatchEvent(new Event(OPEN_REPORTS_CHANGED));
+}
 
 /**
  * 관리 조치. 관리자 여부, 사유, 대상 상태는 모두 서버가 검사한다.
@@ -58,6 +70,49 @@ export async function openAuthorLookup(
   );
 }
 
+/**
+ * 일괄 되돌리기. `items`는 미리보기 때의 문서와 현재 판이다. 서버가 문서를 잠그고 계획을 다시 세워,
+ * 그사이 현재 판이 바뀐 문서는 건너뛴다. 한 번에 200개까지(WK018).
+ */
+export async function bulkRevert(
+  lookupId: string,
+  fromRevisionId: number | null,
+  items: readonly { pageId: number; currentRevisionId: number }[],
+  reason: string,
+): Promise<BulkRevertResult[]> {
+  const rows = unwrap(
+    await getSupabase().rpc("bulk_revert", {
+      p_lookup_id: lookupId,
+      // 생성된 타입은 NULL 가능 여부를 모른다. NULL이면 대상의 모든 편집이다.
+      p_from_revision_id: fromRevisionId as number,
+      p_items: items.map((item) => ({
+        page_id: item.pageId,
+        current_revision_id: item.currentRevisionId,
+      })),
+      p_reason: reason,
+    }),
+  );
+  notifyOpenReportsChanged();
+  return rows.map((row) => ({
+    pageId: row.page_id,
+    outcome: row.outcome as BulkRevertResult["outcome"],
+  }));
+}
+
+/** 판 하나의 처리되지 않은 신고를 모두 닫는다. 결과는 비공개로 남는다. */
+export async function resolveReports(
+  revisionId: number,
+  resolution: "handled" | "dismissed",
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("resolve_reports", {
+      p_revision_id: revisionId,
+      p_resolution: resolution,
+    }),
+  );
+  notifyOpenReportsChanged();
+}
+
 export async function liftBan(banId: number, reason: string): Promise<void> {
   unwrap(
     await getSupabase().rpc("lift_ban", {
@@ -92,6 +147,7 @@ export async function deletePage(
       p_reason: reason,
     }),
   );
+  notifyOpenReportsChanged();
 }
 
 export async function restorePage(
@@ -118,6 +174,24 @@ export async function setRevisionHidden(
       p_reason: reason,
     }),
   );
+  if (hidden) notifyOpenReportsChanged();
+}
+
+/**
+ * 판을 숨긴다. 현재 판이면 먼저 그 앞의 보이는 판으로 되돌리고, 그런 판이 없으면 문서를 삭제한다.
+ * 그 판의 신고는 닫힌다.
+ */
+export async function revertAndHideRevision(
+  revisionId: number,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("revert_and_hide_revision", {
+      p_revision_id: revisionId,
+      p_reason: reason,
+    }),
+  );
+  notifyOpenReportsChanged();
 }
 
 export async function grantAdmin(

@@ -120,6 +120,28 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."revision_target"(bigint) FROM PUBLIC;
 
+-- 문서를 삭제한다(숨긴다). 삭제 판을 `관리자` 이름으로 쓰고, 삭제된 문서의 판은 보이지 않으므로 그
+-- 판들의 신고를 닫는다. 잠금, 검사, 기록은 부르는 쪽이 한다.
+CREATE OR REPLACE FUNCTION private.delete_page_as_admin (
+  p_page_id  bigint,
+  p_admin_id bigint,
+  p_body     jsonb,
+  p_summary  text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
+  update public.pages set deleted_at = now() where id = p_page_id;
+  perform private.close_reports(array(select revision.id from public.revisions as revision where revision.page_id = p_page_id));
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."delete_page_as_admin"(bigint, bigint, jsonb, text) FROM PUBLIC;
+
 -- 차단 길이에서 끝나는 시각을 낸다. NULL은 기한 없음이다. 서버 시계로 세고, 개월은 Postgres가 그
 -- 달의 마지막 날로 맞춘다(1월 31일 + 1개월 = 2월 28일).
 CREATE OR REPLACE FUNCTION private.ban_end (
@@ -307,8 +329,7 @@ begin
   end if;
 
   select body into v_body from public.revisions where id = v_page.current_revision_id;
-  perform private.write_revision(p_page_id, v_admin_id, coalesce(v_body, private.empty_doc()), v_reason, 'delete', true);
-  update public.pages set deleted_at = now() where id = p_page_id;
+  perform private.delete_page_as_admin(p_page_id, v_admin_id, coalesce(v_body, private.empty_doc()), v_reason);
   perform private.log_admin_action('delete_page', v_reason, v_page.title);
 end;
 $function$;
@@ -659,6 +680,284 @@ GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint, integer) TO
 
 REVOKE ALL ON FUNCTION "public"."list_author_edits"(text, bigint, integer) FROM PUBLIC, "anon";
 
+-- 일괄 되돌리기의 문서별 계획. 대상이 `p_from_revision_id`부터 쓴 판을 걷어 낸다. 문서마다 그 판들을
+-- 뺀 마지막 판(대상이 쓰지 않았거나 시작점보다 앞선 판)으로 돌아간다. 그런 판이 없으면 대상이 범위
+-- 안에서 만든 문서라 삭제한다. `p_page_ids`가 있으면 그 문서만 본다.
+--
+-- status:
+--   revert    현재 판이 대상의 판이다. 되돌린다.
+--   delete    돌아갈 판이 없다. 삭제한다.
+--   same      되돌려도 본문이 같다(이동만 했거나 스스로 되돌렸다). 할 일이 없다.
+--   clean     다른 사람이 이미 대상의 첫 편집 앞 본문으로 되돌렸다. 할 일이 없다.
+--   hidden    돌아갈 판이 숨긴 판이다. 숨긴 내용을 새 판으로 다시 공개하지 않도록 건너뛴다.
+--   conflict  대상의 편집 뒤에 다른 사람이 편집했다. 건너뛴다.
+--   deleted   이미 삭제된 문서다. 건너뛴다.
+-- kept_count: 되돌려도 남는 대상의 편집 수. 대상의 편집 사이에 다른 사람의 판이 끼어 있으면, 돌아갈
+-- 판(다른 사람의 판)에 대상의 앞선 편집이 들어 있다.
+-- move_leftover: 대상의 이동이 옛 이름에 남긴 넘겨주기다(이동 판과 같은 트랜잭션에서 생겼다). 지우면
+-- 옮겨진 문서를 옛 이름으로 다시 옮기는 길이 막히지 않지만, 화면은 처음에 고르지 않는다.
+CREATE OR REPLACE FUNCTION private.bulk_revert_plan (
+  p_target_id        bigint,
+  p_from_revision_id bigint,
+  p_page_ids         bigint[] DEFAULT NULL::bigint[]
+)
+  RETURNS TABLE (
+    page_id             bigint,
+    page_title          text,
+    current_revision_id bigint,
+    restore_revision_id bigint,
+    edit_count          integer,
+    kept_count          integer,
+    has_move            boolean,
+    move_leftover       boolean,
+    status              text
+  )
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  with bad as materialized (
+    select revision.id, revision.page_id, revision.kind
+    from private.revision_authors as author
+    join public.revisions as revision on revision.id = author.revision_id
+    where author.member_id = p_target_id
+      and revision.id >= coalesce(p_from_revision_id, 0)
+      and (p_page_ids is null or revision.page_id = any (p_page_ids))
+  ),
+  touched as (
+    select bad.page_id, min(bad.id) as first_bad_id from bad group by bad.page_id
+  ),
+  planned as (
+    select
+      page.id, page.title, page.current_revision_id, page.deleted_at,
+      exists (select 1 from bad where bad.id = page.current_revision_id) as current_is_bad,
+      -- 대상의 판이 아닌 마지막 판. 판 색인(`revisions_page_idx`)을 최신부터 읽어 처음 만나는 판이다.
+      (
+        select revision.id from public.revisions as revision
+        where revision.page_id = page.id
+          and not exists (select 1 from bad where bad.id = revision.id)
+        order by revision.id desc
+        limit 1
+      ) as restore_id,
+      -- 대상의 첫 편집 바로 앞 판. 현재 본문이 이것과 같으면 누군가 이미 되돌렸다.
+      (
+        select revision.id from public.revisions as revision
+        where revision.page_id = page.id and revision.id < touched.first_bad_id
+        order by revision.id desc
+        limit 1
+      ) as before_id
+    from touched
+    join public.pages as page on page.id = touched.page_id
+  ),
+  -- 되돌리면 걷어 낼 판(`removed`)과 남는 판. 충돌이나 삭제된 문서면 이 문서에서 대상이 쓴 판 전부를
+  -- 걷어 낼 판으로 센다(보이기만 한다).
+  counted as (
+    select
+      planned.id as page_id,
+      count(*) filter (where flag.removed)::integer as edit_count,
+      count(*) filter (where not flag.removed)::integer as kept_count,
+      coalesce(bool_or(bad.kind = 'move') filter (where flag.removed), false) as has_move
+    from planned
+    join bad on bad.page_id = planned.id
+    cross join lateral (
+      select planned.deleted_at is not null
+          or not planned.current_is_bad
+          or bad.id > coalesce(planned.restore_id, 0) as removed
+    ) as flag
+    group by planned.id
+  )
+  select
+    planned.id,
+    planned.title,
+    planned.current_revision_id,
+    planned.restore_id,
+    counted.edit_count,
+    counted.kept_count,
+    counted.has_move,
+    -- 이동이 남긴 넘겨주기: 문서의 첫 판이 대상의 이동 판과 같은 트랜잭션(같은 시각)에 쓰였다.
+    -- 대상의 판만 시각 색인(`revision_authors_member_idx`)으로 찾는다.
+    case when planned.restore_id is null then exists (
+      select 1
+      from public.revisions as first_revision
+      join private.revision_authors as mover
+        on mover.member_id = p_target_id and mover.created_at = first_revision.created_at
+      join public.revisions as moved on moved.id = mover.revision_id and moved.kind = 'move'
+      where first_revision.id = (
+          select min(revision.id) from public.revisions as revision where revision.page_id = planned.id
+        )
+    ) else false end,
+    case
+      when planned.deleted_at is not null then 'deleted'
+      when not planned.current_is_bad then
+        case when before_rev.body = current_rev.body then 'clean' else 'conflict' end
+      when planned.restore_id is null then 'delete'
+      when restore_rev.hidden_at is not null then 'hidden'
+      when private.settle_redirect_body(planned.title, restore_rev.body) = current_rev.body then 'same'
+      else 'revert'
+    end
+  from planned
+  join counted on counted.page_id = planned.id
+  left join public.revisions as current_rev on current_rev.id = planned.current_revision_id
+  left join public.revisions as restore_rev on restore_rev.id = planned.restore_id
+  left join public.revisions as before_rev on before_rev.id = planned.before_id
+  order by planned.current_revision_id desc;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."bulk_revert_plan"(bigint, bigint, bigint[]) FROM PUBLIC;
+
+-- 일괄 되돌리기 미리보기. 기록을 남기지 않는다. `p_from_revision_id`가 NULL이면 대상의 모든 편집이다.
+CREATE OR REPLACE FUNCTION public.preview_bulk_revert (
+  p_lookup_id          text,
+  p_from_revision_id   bigint DEFAULT NULL::bigint
+)
+  RETURNS TABLE (
+    page_id             bigint,
+    page_title          text,
+    current_revision_id bigint,
+    restore_revision_id bigint,
+    edit_count          integer,
+    kept_count          integer,
+    has_move            boolean,
+    move_leftover       boolean,
+    status              text
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_target_id bigint;
+begin
+  perform private.require_admin();
+  v_target_id := (private.author_lookup(p_lookup_id)).target_member_id;
+  return query
+  select * from private.bulk_revert_plan(v_target_id, p_from_revision_id)
+  limit 500;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."preview_bulk_revert"(text, bigint) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."preview_bulk_revert"(text, bigint) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."preview_bulk_revert"(text, bigint) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."preview_bulk_revert"(text, bigint) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."preview_bulk_revert"(text, bigint) FROM PUBLIC, "anon";
+
+-- 일괄 되돌리기 실행. `p_items`는 `[{"page_id": 1, "current_revision_id": 2}, …]`이고, 현재 판은
+-- 미리보기 때 본 값이다. 계획은 문서를 잠근 뒤 서버가 다시 세운다. 그 사이 현재 판이 바뀌었거나 할
+-- 일이 없는 문서는 건너뛴다(`skipped`). 판은 `관리자` 이름으로 쓰고, 공개 기록에는 한 줄만 남긴다.
+CREATE OR REPLACE FUNCTION public.bulk_revert (
+  p_lookup_id        text,
+  p_from_revision_id bigint,
+  p_items            jsonb,
+  p_reason           text
+)
+  RETURNS TABLE (
+    page_id    bigint,
+    page_title text,
+    outcome    text
+  )
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_admin_id bigint := private.require_admin();
+  v_reason text := private.require_reason(p_reason);
+  v_lookup private.author_lookups;
+  v_expected jsonb;
+  v_page_ids bigint[];
+  v_plan record;
+  v_body jsonb;
+  v_source record;
+  v_reverted integer := 0;
+  v_deleted integer := 0;
+begin
+  v_lookup := private.author_lookup(p_lookup_id);
+  if jsonb_typeof(p_items) is distinct from 'array' then
+    raise exception 'items must be an array' using errcode = '22023';
+  end if;
+
+  -- 문서 id → 미리보기 때의 현재 판.
+  select
+    coalesce(jsonb_object_agg(item ->> 'page_id', item -> 'current_revision_id'), '{}'::jsonb),
+    coalesce(array_agg(distinct (item ->> 'page_id')::bigint), '{}')
+  into v_expected, v_page_ids
+  from jsonb_array_elements(p_items) as item;
+  if cardinality(v_page_ids) = 0 then
+    raise exception 'nothing to save' using errcode = 'WK007';
+  end if;
+  if cardinality(v_page_ids) > 200 then
+    raise exception 'too many pages' using errcode = 'WK018';
+  end if;
+
+  -- 문서를 id 순서로 잠근다. 다른 저장이나 다른 일괄 되돌리기와 서로를 기다리지 않게 한다.
+  perform 1 from public.pages as page where page.id = any (v_page_ids) order by page.id for update;
+
+  for v_plan in
+    select * from private.bulk_revert_plan(v_lookup.target_member_id, p_from_revision_id, v_page_ids) as plan
+    order by plan.page_id
+  loop
+    page_id := v_plan.page_id;
+    page_title := v_plan.page_title;
+    if (v_expected ->> v_plan.page_id::text)::bigint is distinct from v_plan.current_revision_id
+       or v_plan.status not in ('revert', 'delete') then
+      outcome := 'skipped';
+    elsif v_plan.status = 'revert' then
+      select private.settle_redirect_body(v_plan.page_title, revision.body) into v_body
+      from public.revisions as revision where revision.id = v_plan.restore_revision_id;
+      perform private.write_revision(
+        v_plan.page_id, v_admin_id, v_body,
+        format('r%s 판으로 되돌림: 일괄 되돌리기', v_plan.restore_revision_id), 'revert', true
+      );
+      v_reverted := v_reverted + 1;
+      outcome := 'reverted';
+      -- 걷어 낸 판(돌아갈 판 뒤의 대상의 판)에 걸린 신고를 닫는다.
+      perform private.close_reports(array(
+        select author.revision_id
+        from private.revision_authors as author
+        join public.revisions as revision on revision.id = author.revision_id
+        where author.member_id = v_lookup.target_member_id
+          and revision.page_id = v_plan.page_id
+          and revision.id >= coalesce(p_from_revision_id, 0)
+          and revision.id > v_plan.restore_revision_id
+      ));
+    else
+      -- `delete_page`와 같다. 현재 본문 그대로 삭제 판을 쓰고 숨긴다. 관리자가 복구할 수 있다.
+      select revision.body into v_body
+      from public.revisions as revision where revision.id = v_plan.current_revision_id;
+      perform private.delete_page_as_admin(v_plan.page_id, v_admin_id, v_body, '일괄 되돌리기로 삭제');
+      v_deleted := v_deleted + 1;
+      outcome := 'deleted';
+    end if;
+    return next;
+  end loop;
+
+  if v_reverted + v_deleted > 0 then
+    select * into v_source from private.revision_target(v_lookup.source_revision_id);
+    perform private.log_admin_action(
+      'bulk_revert', v_reason, v_source.page_title, v_lookup.source_revision_id, v_source.pseudonym,
+      format('문서 %s개 되돌림, %s개 삭제', v_reverted, v_deleted)
+    );
+  end if;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."bulk_revert"(text, bigint, jsonb, text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."bulk_revert"(text, bigint, jsonb, text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."bulk_revert"(text, bigint, jsonb, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."bulk_revert"(text, bigint, jsonb, text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."bulk_revert"(text, bigint, jsonb, text) FROM PUBLIC, "anon";
+
 CREATE OR REPLACE FUNCTION public.restore_page (
   p_page_id bigint,
   p_reason  text
@@ -787,6 +1086,64 @@ GRANT EXECUTE ON FUNCTION "public"."set_protection"(bigint, text, text) TO "post
 
 REVOKE ALL ON FUNCTION "public"."set_protection"(bigint, text, text) FROM PUBLIC, "anon";
 
+-- 판을 숨긴다. 현재 판이면 먼저 그 앞의 보이는 판으로 되돌린다(`관리자` 이름의 새 판). 보이는 앞 판이
+-- 없으면(문서의 첫 판이거나 앞 판이 모두 숨겨졌다) 빈 본문으로 문서를 삭제한다. 숨긴 내용이 삭제 판이나
+-- 복구로 다시 나오지 않게 한다. 숨기기는 `set_revision_hidden`이 하고 기록하며 신고도 닫는다.
+CREATE OR REPLACE FUNCTION public.revert_and_hide_revision (
+  p_revision_id bigint,
+  p_reason      text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_admin_id bigint := private.require_admin();
+  v_reason text := private.require_reason(p_reason);
+  v_page public.pages;
+  v_restore public.revisions;
+begin
+  select page.* into v_page
+  from public.revisions as revision
+  join public.pages as page on page.id = revision.page_id
+  where revision.id = p_revision_id
+  for update of page;
+  if v_page.id is null then
+    raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+
+  if v_page.current_revision_id = p_revision_id then
+    select * into v_restore
+    from public.revisions as revision
+    where revision.page_id = v_page.id and revision.id < p_revision_id and revision.hidden_at is null
+    order by revision.id desc
+    limit 1;
+    if v_restore.id is null then
+      perform private.delete_page_as_admin(v_page.id, v_admin_id, private.empty_doc(), v_reason);
+      perform private.log_admin_action('delete_page', v_reason, v_page.title);
+    else
+      perform private.write_revision(
+        v_page.id, v_admin_id, private.settle_redirect_body(v_page.title, v_restore.body),
+        format('r%s 판으로 되돌림', v_restore.id), 'revert', true
+      );
+    end if;
+  end if;
+
+  perform public.set_revision_hidden(p_revision_id, true, v_reason);
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) FROM PUBLIC, "anon";
+
 CREATE OR REPLACE FUNCTION public.set_revision_hidden (
   p_revision_id bigint,
   p_hidden      boolean,
@@ -825,6 +1182,9 @@ begin
     case when p_hidden then 'hide_revision' else 'unhide_revision' end,
     v_reason, v_page.title, p_revision_id, v_revision.author_pseudonym
   );
+  if p_hidden then
+    perform private.close_reports(array[p_revision_id]);
+  end if;
 end;
 $function$;
 
@@ -854,7 +1214,7 @@ CREATE TABLE "public"."admin_log" (
   CONSTRAINT "admin_log_action"
     CHECK
     ((action = ANY (ARRAY['ban'::text, 'lift_ban'::text, 'grant_admin'::text, 'revoke_admin'::text, 'protect'::text, 'unprotect'::text, 'delete_page'::text, 'restore_page'::text,
-    'hide_revision'::text, 'unhide_revision'::text, 'view_author_edits'::text, 'change_ban'::text]))),
+    'hide_revision'::text, 'unhide_revision'::text, 'view_author_edits'::text, 'change_ban'::text, 'bulk_revert'::text]))),
   CONSTRAINT "admin_log_pkey" PRIMARY KEY (id)
 );
 

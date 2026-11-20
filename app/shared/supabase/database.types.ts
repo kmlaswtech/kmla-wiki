@@ -285,10 +285,24 @@ export type Database = {
         Args: { p_length: string; p_reason: string; p_revision_id: number }
         Returns: number
       }
+      bulk_revert: {
+        Args: {
+          p_from_revision_id: number
+          p_items: Json
+          p_lookup_id: string
+          p_reason: string
+        }
+        Returns: {
+          outcome: string
+          page_id: number
+          page_title: string
+        }[]
+      }
       change_ban_end: {
         Args: { p_ban_log_id: number; p_length: string; p_reason: string }
         Returns: undefined
       }
+      count_open_reports: { Args: Record<PropertyKey, never>; Returns: number }
       delete_page: {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
@@ -378,6 +392,23 @@ export type Database = {
           source_revision_id: number
         }[]
       }
+      list_open_reports: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          dismissed_count: number
+          first_reported_at: string
+          hidden_at: string
+          is_current: boolean
+          page_deleted: boolean
+          page_id: number
+          page_title: string
+          parent_revision_id: number
+          pseudonym: string
+          reports: Json
+          revision_created_at: string
+          revision_id: number
+        }[]
+      }
       mark_image_deleted: { Args: { p_image_id: string }; Returns: undefined }
       move_page: {
         Args: {
@@ -415,6 +446,20 @@ export type Database = {
           title: string
         }[]
       }
+      preview_bulk_revert: {
+        Args: { p_from_revision_id?: number; p_lookup_id: string }
+        Returns: {
+          current_revision_id: number
+          edit_count: number
+          has_move: boolean
+          kept_count: number
+          move_leftover: boolean
+          page_id: number
+          page_title: string
+          restore_revision_id: number
+          status: string
+        }[]
+      }
       random_page: { Args: Record<PropertyKey, never>; Returns: string }
       record_member_verification: {
         Args: {
@@ -436,6 +481,10 @@ export type Database = {
         Args: { p_height: number; p_image_id: string; p_width: number }
         Returns: undefined
       }
+      report_revision: {
+        Args: { p_category: string; p_note?: string; p_revision_id: number }
+        Returns: undefined
+      }
       resolve_body: { Args: { p_body: Json }; Returns: Json }
       resolve_images: { Args: { p_body: Json }; Returns: Json }
       resolve_redirect: {
@@ -446,8 +495,16 @@ export type Database = {
           via: string
         }[]
       }
+      resolve_reports: {
+        Args: { p_resolution: string; p_revision_id: number }
+        Returns: number
+      }
       restore_page: {
         Args: { p_page_id: number; p_reason: string }
+        Returns: undefined
+      }
+      revert_and_hide_revision: {
+        Args: { p_reason: string; p_revision_id: number }
         Returns: undefined
       }
       revert_page: {

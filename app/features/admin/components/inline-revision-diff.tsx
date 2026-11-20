@@ -11,38 +11,39 @@ type State =
   | { status: "error"; message: string };
 
 /**
- * 판 하나와 바로 전 판의 차이를 목록 안에서 보여 준다. 전 판이 없으면(새 문서) 본문 전체가 더해진
- * 것으로 보인다. 관리자는 숨긴 판과 삭제된 문서의 판도 읽는다.
+ * 한 문서의 두 판의 차이를 목록 안에서 보여 준다. `beforeId`가 `null`이면 빈 문서에서 시작한 것으로
+ * (새 문서), `afterId`가 `null`이면 빈 문서로 끝난 것으로(삭제)본다. 관리자는 숨긴 판과 삭제된
+ * 문서의 판도 읽는다.
  */
 export function InlineRevisionDiff({
   pageId,
-  revisionId,
-  parentRevisionId,
+  beforeId,
+  afterId,
 }: {
   pageId: number;
-  revisionId: number;
-  parentRevisionId: number | null;
+  beforeId: number | null;
+  afterId: number | null;
 }) {
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
     let cancelled = false;
-    const ids =
-      parentRevisionId === null ? [revisionId] : [parentRevisionId, revisionId];
+    const ids = [beforeId, afterId].filter((id) => id !== null);
     getRevisionBodies(pageId, ids).then(
       (rows) => {
         if (cancelled) return;
-        const after = rows.find((row) => row.id === revisionId);
-        const before = rows.find((row) => row.id === parentRevisionId);
-        if (!after || (parentRevisionId !== null && !before)) {
+        const text = (id: number | null) => {
+          if (id === null) return "";
+          const row = rows.find((candidate) => candidate.id === id);
+          return row ? docToText(row.body) : null;
+        };
+        const before = text(beforeId);
+        const after = text(afterId);
+        if (before === null || after === null) {
           setState({ status: "error", message: "비교할 판을 볼 수 없습니다." });
           return;
         }
-        setState({
-          status: "ready",
-          before: before ? docToText(before.body) : "",
-          after: docToText(after.body),
-        });
+        setState({ status: "ready", before, after });
       },
       (error: unknown) => {
         if (!cancelled) {
@@ -53,7 +54,7 @@ export function InlineRevisionDiff({
     return () => {
       cancelled = true;
     };
-  }, [pageId, revisionId, parentRevisionId]);
+  }, [pageId, beforeId, afterId]);
 
   if (state.status === "loading") {
     return (

@@ -1,3 +1,4 @@
+import type { BulkRevertRow, BulkRevertStatus } from "../model/bulk-revert";
 import type { AdminAction, AdminLogEntry, BanEntry } from "../model/log";
 import type { RecentChange } from "~/features/pages";
 import { getSupabase } from "~/shared/supabase/client";
@@ -156,6 +157,88 @@ export async function listMyAuthorLookups(): Promise<OpenLookup[]> {
     pseudonym: row.pseudonym,
     expiresAt: row.expires_at,
   }));
+}
+
+/** 미리보기가 한 번에 돌려주는 문서 수. 서버(`preview_bulk_revert`)와 같다. 꽉 차면 더 있을 수 있다. */
+export const BULK_REVERT_PREVIEW_LIMIT = 500;
+
+/**
+ * 일괄 되돌리기 미리보기(관리자 전용, 기록 없음). `fromRevisionId`부터 대상이 쓴 판을 문서마다
+ * 어떻게 걷어 낼지. 없으면 대상의 모든 편집이다. 허가가 끝났으면 `WK016`으로 던진다.
+ */
+export async function previewBulkRevert(
+  lookupId: string,
+  fromRevisionId: number | null,
+): Promise<BulkRevertRow[]> {
+  const rows = unwrap(
+    await getSupabase().rpc("preview_bulk_revert", {
+      p_lookup_id: lookupId,
+      p_from_revision_id: fromRevisionId ?? undefined,
+    }),
+  );
+  return rows.map((row) => ({
+    pageId: row.page_id,
+    pageTitle: row.page_title,
+    currentRevisionId: row.current_revision_id,
+    restoreRevisionId: row.restore_revision_id,
+    editCount: row.edit_count,
+    keptCount: row.kept_count,
+    hasMove: row.has_move,
+    moveLeftover: row.move_leftover,
+    status: row.status as BulkRevertStatus,
+  }));
+}
+
+/** 신고 한 건. 신고자는 오지 않는다. */
+export interface ReportNote {
+  category: string;
+  note: string;
+  createdAt: string;
+}
+
+/** 처리되지 않은 신고를 판별로 묶은 것. */
+export interface OpenReport {
+  revisionId: number;
+  pageId: number;
+  pageTitle: string;
+  authorPseudonym: string;
+  parentRevisionId: number | null;
+  revisionCreatedAt: string;
+  hiddenAt: string | null;
+  isCurrent: boolean;
+  pageDeleted: boolean;
+  reports: ReportNote[];
+  /** 같은 판에서 전에 기각한 신고 수. */
+  dismissedCount: number;
+}
+
+/** 처리되지 않은 신고, 오래된 것부터(관리자 전용). */
+export async function listOpenReports(): Promise<OpenReport[]> {
+  const rows = unwrap(await getSupabase().rpc("list_open_reports"));
+  return rows.map((row) => ({
+    revisionId: row.revision_id,
+    pageId: row.page_id,
+    pageTitle: row.page_title,
+    authorPseudonym: row.pseudonym,
+    parentRevisionId: row.parent_revision_id,
+    revisionCreatedAt: row.revision_created_at,
+    hiddenAt: row.hidden_at,
+    isCurrent: row.is_current,
+    pageDeleted: row.page_deleted,
+    reports: (
+      row.reports as { category: string; note: string; created_at: string }[]
+    ).map((report) => ({
+      category: report.category,
+      note: report.note,
+      createdAt: report.created_at,
+    })),
+    dismissedCount: row.dismissed_count,
+  }));
+}
+
+/** 처리되지 않은 신고가 걸린 판 수(관리자 전용). */
+export async function countOpenReports(): Promise<number> {
+  return unwrap(await getSupabase().rpc("count_open_reports")) ?? 0;
 }
 
 /** 관리자 목록(관리자 전용). 관리자 전용 이름만 온다. */
