@@ -261,6 +261,10 @@ begin
   from public.revisions as revision
   join public.pages as page on page.id = revision.page_id
   where revision.id = v_lookup.source_revision_id;
+  -- 판은 지우지 않으므로 보통은 생기지 않는다. 생기면 다른 허가 문제처럼 다시 조회하게 한다.
+  if not found then
+    raise exception 'lookup source missing' using errcode = 'WK016';
+  end if;
 end;
 $function$;
 

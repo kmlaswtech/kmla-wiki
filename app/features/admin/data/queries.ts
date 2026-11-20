@@ -5,7 +5,7 @@ import { unwrap, WikiError } from "~/shared/supabase/errors";
 
 const PAGE_SIZE = 50;
 
-/** `list_author_edits`의 `limit`과 같다. 한 쪽이 꽉 차면 더 볼 것이 있다. */
+/** 다른 편집 목록의 한 쪽. 클라이언트가 늘 `p_limit`으로 보낸다. 한 쪽이 꽉 차면 더 볼 것이 있다. */
 export const AUTHOR_EDITS_PAGE_SIZE = 50;
 
 /** 공개 관리 기록, 최신순. 승인 회원 누구나 읽는다. */
@@ -76,7 +76,7 @@ export async function getAuthorLookup(
   const [row] = unwrap(
     await getSupabase().rpc("get_author_lookup", { p_lookup_id: lookupId }),
   );
-  // RPC는 행 하나를 돌려주거나 WK016으로 던진다. 타입을 좁히려고 같은 오류로 맞춘다.
+  // RPC는 행 하나를 돌려주거나 WK016으로 던진다. 생성 타입이 배열이라 타입을 좁히려고 같은 오류로 맞춘다.
   if (!row) throw new WikiError("WK016", "lookup expired");
   return {
     source: {
@@ -91,7 +91,7 @@ export async function getAuthorLookup(
 }
 
 /**
- * 같은 사람의 다른 편집, 최신순 50개씩(관리자 전용). 유효한 조회 허가(`openAuthorLookup`)가
+ * 같은 사람의 다른 편집, 최신순으로 `limit`개(관리자 전용). 유효한 조회 허가(`openAuthorLookup`)가
  * 있어야 하고, 허가가 끝났으면 `WK016`으로 던진다.
  */
 export async function listAuthorEdits(

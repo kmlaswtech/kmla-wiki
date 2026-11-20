@@ -1,4 +1,4 @@
-import { data, redirect, useRevalidator } from "react-router";
+import { data, redirect } from "react-router";
 
 import type { Route } from "./+types/author-edits";
 import {
@@ -50,7 +50,8 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 /**
- * 판 하나에서 시작해 같은 사람이 다른 문서에 한 편집을 본다(관리자 전용).
+ * 판 하나에서 시작해 같은 사람이 다른 문서에 한 편집을 본다(관리자 전용). 조치 뒤 갱신은 결과 화면이
+ * 스스로 한다.
  *
  * 문서별 가명이 지키는 것을 관리자에게 한해 푸는 화면이다. 그래서 사유를 먼저 받고, 조회 사실이
  * 공개 기록에 남는다는 것을 조회 전에 알린다. 조회하면 10분짜리 허가가 생기고, 주소에는 사람 대신
@@ -58,7 +59,6 @@ export const meta: Route.MetaFunction = () => [
  */
 export default function AuthorEditsRoute({ loaderData }: Route.ComponentProps) {
   const { revisionId, lookup } = loaderData;
-  const revalidator = useRevalidator();
 
   if (lookup === null || lookup === "expired") {
     return (
@@ -73,7 +73,6 @@ export default function AuthorEditsRoute({ loaderData }: Route.ComponentProps) {
       key={lookup.id}
       revisionId={revisionId}
       lookup={lookup}
-      onChanged={() => void revalidator.revalidate()}
     />
   );
 }

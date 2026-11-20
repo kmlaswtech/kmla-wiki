@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 
 import {
   BAN_PRESETS,
@@ -10,49 +10,45 @@ import {
   parseBanLength,
   type BanUnit,
 } from "../model/ban-length";
-import { ReasonDialog } from "./reason-dialog";
+import { ReasonForm, type ActionDialogProps } from "./reason-dialog";
+import { Dialog, DialogContent } from "~/shared/ui/dialog";
 import { Input } from "~/shared/ui/input";
 import { Label } from "~/shared/ui/label";
 import { NativeSelect, NativeSelectOption } from "~/shared/ui/native-select";
 
-interface BanLengthDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description: ReactNode;
-  confirmLabel: string;
-  destructive?: boolean;
+interface BanLengthDialogProps extends ActionDialogProps {
   /** 조치를 실행한다. `length`는 Postgres interval 글이고, `null`이면 기한 없음. */
   onConfirm: (length: string | null, reason: string) => Promise<void>;
-  onDone: () => void;
 }
 
 /**
  * 차단 기간과 사유를 받는 대화상자(차단, 기간 변경). 자주 쓰는 길이를 고르거나 숫자와 단위를 직접
  * 넣는다. 열 때마다 기본 길이로 돌아간다.
  */
-export function BanLengthDialog({
-  open,
-  onOpenChange,
+export function BanLengthDialog({ open, ...form }: BanLengthDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={form.onOpenChange}>
+      <DialogContent>
+        <BanLengthForm {...form} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** 대화상자 안에 있어서 닫힐 때 내려가고, 열 때마다 기본 길이로 시작한다. */
+function BanLengthForm({
   onConfirm,
-  ...dialog
-}: BanLengthDialogProps) {
+  ...form
+}: Omit<BanLengthDialogProps, "open">) {
   const [input, setInput] = useState(DEFAULT_BAN_INPUT);
-  const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) setInput(DEFAULT_BAN_INPUT);
-  }
 
   const length = parseBanLength(input);
   const custom = input.preset === CUSTOM_PRESET;
   const invalid = custom && input.amount !== "" && length === undefined;
 
   return (
-    <ReasonDialog
-      {...dialog}
-      open={open}
-      onOpenChange={onOpenChange}
+    <ReasonForm
+      {...form}
       canConfirm={length !== undefined}
       onConfirm={(reason) =>
         length === undefined
@@ -111,6 +107,6 @@ export function BanLengthDialog({
           <p className="text-xs text-destructive">1 이상의 수를 넣어 주세요.</p>
         ) : null}
       </div>
-    </ReasonDialog>
+    </ReasonForm>
   );
 }

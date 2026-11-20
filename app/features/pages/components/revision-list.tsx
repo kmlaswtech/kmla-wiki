@@ -45,6 +45,7 @@ export function RevisionList<Row extends RevisionSummary>({
     <ul className="divide-y text-sm">
       {revisions.map((revision) => {
         const title = pageTitle(revision);
+        const extra = detail?.(revision);
         const kind = revisionKindLabel(revision.kind);
         return (
           <li
@@ -105,18 +106,13 @@ export function RevisionList<Row extends RevisionSummary>({
               ) : null}
               {actions?.(revision)}
             </span>
-            {detail ? <DetailSlot>{detail(revision)}</DetailSlot> : null}
+            {extra ? (
+              // 줄 맨 끝(폰에서 요약 다음) 전체 폭.
+              <div className="order-last basis-full pt-1">{extra}</div>
+            ) : null}
           </li>
         );
       })}
     </ul>
   );
-}
-
-/** 줄 맨 끝(폰에서 요약 다음) 전체 폭. 내용이 없으면 자리를 만들지 않는다. */
-function DetailSlot({ children }: { children: ReactNode }) {
-  if (children === null || children === undefined || children === false) {
-    return null;
-  }
-  return <div className="order-last basis-full pt-1">{children}</div>;
 }

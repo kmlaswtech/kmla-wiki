@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router";
 import { openAuthorLookup } from "../data/mutations";
 import {
   AUTHOR_EDITS_PAGE_SIZE,
+  getAuthorLookup,
   listAuthorEdits,
   type AuthorEdit,
   type LookupSource,
@@ -22,20 +23,15 @@ import { Label } from "~/shared/ui/label";
 import { Spinner } from "~/shared/ui/spinner";
 import { Textarea } from "~/shared/ui/textarea";
 
-/** 열린 조회 허가와 첫 쪽. */
-export interface AuthorLookupView {
+/** 열린 조회 허가와 첫 쪽(loader가 읽는다). */
+interface AuthorLookupView {
   id: string;
   source: LookupSource;
   expiresAt: string;
   edits: AuthorEdit[];
 }
 
-/**
- * 같은 사람의 다른 편집 화면(관리자 전용).
- *
- * 문서별 가명이 지키는 것을 관리자에게 한해 푸는 화면이다. 그래서 사유를 먼저 받고, 조회 사실이
- * 공개 기록에 남는다는 것을 조회 전에 알린다.
- */
+/** 사유를 받아 조회 허가를 열고, 허가 ID가 든 주소로 옮긴다. */
 export function AuthorLookupForm({
   revisionId,
   expired,
@@ -111,22 +107,21 @@ export function AuthorLookupForm({
   );
 }
 
+/** 열린 허가로 본 편집 목록과 "이 사람에 대한 조치". */
 export function AuthorEditsResult({
   revisionId,
   lookup,
-  onChanged,
 }: {
   /** 주소의 판. 허가가 끝났을 때 이 판에서 다시 조회한다. */
   revisionId: number;
   lookup: AuthorLookupView;
-  /** 관리 조치가 끝났다. 허가 정보(근거 판의 상태)를 다시 읽는다. */
-  onChanged: () => void;
 }) {
-  // 목록은 이 화면이 가진다. 첫 쪽만 loader에서 받고, 더 보기는 뒤에 붙이고, 조치 뒤에는 불러온 만큼
-  // 한 번에 다시 읽는다. 그래서 조치를 해도 내려간 위치를 잃지 않는다. 허가가 바뀌면 route가 `key`로
-  // 이 화면을 새로 만든다.
+  // 처음 값만 loader에서 받고, 그 뒤로는 이 화면이 가진다. 더 보기는 뒤에 붙이고, 조치 뒤에는 근거 판과
+  // 불러온 만큼의 목록을 한 번에 다시 읽는다. 그래서 조치를 해도 내려간 위치를 잃지 않는다. 허가가
+  // 바뀌면 route가 `key`로 이 화면을 새로 만든다.
+  const [source, setSource] = useState(lookup.source);
   const [edits, setEdits] = useState(lookup.edits);
-  const [lastPageFull, setLastPageFull] = useState(
+  const [hasMore, setHasMore] = useState(
     lookup.edits.length === AUTHOR_EDITS_PAGE_SIZE,
   );
   const [pending, setPending] = useState(false);
@@ -142,13 +137,25 @@ export function AuthorEditsResult({
     });
   }
 
-  const { source } = lookup;
-
-  async function read(next: () => Promise<void>) {
+  /** `more`면 다음 쪽을 붙이고, 아니면(조치 뒤) 근거 판과 지금까지 불러온 만큼을 다시 읽는다. */
+  async function fetchEdits(more: boolean) {
     setPending(true);
     setError(null);
     try {
-      await next();
+      if (more) {
+        const next = await listAuthorEdits(lookup.id, edits.at(-1)?.id);
+        setEdits([...edits, ...next]);
+        setHasMore(next.length === AUTHOR_EDITS_PAGE_SIZE);
+      } else {
+        const limit = Math.max(edits.length, AUTHOR_EDITS_PAGE_SIZE);
+        const [fresh, rows] = await Promise.all([
+          getAuthorLookup(lookup.id),
+          listAuthorEdits(lookup.id, undefined, limit),
+        ]);
+        setSource(fresh.source);
+        setEdits(rows);
+        setHasMore(rows.length === limit);
+      }
     } catch (caught) {
       setError(describeAdminError(caught));
     } finally {
@@ -156,32 +163,12 @@ export function AuthorEditsResult({
     }
   }
 
-  const loadMore = () =>
-    read(async () => {
-      const next = await listAuthorEdits(lookup.id, edits.at(-1)?.id);
-      setEdits([...edits, ...next]);
-      setLastPageFull(next.length === AUTHOR_EDITS_PAGE_SIZE);
-    });
-
-  const reload = () =>
-    read(async () => {
-      const limit = Math.max(edits.length, AUTHOR_EDITS_PAGE_SIZE);
-      const fresh = await listAuthorEdits(lookup.id, undefined, limit);
-      setEdits(fresh);
-      setLastPageFull(fresh.length === limit);
-    });
-
-  function afterAction() {
-    void reload();
-    onChanged();
-  }
-
   return (
     <div>
       <Heading />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-muted-foreground">
-          편집 {edits.length}건{lastPageFull ? " 이상" : ""}. 가명은 문서마다
+          편집 {edits.length}건{hasMore ? " 이상" : ""}. 가명은 문서마다
           다릅니다. 조회 허가는 {formatDateTime(lookup.expiresAt)}까지입니다.
         </span>
         <span className="ml-auto flex items-center gap-1">
@@ -190,7 +177,7 @@ export function AuthorEditsResult({
             revision={source}
             pageTitle={source.pageTitle}
             isCurrent={source.isCurrent}
-            onDone={afterAction}
+            onDone={() => void fetchEdits(false)}
             showAuthorEdits={false}
           />
         </span>
@@ -209,38 +196,41 @@ export function AuthorEditsResult({
             />
           ) : null
         }
-        actions={(edit) => (
-          <>
-            {edit.isCurrent ? <Badge variant="secondary">현재 판</Badge> : null}
-            {edit.pageDeleted ? (
-              <Badge variant="outline">삭제된 문서</Badge>
-            ) : null}
-            <Link
-              to={pageHref(edit.pageTitle, "history")}
-              className="rounded px-1.5 py-0.5 text-primary hover:bg-muted"
-            >
-              기록
-            </Link>
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              aria-expanded={expanded.has(edit.id)}
-              aria-label={
-                expanded.has(edit.id)
-                  ? `r${edit.id} 비교 접기`
-                  : `r${edit.id} 바로 전 판과 비교 펼치기`
-              }
-              onClick={() => toggle(edit.id)}
-            >
-              <ChevronDown
-                className={
-                  expanded.has(edit.id) ? "rotate-180 transition" : "transition"
+        actions={(edit) => {
+          const open = expanded.has(edit.id);
+          return (
+            <>
+              {edit.isCurrent ? (
+                <Badge variant="secondary">현재 판</Badge>
+              ) : null}
+              {edit.pageDeleted ? (
+                <Badge variant="outline">삭제된 문서</Badge>
+              ) : null}
+              <Link
+                to={pageHref(edit.pageTitle, "history")}
+                className="rounded px-1.5 py-0.5 text-primary hover:bg-muted"
+              >
+                기록
+              </Link>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-expanded={open}
+                aria-label={
+                  open
+                    ? `r${edit.id} 비교 접기`
+                    : `r${edit.id} 바로 전 판과 비교 펼치기`
                 }
-              />
-            </Button>
-          </>
-        )}
+                onClick={() => toggle(edit.id)}
+              >
+                <ChevronDown
+                  className={open ? "rotate-180 transition" : "transition"}
+                />
+              </Button>
+            </>
+          );
+        }}
       />
 
       {error ? (
@@ -255,12 +245,12 @@ export function AuthorEditsResult({
         </p>
       ) : null}
 
-      {lastPageFull ? (
+      {hasMore ? (
         <div className="mt-4 text-center">
           <Button
             variant="outline"
             disabled={pending}
-            onClick={() => void loadMore()}
+            onClick={() => void fetchEdits(true)}
           >
             {pending ? <Spinner /> : null}더 보기
           </Button>

@@ -17,8 +17,6 @@ export {
   listAuthorEdits,
   listBans,
   listMyAuthorLookups,
-  type AuthorEdit,
-  type OpenLookup,
 } from "./data/queries";
 export { authorEditsHref } from "./model/author-lookup";
 export {
