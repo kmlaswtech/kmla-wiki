@@ -298,6 +298,10 @@ export type Database = {
         Args: { p_lookup_id: string }
         Returns: {
           expires_at: string
+          hidden_at: string
+          is_current: boolean
+          page_title: string
+          pseudonym: string
           source_revision_id: number
         }[]
       }
@@ -344,7 +348,11 @@ export type Database = {
         }[]
       }
       list_author_edits: {
-        Args: { p_before_revision_id?: number; p_lookup_id: string }
+        Args: {
+          p_before_revision_id?: number
+          p_limit?: number
+          p_lookup_id: string
+        }
         Returns: {
           byte_delta: number
           created_at: string

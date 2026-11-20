@@ -7,6 +7,7 @@ import {
   AUTHOR_EDITS_PAGE_SIZE,
   listAuthorEdits,
   type AuthorEdit,
+  type LookupSource,
 } from "../data/queries";
 import { authorEditsHref } from "../model/author-lookup";
 import { describeAdminError } from "../model/log";
@@ -24,7 +25,7 @@ import { Textarea } from "~/shared/ui/textarea";
 /** 열린 조회 허가와 첫 쪽. */
 export interface AuthorLookupView {
   id: string;
-  sourceRevisionId: number;
+  source: LookupSource;
   expiresAt: string;
   edits: AuthorEdit[];
 }
@@ -118,16 +119,16 @@ export function AuthorEditsResult({
   /** 주소의 판. 허가가 끝났을 때 이 판에서 다시 조회한다. */
   revisionId: number;
   lookup: AuthorLookupView;
-  /** 관리 조치가 끝났다. 첫 쪽을 다시 읽는다. */
+  /** 관리 조치가 끝났다. 허가 정보(근거 판의 상태)를 다시 읽는다. */
   onChanged: () => void;
 }) {
-  // 첫 쪽은 loader가 읽고, 더 보기로 읽은 쪽은 그 첫 쪽에 묶어 둔다. loader가 다시 읽으면(조치 뒤)
-  // 묶음이 맞지 않으므로 붙인 쪽은 버려진다.
-  const [loaded, setLoaded] = useState({
-    base: lookup.edits,
-    pages: [] as AuthorEdit[][],
-  });
-  const pages = loaded.base === lookup.edits ? loaded.pages : [];
+  // 목록은 이 화면이 가진다. 첫 쪽만 loader에서 받고, 더 보기는 뒤에 붙이고, 조치 뒤에는 불러온 만큼
+  // 한 번에 다시 읽는다. 그래서 조치를 해도 내려간 위치를 잃지 않는다. 허가가 바뀌면 route가 `key`로
+  // 이 화면을 새로 만든다.
+  const [edits, setEdits] = useState(lookup.edits);
+  const [lastPageFull, setLastPageFull] = useState(
+    lookup.edits.length === AUTHOR_EDITS_PAGE_SIZE,
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 바로 전 판과의 비교를 펼친 판들.
@@ -141,22 +142,38 @@ export function AuthorEditsResult({
     });
   }
 
-  const edits = [lookup.edits, ...pages].flat();
-  const lastPageFull =
-    (pages.at(-1) ?? lookup.edits).length === AUTHOR_EDITS_PAGE_SIZE;
-  const source = edits.find((edit) => edit.id === lookup.sourceRevisionId);
+  const { source } = lookup;
 
-  async function loadMore() {
+  async function read(next: () => Promise<void>) {
     setPending(true);
     setError(null);
     try {
-      const next = await listAuthorEdits(lookup.id, edits.at(-1)?.id);
-      setLoaded({ base: lookup.edits, pages: [...pages, next] });
+      await next();
     } catch (caught) {
       setError(describeAdminError(caught));
     } finally {
       setPending(false);
     }
+  }
+
+  const loadMore = () =>
+    read(async () => {
+      const next = await listAuthorEdits(lookup.id, edits.at(-1)?.id);
+      setEdits([...edits, ...next]);
+      setLastPageFull(next.length === AUTHOR_EDITS_PAGE_SIZE);
+    });
+
+  const reload = () =>
+    read(async () => {
+      const limit = Math.max(edits.length, AUTHOR_EDITS_PAGE_SIZE);
+      const fresh = await listAuthorEdits(lookup.id, undefined, limit);
+      setEdits(fresh);
+      setLastPageFull(fresh.length === limit);
+    });
+
+  function afterAction() {
+    void reload();
+    onChanged();
   }
 
   return (
@@ -167,18 +184,16 @@ export function AuthorEditsResult({
           편집 {edits.length}건{lastPageFull ? " 이상" : ""}. 가명은 문서마다
           다릅니다. 조회 허가는 {formatDateTime(lookup.expiresAt)}까지입니다.
         </span>
-        {source ? (
-          <span className="ml-auto flex items-center gap-1">
-            이 사람에 대한 조치
-            <RevisionAdminMenu
-              revision={source}
-              pageTitle={source.pageTitle}
-              isCurrent={source.isCurrent}
-              onDone={onChanged}
-              showAuthorEdits={false}
-            />
-          </span>
-        ) : null}
+        <span className="ml-auto flex items-center gap-1">
+          이 사람에 대한 조치
+          <RevisionAdminMenu
+            revision={source}
+            pageTitle={source.pageTitle}
+            isCurrent={source.isCurrent}
+            onDone={afterAction}
+            showAuthorEdits={false}
+          />
+        </span>
       </div>
 
       <RevisionList

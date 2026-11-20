@@ -48,9 +48,13 @@ select set_eq(
   'an admin sees the same author''s edits across pages, and nobody else''s'
 );
 select results_eq(
-  format($$select source_revision_id from public.get_author_lookup(%L)$$, :'lookup1'),
-  format($$values (%s::bigint)$$, :b1),
-  'the lookup remembers the revision it started from'
+  format($$select source_revision_id, page_title, pseudonym from public.get_author_lookup(%L)$$, :'lookup1'),
+  format($$select id, '훼손 문서 하나'::text, author_pseudonym from public.revisions where id = %s$$, :b1),
+  'the lookup remembers the revision it started from, with its page and pseudonym'
+);
+select is(
+  (select count(*) from public.list_author_edits(:'lookup1', null, 1)), 1::bigint,
+  'a caller can read fewer rows at once'
 );
 select results_eq(
   $$select action, page_title, pseudonym, reason from public.admin_log order by id desc limit 1$$,

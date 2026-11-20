@@ -238,7 +238,11 @@ CREATE OR REPLACE FUNCTION public.get_author_lookup (
 )
   RETURNS TABLE (
     source_revision_id bigint,
-    expires_at         timestamp with time zone
+    expires_at         timestamp with time zone,
+    page_title         text,
+    pseudonym          text,
+    hidden_at          timestamp with time zone,
+    is_current         boolean
   )
   LANGUAGE plpgsql
   STABLE
@@ -250,9 +254,13 @@ declare
 begin
   perform private.require_admin();
   v_lookup := private.author_lookup(p_lookup_id);
-  source_revision_id := v_lookup.source_revision_id;
-  expires_at := v_lookup.expires_at;
-  return next;
+  return query
+  select
+    v_lookup.source_revision_id, v_lookup.expires_at, page.title, revision.author_pseudonym,
+    revision.hidden_at, revision.id = page.current_revision_id
+  from public.revisions as revision
+  join public.pages as page on page.id = revision.page_id
+  where revision.id = v_lookup.source_revision_id;
 end;
 $function$;
 
@@ -285,7 +293,8 @@ $function$;
 
 CREATE OR REPLACE FUNCTION public.list_author_edits (
   p_lookup_id          text,
-  p_before_revision_id bigint DEFAULT NULL::bigint
+  p_before_revision_id bigint  DEFAULT NULL::bigint,
+  p_limit              integer DEFAULT 50
 )
   RETURNS TABLE (
     revision_id        bigint,
@@ -323,11 +332,11 @@ begin
   where author.member_id = v_target_id
     and (p_before_revision_id is null or revision.id < p_before_revision_id)
   order by revision.id desc
-  limit 50;
+  limit least(greatest(coalesce(p_limit, 50), 1), 500);
 end;
 $function$;
 
-REVOKE ALL ON FUNCTION "public"."list_author_edits"(text, bigint) FROM PUBLIC, "anon";
+REVOKE ALL ON FUNCTION "public"."list_author_edits"(text, bigint, integer) FROM PUBLIC, "anon";
 
 CREATE OR REPLACE FUNCTION public.list_my_author_lookups()
   RETURNS TABLE (
@@ -455,13 +464,13 @@ GRANT EXECUTE ON FUNCTION "public"."get_author_lookup"(text) TO "postgres";
 
 GRANT EXECUTE ON FUNCTION "public"."get_author_lookup"(text) TO "service_role";
 
-GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint) TO "authenticated";
+GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint, integer) TO "authenticated";
 
-REVOKE ALL ON FUNCTION "public"."list_author_edits"(text, bigint) FROM "postgres";
+REVOKE ALL ON FUNCTION "public"."list_author_edits"(text, bigint, integer) FROM "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint) TO "postgres";
+GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint, integer) TO "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint) TO "service_role";
+GRANT EXECUTE ON FUNCTION "public"."list_author_edits"(text, bigint, integer) TO "service_role";
 
 GRANT EXECUTE ON FUNCTION "public"."list_my_author_lookups"() TO "authenticated";
 

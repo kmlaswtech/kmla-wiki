@@ -70,6 +70,7 @@ export default function AuthorEditsRoute({ loaderData }: Route.ComponentProps) {
   }
   return (
     <AuthorEditsResult
+      key={lookup.id}
       revisionId={revisionId}
       lookup={lookup}
       onChanged={() => void revalidator.revalidate()}

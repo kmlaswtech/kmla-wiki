@@ -60,17 +60,32 @@ export interface AuthorEdit extends RecentChange {
   pageDeleted: boolean;
 }
 
+/** 허가의 근거 판. "이 사람에 대한 조치" 메뉴의 대상이다. */
+export interface LookupSource {
+  id: number;
+  pageTitle: string;
+  authorPseudonym: string;
+  hiddenAt: string | null;
+  isCurrent: boolean;
+}
+
 /** 조회 허가의 근거 판과 끝나는 시각. 허가가 없거나 끝났으면 `WK016`으로 던진다. */
 export async function getAuthorLookup(
   lookupId: string,
-): Promise<{ sourceRevisionId: number; expiresAt: string }> {
+): Promise<{ source: LookupSource; expiresAt: string }> {
   const [row] = unwrap(
     await getSupabase().rpc("get_author_lookup", { p_lookup_id: lookupId }),
   );
   // RPC는 행 하나를 돌려주거나 WK016으로 던진다. 타입을 좁히려고 같은 오류로 맞춘다.
   if (!row) throw new WikiError("WK016", "lookup expired");
   return {
-    sourceRevisionId: row.source_revision_id,
+    source: {
+      id: row.source_revision_id,
+      pageTitle: row.page_title,
+      authorPseudonym: row.pseudonym,
+      hiddenAt: row.hidden_at,
+      isCurrent: row.is_current,
+    },
     expiresAt: row.expires_at,
   };
 }
@@ -82,11 +97,13 @@ export async function getAuthorLookup(
 export async function listAuthorEdits(
   lookupId: string,
   before?: number,
+  limit: number = AUTHOR_EDITS_PAGE_SIZE,
 ): Promise<AuthorEdit[]> {
   const rows = unwrap(
     await getSupabase().rpc("list_author_edits", {
       p_lookup_id: lookupId,
       p_before_revision_id: before,
+      p_limit: limit,
     }),
   );
   return rows.map((row) => ({
