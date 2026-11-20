@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -21,6 +22,15 @@ import {
 } from "../model/doc";
 import { headingId } from "../model/heading-id";
 import { mediaAlign, mediaSize } from "../model/media";
+import {
+  backgroundVars,
+  parseBackground,
+  parseTextColor,
+  textAlignOf,
+  textColorVars,
+  textSizeOf,
+  type TextAlign,
+} from "../model/style";
 import { normalizeStart, YOUTUBE_ID, youtubeEmbedUrl } from "../model/youtube";
 import { headingNumberMap } from "../model/heading-number";
 import {
@@ -58,6 +68,11 @@ interface WikiContentProps {
    * 제목·각주에 `id`를 달지 않는다. 바깥 문서의 `id`와 겹치면 `#fn-1` 같은 이동이 틀어진다.
    */
   embedded?: boolean;
+  /**
+   * 본문 앞에 그릴 것(문서 보기의 목차). 프로필이 있으면 프로필 왼쪽에 나란히 둔다. 본문
+   * 규칙(`.wiki-content`) 밖에 그린다.
+   */
+  beforeBody?: ReactNode;
   className?: string;
 }
 
@@ -81,6 +96,7 @@ export function WikiContent({
   renderImage,
   withToc = false,
   embedded = false,
+  beforeBody,
   className,
 }: WikiContentProps) {
   const content = useMemo(() => {
@@ -104,6 +120,7 @@ export function WikiContent({
           number={numbers?.get(heading.index)}
           numberLinksToToc={withToc}
           withId={!embedded}
+          align={textAlignOf(block.node)}
           editHref={
             sectionEditHref && heading.sectionIndex !== null
               ? sectionEditHref(heading.sectionIndex)
@@ -123,7 +140,15 @@ export function WikiContent({
             : renderBlock(block.node, index, context),
         );
 
-    return (
+    // 프로필은 문서 머리에 둔다. 끼워 그리는 미리보기(틀)에는 그리지 않는다.
+    const profile =
+      document.profile && !embedded ? (
+        <aside aria-label="프로필" className="wiki-content wiki-profile">
+          {renderBlocks(document.profile, context)}
+        </aside>
+      ) : null;
+
+    const rest = (
       <>
         {body}
         {document.footnotes.length > 0 && !embedded ? (
@@ -147,6 +172,7 @@ export function WikiContent({
         ) : null}
       </>
     );
+    return { profile, rest };
   }, [document, existing, sectionEditHref, renderImage, withToc, embedded]);
 
   const root = useRef<HTMLDivElement>(null);
@@ -154,8 +180,18 @@ export function WikiContent({
   useResetStrikeOnChange(root, document);
 
   return (
-    <div ref={root} className={cn("wiki-content", className)}>
-      {content}
+    <div ref={root} className={className}>
+      {content.profile ? (
+        // 나무위키처럼 프로필은 오른쪽, 목차는 그 왼쪽에 나란히 둔다. 본문은 프로필이 끝난 뒤에
+        // 온다(본문이 프로필 옆으로 흐르지 않는다). 좁은 화면은 프로필, 목차, 본문 순서로 쌓는다.
+        <div className="wiki-head">
+          {content.profile}
+          {beforeBody}
+        </div>
+      ) : (
+        beforeBody
+      )}
+      <div className="wiki-content">{content.rest}</div>
     </div>
   );
 }
@@ -284,12 +320,20 @@ function renderBlock(
   const children = node.content ?? [];
   switch (node.type) {
     case NODE.paragraph:
-      return <p key={key}>{renderInline(children, context)}</p>;
+      return (
+        <p key={key} style={alignStyle(textAlignOf(node))}>
+          {renderInline(children, context)}
+        </p>
+      );
     case NODE.heading: {
       // 인용·접기 안의 제목. 문단을 나누지 않고 모양만 제목이다.
       const level = numberAttr(node, "level") ?? 2;
       const Tag = level >= 4 ? "h4" : level === 3 ? "h3" : "h2";
-      return <Tag key={key}>{renderInline(children, context)}</Tag>;
+      return (
+        <Tag key={key} style={alignStyle(textAlignOf(node))}>
+          {renderInline(children, context)}
+        </Tag>
+      );
     }
     case NODE.bulletList:
       return <ul key={key}>{renderBlocks(children, context)}</ul>;
@@ -323,20 +367,11 @@ function renderBlock(
             <tbody>
               {children.map((row, rowIndex) => (
                 <tr key={rowIndex}>
-                  {(row.content ?? []).map((cell, cellIndex) => {
-                    const Cell = cell.type === NODE.tableHeader ? "th" : "td";
-                    const colSpan = numberAttr(cell, "colspan");
-                    const rowSpan = numberAttr(cell, "rowspan");
-                    return (
-                      <Cell
-                        key={cellIndex}
-                        colSpan={colSpan && colSpan > 1 ? colSpan : undefined}
-                        rowSpan={rowSpan && rowSpan > 1 ? rowSpan : undefined}
-                      >
-                        {renderBlocks(cell.content ?? [], context)}
-                      </Cell>
-                    );
-                  })}
+                  {(row.content ?? []).map((cell, cellIndex) => (
+                    <TableCell key={cellIndex} cell={cell}>
+                      {renderBlocks(cell.content ?? [], context)}
+                    </TableCell>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -418,6 +453,40 @@ function renderBlock(
   }
 }
 
+/** 문단·제목 정렬. 왼쪽(기본)이면 `style`을 두지 않는다. */
+function alignStyle(align: TextAlign | null): CSSProperties | undefined {
+  return align ? { textAlign: align } : undefined;
+}
+
+/**
+ * 표 칸: 합치기, 배경. `data-bg`는 이 글을 복사해 편집기에 붙여넣을 때 배경을 되살리는 데
+ * 쓴다(`features/editor/model/schema.ts`).
+ */
+function TableCell({
+  cell,
+  children,
+}: {
+  cell: WikiNode;
+  children: ReactNode;
+}) {
+  const Cell = cell.type === NODE.tableHeader ? "th" : "td";
+  const colSpan = numberAttr(cell, "colspan");
+  const rowSpan = numberAttr(cell, "rowspan");
+  const background = parseBackground(cell.attrs?.background);
+  const fill = background ? backgroundVars(background) : null;
+  return (
+    <Cell
+      colSpan={colSpan && colSpan > 1 ? colSpan : undefined}
+      rowSpan={rowSpan && rowSpan > 1 ? rowSpan : undefined}
+      data-bg={fill ? stringAttr(cell, "background") : undefined}
+      data-bg-strong={fill?.strong ? "" : undefined}
+      style={fill?.vars}
+    >
+      {children}
+    </Cell>
+  );
+}
+
 /**
  * 이미지·영상 상자: 크기·정렬과, 그림 아래의 캡션(비어 있으면 그리지 않는다). `data-*`는 이 글을
  * 복사해 편집기에 붙여넣을 때 노드로 되살리는 데 쓴다(`features/editor/model/schema.ts`).
@@ -497,6 +566,8 @@ function renderInline(
 const MARK_ORDER: readonly string[] = [
   MARK.wikiLink,
   MARK.link,
+  MARK.textSize,
+  MARK.textColor,
   MARK.bold,
   MARK.italic,
   MARK.underline,
@@ -525,6 +596,25 @@ function applyMarks(
         return <s>{inner}</s>;
       case MARK.code:
         return <code>{inner}</code>;
+      case MARK.textColor: {
+        // `data-text-color`는 복사해 붙여넣을 때 색을 되살리는 데 쓴다.
+        const color = parseTextColor(mark.attrs?.color);
+        return color ? (
+          <span
+            className="wiki-color"
+            data-text-color={stringAttr(mark, "color")}
+            style={textColorVars(color)}
+          >
+            {inner}
+          </span>
+        ) : (
+          inner
+        );
+      }
+      case MARK.textSize: {
+        const size = textSizeOf(mark);
+        return size ? <span data-text-size={size}>{inner}</span> : inner;
+      }
       case MARK.link: {
         const href = stringAttr(mark, "href");
         return SAFE_HREF.test(href) ? (
@@ -704,6 +794,7 @@ function WikiHeading({
   number,
   numberLinksToToc,
   withId,
+  align,
   editHref,
   children,
 }: {
@@ -711,6 +802,7 @@ function WikiHeading({
   number?: string;
   numberLinksToToc: boolean;
   withId: boolean;
+  align: TextAlign | null;
   editHref?: string;
   children?: ReactNode;
 }) {
@@ -726,7 +818,7 @@ function WikiHeading({
       )}
       onClick={onClick}
     >
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1" style={alignStyle(align)}>
         {number ? (
           numberLinksToToc ? (
             <a href={`#${TOC_ID}`} className="heading-number" title="목차로">

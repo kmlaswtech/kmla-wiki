@@ -104,7 +104,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
       ) : null}
       {/* 본문과 곁 칸은 바깥(`canvas`) 위에 뜬 상자다. 면과 테두리는 테마 토큰(`surface`,
        * `panel`)이 정한다. 최근 변경은 넓은 화면(xl)에서 본문 곁에, 그보다 좁으면 본문 아래에 둔다. */}
-      <div className="flex-1 sm:px-4 sm:py-4">
+      <div className="flex-1 sm:px-6 sm:py-4 lg:px-8">
         <div
           className={cn(
             "mx-auto flex flex-col gap-4 xl:flex-row xl:items-start",

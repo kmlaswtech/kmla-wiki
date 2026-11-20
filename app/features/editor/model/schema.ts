@@ -1,4 +1,5 @@
 import {
+  Extension,
   getSchema,
   Mark,
   mergeAttributes,
@@ -14,15 +15,22 @@ import {
 import { StarterKit } from "@tiptap/starter-kit";
 
 import {
+  backgroundVars,
   DEFAULT_VIDEO_SIZE,
   HEADING_LEVELS,
   IMAGE_ID,
-  MARK,
   isMediaAlign,
   isMediaSize,
+  isTextAlign,
+  isTextSize,
+  MARK,
   NODE,
   normalizeStart,
+  parseBackground,
+  parseTextColor,
   SAFE_HREF,
+  styleText,
+  textColorVars,
   YOUTUBE_ID,
   type MediaSize,
 } from "~/features/markup";
@@ -383,8 +391,152 @@ export const Youtube = Node.create({
 });
 
 /**
- * 스키마를 이루는 확장 전부. 꾸밈 단추로 고를 수 있는 것만 넣는다. 여기에 없는 꾸밈(글자 색·크기,
- * 정렬)은 붙여넣어도 사라진다.
+ * 글자 색. 팔레트 이름이나 검사한 `#rrggbb`만 받는다(`markup/model/style.ts`). 붙여넣기는 문서
+ * 보기가 남기는 `data-text-color`만 읽는다. 다른 사이트의 `style="color: …"`는 버린다. 어두운
+ * 화면에서 읽히지 않는 색이 섞여 들어오지 않게 하려는 것이다.
+ */
+export const TextColor = Mark.create({
+  name: MARK.textColor,
+
+  addAttributes() {
+    return { color: { default: null, rendered: false } };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "span[data-text-color]",
+        getAttrs: (element) => {
+          const color = element.getAttribute("data-text-color");
+          return parseTextColor(color) ? { color } : false;
+        },
+      },
+    ];
+  },
+
+  renderHTML({ mark }) {
+    const color = parseTextColor(mark.attrs.color);
+    return [
+      "span",
+      {
+        class: "wiki-color",
+        "data-text-color": color ? String(mark.attrs.color) : null,
+        style: color ? styleText(textColorVars(color)) : null,
+      },
+      0,
+    ];
+  },
+});
+
+/** 글자 크기 단계(`markup/model/style.ts`). 붙여넣기는 `data-text-size`만 읽는다. */
+export const TextSize = Mark.create({
+  name: MARK.textSize,
+
+  addAttributes() {
+    return { size: { default: null, rendered: false } };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "span[data-text-size]",
+        getAttrs: (element) => {
+          const size = Number(element.getAttribute("data-text-size"));
+          return isTextSize(size) ? { size } : false;
+        },
+      },
+    ];
+  },
+
+  renderHTML({ mark }) {
+    return [
+      "span",
+      {
+        "data-text-size": isTextSize(mark.attrs.size)
+          ? String(mark.attrs.size)
+          : null,
+      },
+      0,
+    ];
+  },
+});
+
+/** 문단·제목 정렬(가운데, 오른쪽). 왼쪽은 값을 두지 않는다(`null`). */
+export const TextAlign = Extension.create({
+  name: "wikiTextAlign",
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: [NODE.paragraph, NODE.heading],
+        attributes: {
+          textAlign: {
+            default: null,
+            parseHTML: (element) => {
+              const value =
+                element.getAttribute("data-text-align") ??
+                element.style.textAlign;
+              return isTextAlign(value) ? value : null;
+            },
+            renderHTML: (attributes) =>
+              isTextAlign(attributes.textAlign)
+                ? {
+                    "data-text-align": attributes.textAlign,
+                    style: `text-align: ${attributes.textAlign}`,
+                  }
+                : {},
+          },
+        },
+      },
+    ];
+  },
+});
+
+/** 셀 배경. */
+const cellBackground = {
+  background: {
+    default: null,
+    parseHTML: (element: HTMLElement) => {
+      const value = element.getAttribute("data-bg");
+      return parseBackground(value) ? value : null;
+    },
+    renderHTML: (attributes: Record<string, unknown>) => {
+      const background = parseBackground(attributes.background);
+      if (!background) return {};
+      const { vars, strong } = backgroundVars(background);
+      return {
+        "data-bg": attributes.background,
+        "data-bg-strong": strong ? "" : null,
+        style: styleText(vars),
+      };
+    },
+  },
+};
+
+/**
+ * 셀 속성: Tiptap 셀 속성에서 정렬(`align`)을 빼고 배경을 더한다. 칸 안의 글도 문단이라 문단 정렬로
+ * 맞춘다. 정렬을 두 곳에 두면 둘이 어긋날 때 어느 것이 이기는지 알기 어렵다.
+ */
+function cellAttributes(parent: Record<string, unknown> | undefined) {
+  const { align: _align, ...rest } = parent ?? {};
+  return { ...rest, ...cellBackground };
+}
+
+export const WikiTableCell = TableCell.extend({
+  addAttributes() {
+    return cellAttributes(this.parent?.());
+  },
+});
+
+export const WikiTableHeader = TableHeader.extend({
+  addAttributes() {
+    return cellAttributes(this.parent?.());
+  },
+});
+
+/**
+ * 스키마를 이루는 확장 전부. 꾸밈 단추로 고를 수 있는 것만 넣는다. 여기에 없는 꾸밈(글꼴, 줄 간격
+ * 등)과 팔레트·검사를 거치지 않은 값은 붙여넣어도 사라진다.
  */
 export function schemaExtensions(): AnyExtension[] {
   return [
@@ -405,8 +557,11 @@ export function schemaExtensions(): AnyExtension[] {
     }),
     Table.configure({ resizable: false }),
     TableRow,
-    TableHeader,
-    TableCell,
+    WikiTableHeader,
+    WikiTableCell,
+    TextAlign,
+    TextColor,
+    TextSize,
     WikiLink,
     Footnote,
     Fold,

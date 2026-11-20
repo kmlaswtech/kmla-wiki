@@ -499,6 +499,7 @@ function YoutubeForm({
     if (!video) return;
     // 고칠 때는 고른 크기·정렬을 그대로 둔다.
     upsertNode(editor, current, NODE.youtube, {
+      size: "small",
       ...current?.node.attrs,
       videoId: video.videoId,
       start: video.start,

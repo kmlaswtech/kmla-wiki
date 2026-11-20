@@ -1,12 +1,17 @@
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import {
+  ALargeSmall,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Bold,
   CircleHelp,
   Code,
   CornerDownRight,
   Ellipsis,
   Heading,
+  IdCard,
   Image,
   Italic,
   Link2,
@@ -27,7 +32,17 @@ import {
 import type { ReactNode } from "react";
 
 import type { EditorRequest } from "./editor-ui";
-import { MARK, NODE, pageHref } from "~/features/markup";
+import { CellStyleButton, TextColorButton } from "./style-controls";
+import {
+  isTextAlign,
+  isTextSize,
+  MARK,
+  NODE,
+  pageHref,
+  TEXT_SIZE_LABEL,
+  TEXT_SIZES,
+  type TextAlign,
+} from "~/features/markup";
 import { cn } from "~/shared/lib/utils";
 import { Button } from "~/shared/ui/button";
 import {
@@ -48,13 +63,16 @@ interface ToolbarProps {
   isTemplatePage?: boolean;
   /** 이 문서를 넘겨주기로 바꾼다(넘겨주기 입력으로 간다). 주지 않으면 메뉴에 없다. */
   onConvertToRedirect?: () => void;
+  /** 프로필(문서 맨 위의 따로 된 편집 칸)을 넣는다. 주지 않으면 메뉴에 없다(이미 있거나 문단 편집). */
+  onAddProfile?: () => void;
   className?: string;
 }
 
 /**
  * 편집 툴바. 고른 글자에 바로 꾸밈이 들어간다(문법을 외울 필요가 없다).
  *
- * 기능 수를 일부러 묶어 둔다. 여기에 없는 꾸밈(글자 색·크기, 정렬)은 지원하지 않는다.
+ * 자주 쓰는 꾸밈을 앞에 두고, 드물게 쓰는 것은 "더보기"에 둔다. 색은 팔레트에서 고른다
+ * (`style-controls.tsx`).
  */
 export function Toolbar({
   editor,
@@ -62,6 +80,7 @@ export function Toolbar({
   onPickImage,
   isTemplatePage = false,
   onConvertToRedirect,
+  onAddProfile,
   className,
 }: ToolbarProps) {
   const state = useEditorState({
@@ -79,12 +98,31 @@ export function Toolbar({
       orderedList: current.isActive(NODE.orderedList),
       blockquote: current.isActive(NODE.blockquote),
       inTable: current.isActive(NODE.table),
+      textSize: ((value: unknown) => (isTextSize(value) ? value : null))(
+        current.getAttributes(MARK.textSize).size,
+      ),
+      textAlign: ((value: unknown) => (isTextAlign(value) ? value : null))(
+        current.isActive(NODE.heading)
+          ? current.getAttributes(NODE.heading).textAlign
+          : current.getAttributes(NODE.paragraph).textAlign,
+      ),
       canUndo: current.can().undo(),
       canRedo: current.can().redo(),
     }),
   });
 
   const chain = () => editor.chain().focus();
+  const setAlign = (textAlign: TextAlign | null) =>
+    chain()
+      .updateAttributes(NODE.paragraph, { textAlign })
+      .updateAttributes(NODE.heading, { textAlign })
+      .run();
+  const AlignIcon =
+    state.textAlign === "center"
+      ? AlignCenter
+      : state.textAlign === "right"
+        ? AlignRight
+        : AlignLeft;
 
   return (
     <div
@@ -141,6 +179,35 @@ export function Toolbar({
       >
         <Strikethrough />
       </ToolButton>
+      <TextColorButton editor={editor} />
+      <Menu
+        label="글자 크기"
+        active={state.textSize !== null}
+        icon={<ALargeSmall />}
+      >
+        <DropdownMenuItem
+          onClick={() => chain().unsetMark(MARK.textSize).run()}
+        >
+          보통
+        </DropdownMenuItem>
+        {TEXT_SIZES.map((size) => (
+          <DropdownMenuItem
+            key={size}
+            onClick={() => chain().setMark(MARK.textSize, { size }).run()}
+          >
+            <span
+              className={cn(
+                size === -2 && "text-xs",
+                size === -1 && "text-sm",
+                size === 1 && "text-base font-medium",
+                size >= 2 && "text-lg font-semibold",
+              )}
+            >
+              {TEXT_SIZE_LABEL[size]}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </Menu>
 
       <Menu
         label="제목"
@@ -189,6 +256,24 @@ export function Toolbar({
       >
         <Quote />
       </ToolButton>
+      <Menu
+        label="문단 정렬"
+        active={state.textAlign !== null}
+        icon={<AlignIcon />}
+      >
+        <DropdownMenuItem onClick={() => setAlign(null)}>
+          <AlignLeft />
+          왼쪽
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setAlign("center")}>
+          <AlignCenter />
+          가운데
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setAlign("right")}>
+          <AlignRight />
+          오른쪽
+        </DropdownMenuItem>
+      </Menu>
       <Divider />
 
       <ToolButton
@@ -213,6 +298,7 @@ export function Toolbar({
         <Superscript />
       </ToolButton>
 
+      {state.inTable ? <CellStyleButton editor={editor} /> : null}
       {state.inTable ? (
         <Menu label="표" active icon={<Table />}>
           <DropdownMenuItem onClick={() => chain().addRowAfter().run()}>
@@ -273,9 +359,15 @@ export function Toolbar({
           <Minus />
           구분선
         </DropdownMenuItem>
+        {onAddProfile || onConvertToRedirect ? <DropdownMenuSeparator /> : null}
+        {onAddProfile ? (
+          <DropdownMenuItem onClick={onAddProfile}>
+            <IdCard />
+            프로필 넣기
+          </DropdownMenuItem>
+        ) : null}
         {onConvertToRedirect ? (
           <>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onConvertToRedirect}>
               <CornerDownRight />
               넘겨주기로 바꾸기

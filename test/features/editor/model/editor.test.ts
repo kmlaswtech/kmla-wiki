@@ -30,7 +30,7 @@ describe("document attributes", () => {
     };
     const { content, meta } = splitDoc(body);
     expect(content.attrs).toBeUndefined();
-    expect(meta).toEqual({ categories: ["분류:생활"] });
+    expect(meta).toEqual({ categories: ["분류:생활"], profile: null });
     expect(joinDoc(content, meta)).toEqual(body);
   });
 
@@ -49,6 +49,7 @@ describe("document attributes", () => {
   it("drops empty attributes, duplicate categories and trailing empty paragraphs", () => {
     const joined = joinDoc(doc(para(text("글")), para(), para()), {
       categories: ["생활", "분류:생활", " "],
+      profile: null,
     });
     expect(joined).toEqual({
       ...doc(para(text("글"))),
@@ -57,9 +58,9 @@ describe("document attributes", () => {
   });
 
   it("keeps one paragraph in an empty document", () => {
-    expect(joinDoc(doc(para(), para()), { categories: [] })).toEqual(
-      doc(para()),
-    );
+    expect(
+      joinDoc(doc(para(), para()), { categories: [], profile: null }),
+    ).toEqual(doc(para()));
   });
 });
 

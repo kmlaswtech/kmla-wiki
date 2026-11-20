@@ -37,7 +37,9 @@ export interface WikiEditorOptions {
  *
  * 괄호는 한글 조합과 상관없이 들어오는 글자라 입력기와 부딪치지 않는다.
  */
-const WikiShortcuts = Extension.create<Pick<WikiEditorOptions, "request">>({
+export const WikiShortcuts = Extension.create<
+  Pick<WikiEditorOptions, "request">
+>({
   name: "wikiShortcuts",
 
   addOptions() {

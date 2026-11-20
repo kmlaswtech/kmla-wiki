@@ -38,6 +38,10 @@ begin
   if coalesce(jsonb_array_length(p_body -> 'attrs' -> 'categories'), 0) > 0 then
     raise exception 'redirect with categories' using errcode = 'WK015', detail = 'categories';
   end if;
+  -- 넘겨주기 문서는 본문을 그리지 않으므로 프로필도 둘 자리가 없다.
+  if (p_body -> 'attrs') ? 'profile' then
+    raise exception 'redirect with content' using errcode = 'WK015', detail = 'content';
+  end if;
 end;
 $function$;
 

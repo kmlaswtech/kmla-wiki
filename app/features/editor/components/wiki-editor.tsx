@@ -9,7 +9,7 @@ import {
   type EditorUi,
 } from "./editor-ui";
 import type { ImageInfo } from "~/features/images";
-import type { WikiDoc } from "~/features/markup";
+import { profileOf, type WikiDoc, type WikiNode } from "~/features/markup";
 import type { ResolvedBody } from "~/features/pages";
 import { cn } from "~/shared/lib/utils";
 
@@ -41,6 +41,8 @@ interface UseWikiEditorOptions {
   onChange?: (content: WikiDoc) => void;
   /** 붙여넣거나 끌어놓은 이미지 파일. */
   onImageFiles?: (files: File[]) => void;
+  /** 편집 영역에 더할 class(프로필 편집기 등). */
+  editorClassName?: string;
 }
 
 /**
@@ -56,6 +58,7 @@ export function useWikiEditor({
   request,
   onChange,
   onImageFiles,
+  editorClassName,
 }: UseWikiEditorOptions): Editor | null {
   // 편집기는 한 번만 만든다. 확장과 편집기 이벤트는 이 상자에서 최신 콜백과 목록을 읽는다
   // (편집기가 부르는 때는 렌더 밖이다).
@@ -83,7 +86,7 @@ export function useWikiEditor({
     editorProps: {
       attributes: {
         "aria-label": ariaLabel,
-        class: "wiki-content wiki-editor",
+        class: cn("wiki-content wiki-editor", editorClassName),
       },
       handlePaste: (_, event) => {
         const files = imageFilesOf(event.clipboardData);
@@ -156,18 +159,51 @@ export function ReadOnlyDocument({
   images: ReadonlyMap<string, ImageInfo>;
   ariaLabel: string;
 }) {
+  const profile = profileOf(doc);
+  return (
+    <div className="rounded-md border p-4">
+      {profile ? (
+        <aside aria-label="프로필" className="wiki-profile mb-4">
+          <ReadOnlyEditor
+            content={profile}
+            resolved={resolved}
+            images={images}
+            ariaLabel="프로필"
+            editorClassName="wiki-profile-editor"
+          />
+        </aside>
+      ) : null}
+      <ReadOnlyEditor
+        content={doc.content}
+        resolved={resolved}
+        images={images}
+        ariaLabel={ariaLabel}
+      />
+    </div>
+  );
+}
+
+function ReadOnlyEditor({
+  content,
+  resolved,
+  images,
+  ariaLabel,
+  editorClassName,
+}: {
+  content: WikiNode[];
+  resolved: ResolvedBody;
+  images: ReadonlyMap<string, ImageInfo>;
+  ariaLabel: string;
+  editorClassName?: string;
+}) {
   const editor = useWikiEditor({
-    initialContent: { type: "doc", content: doc.content },
+    initialContent: { type: "doc", content },
     editable: false,
     ariaLabel,
     existing: resolved.existing,
+    editorClassName,
   });
   return (
-    <WikiEditorContent
-      editor={editor}
-      resolved={resolved}
-      images={images}
-      className="rounded-md border p-4"
-    />
+    <WikiEditorContent editor={editor} resolved={resolved} images={images} />
   );
 }

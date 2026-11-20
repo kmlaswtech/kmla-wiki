@@ -17,7 +17,7 @@ export const MEDIA_SIZE_LABEL: Record<MediaSize, string> = {
   small: "작게",
   medium: "중간",
   large: "크게",
-  full: "본문 너비에 맞춤",
+  full: "너비에 맞춤",
 };
 
 export const MEDIA_ALIGN_LABEL: Record<MediaAlign, string> = {
