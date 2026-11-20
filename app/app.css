@@ -440,8 +440,12 @@
   }
   /* 올린 이미지. 원본 폭(`--image-width`, `WikiImage`)이 기본이고 칸보다 넓어지지 않는다. */
   .wiki-content .wiki-image-frame {
-    @apply block max-w-full overflow-hidden rounded-md bg-muted;
+    @apply block max-w-full overflow-hidden rounded-md;
     width: var(--image-width);
+  }
+  /* 회색 자리는 받는 동안만 둔다. 받은 뒤에도 두면 투명 PNG·WebP의 투명한 부분이 회색으로 보인다. */
+  .wiki-content .wiki-image-frame[data-loading] {
+    @apply bg-muted;
   }
   .wiki-content .wiki-image-frame > img {
     @apply block size-full;

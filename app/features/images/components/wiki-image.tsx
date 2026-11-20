@@ -77,6 +77,7 @@ export function WikiImage({ info, alt }: WikiImageProps) {
       // 폭·모서리는 본문의 크기 고르기·캡션(`.wiki-image-frame`, app.css)이 정한다. 원본 폭은 변수로만
       // 넘긴다. 폭을 인라인 스타일이나 유틸리티 클래스로 주면 그 규칙들이 이기지 못한다.
       className="wiki-image-frame"
+      data-loading={url ? undefined : ""}
       style={
         {
           "--image-width": `${info.width}px`,
