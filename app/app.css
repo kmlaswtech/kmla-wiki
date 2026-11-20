@@ -169,37 +169,6 @@
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
-  /* 본문 꾸밈 팔레트(`features/markup/model/style.ts`). 글자 색은 흰 바탕에서 대비 5.4:1 이상,
-     진한 배경은 흰 글자와 5.4:1 이상이다. 연한 배경 위의 본문 글자는 13:1 이상이다. 진한 배경은
-     흰 글자를 얹으므로 두 화면 모드에서 같은 색이다. */
-  --wiki-text-gray: #606369;
-  --wiki-soft-gray: #eceff3;
-  --wiki-strong-gray: #606369;
-  --wiki-text-red: #b71824;
-  --wiki-soft-red: #ffe6e3;
-  --wiki-strong-red: #b71824;
-  --wiki-text-orange: #a63d00;
-  --wiki-soft-orange: #ffe8da;
-  --wiki-strong-orange: #a63d00;
-  --wiki-text-yellow: #875a00;
-  --wiki-soft-yellow: #f9edd5;
-  --wiki-strong-yellow: #875a00;
-  --wiki-text-green: #107823;
-  --wiki-soft-green: #e1f5e0;
-  --wiki-strong-green: #107823;
-  --wiki-text-teal: #007671;
-  --wiki-soft-teal: #d5f7f4;
-  --wiki-strong-teal: #007671;
-  --wiki-text-blue: #0060c1;
-  --wiki-soft-blue: #dff0ff;
-  --wiki-strong-blue: #0060c1;
-  --wiki-text-purple: #7444b4;
-  --wiki-soft-purple: #f2eaff;
-  --wiki-strong-purple: #7444b4;
-  --wiki-text-pink: #a42c71;
-  --wiki-soft-pink: #ffe5f2;
-  --wiki-strong-pink: #a42c71;
-  --wiki-on-strong: #ffffff;
 }
 
 .dark {
@@ -250,26 +219,6 @@
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
-  /* 본문 꾸밈 팔레트. 글자 색은 `#18191a` 바탕에서 대비 8:1 이상, 연한 배경 위의 본문 글자는 9.9:1
-     이상이다. */
-  --wiki-text-gray: #b5b7bc;
-  --wiki-soft-gray: #313336;
-  --wiki-text-red: #ff9189;
-  --wiki-soft-red: #492826;
-  --wiki-text-orange: #f5a06f;
-  --wiki-soft-orange: #472b1b;
-  --wiki-text-yellow: #d6b265;
-  --wiki-soft-yellow: #3f3112;
-  --wiki-text-green: #89cb8a;
-  --wiki-soft-green: #223a23;
-  --wiki-text-teal: #75c9c3;
-  --wiki-soft-teal: #0a3b38;
-  --wiki-text-blue: #7ebaff;
-  --wiki-soft-blue: #21344c;
-  --wiki-text-purple: #c4a4fd;
-  --wiki-soft-purple: #372d49;
-  --wiki-text-pink: #f494c3;
-  --wiki-soft-pink: #462836;
 }
 @layer base {
   * {
@@ -630,6 +579,9 @@
   .wiki-content [data-bg-strong] a {
     color: inherit;
     text-decoration: underline;
+  }
+  .wiki-content [data-bg-strong] a.wiki-link-missing {
+    text-decoration-style: dotted;
   }
 
   /* 프로필(`WikiContent`, `features/markup/model/profile.ts`). 나무위키처럼 프로필은 오른쪽, 목차는

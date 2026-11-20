@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import { CellSelection } from "@tiptap/pm/tables";
 import { useEditorState } from "@tiptap/react";
 import { Baseline, PaintBucket } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
@@ -29,7 +30,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/tooltip";
 type ColorKind = "text" | "background";
 
 /**
- * 색 고르기. 팔레트가 먼저다. 팔레트 색은 두 화면 모드에서 대비를 맞춰 두었다(`app.css`).
+ * 색 고르기. 팔레트가 먼저다. 팔레트 색은 두 화면 모드에서 대비를 맞춰 두었다.
  *
  * `#rrggbb` 직접 입력은 접어 둔 "직접 입력" 안에만 둔다. 어두운 화면에서 읽히지 않는 색을 고를 수
  * 있으므로 먼저 권하지 않는다. 대비가 모자라면 그 자리에서 알린다.
@@ -110,15 +111,10 @@ function Swatch({
 }) {
   const color = kind === "text" ? parseTextColor(value) : null;
   const background = kind === "background" ? parseBackground(value) : null;
-  // 고를 칸은 지금 화면 모드의 색으로 그린다(토큰이 화면 모드마다 바뀐다).
-  const backgroundStyle = background ? backgroundVars(background).vars : null;
   const style = color
-    ? { color: textColorVars(color)["--wiki-fg"] }
-    : backgroundStyle
-      ? {
-          backgroundColor: backgroundStyle["--wiki-bg"],
-          color: backgroundStyle["--wiki-on"],
-        }
+    ? textColorVars(color)
+    : background
+      ? backgroundVars(background).vars
       : undefined;
   return (
     <Tooltip>
@@ -132,6 +128,9 @@ function Swatch({
             onClick={onClick}
             className={cn(
               "flex aspect-square w-full min-w-6 items-center justify-center rounded-md border text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              kind === "text"
+                ? "[color:var(--wiki-fg)] dark:[color:var(--wiki-fg-dark)]"
+                : "[background-color:var(--wiki-bg)] [color:var(--wiki-on)] dark:[background-color:var(--wiki-bg-dark)] dark:[color:var(--wiki-on-dark)]",
               active && "ring-2 ring-ring ring-offset-1 ring-offset-popover",
             )}
             style={style}
@@ -348,7 +347,21 @@ export function CellStyleButton({ editor }: { editor: Editor }) {
         value={background}
         // 팝오버가 초점을 가져가도 편집기의 선택(고른 셀)은 남는다. 초점을 편집기로 되돌리지 않는다.
         onChange={(next) =>
-          editor.chain().setCellAttribute("background", next).run()
+          editor.commands.command(({ commands, tr }) => {
+            const { selection } = tr;
+            if (!(selection instanceof CellSelection)) {
+              return commands.setCellAttribute("background", next);
+            }
+            selection.forEachCell((cell, pos) => {
+              if (cell.attrs.background !== next) {
+                tr.setNodeMarkup(pos, undefined, {
+                  ...cell.attrs,
+                  background: next,
+                });
+              }
+            });
+            return true;
+          })
         }
       />
     </PopoverToolButton>

@@ -67,8 +67,8 @@ describe("colors", () => {
 
   it("always sets both theme variables, so nothing leaks from a parent", () => {
     expect(textColorVars({ kind: "palette", hue: "red" })).toEqual({
-      "--wiki-fg": "var(--wiki-text-red)",
-      "--wiki-fg-dark": "var(--wiki-text-red)",
+      "--wiki-fg": "var(--wiki-cell-text-red, #b71824)",
+      "--wiki-fg-dark": "var(--wiki-cell-text-red-dark, #ff9189)",
     });
     expect(
       textColorVars({ kind: "custom", light: "#111111", dark: null }),

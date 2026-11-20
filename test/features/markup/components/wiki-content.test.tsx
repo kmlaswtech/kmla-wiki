@@ -253,7 +253,9 @@ describe("WikiContent styling", () => {
     );
     const [red, custom] = container.querySelectorAll(".wiki-color");
     expect(red).toHaveAttribute("data-text-color", "red");
-    expect(red?.getAttribute("style")).toContain("var(--wiki-text-red)");
+    expect(red?.getAttribute("style")).toContain(
+      "var(--wiki-cell-text-red, #b71824)",
+    );
     expect(custom?.getAttribute("style")).toContain("--wiki-fg-dark: #ddeeff");
   });
 
@@ -312,7 +314,7 @@ describe("WikiContent styling", () => {
     expect(th).toHaveAttribute("colspan", "2");
     expect(th).toHaveAttribute("data-bg", "blue-strong");
     expect(th).toHaveAttribute("data-bg-strong", "");
-    expect(th?.getAttribute("style")).toContain("var(--wiki-strong-blue)");
+    expect(th?.style.getPropertyValue("--wiki-bg")).toBe("#0060c1");
     // 칸 정렬은 없다(칸 안의 글은 문단 정렬로 맞춘다). 예전 값이 남아 있어도 그리지 않는다.
     expect(th?.getAttribute("style")).not.toContain("text-align");
   });

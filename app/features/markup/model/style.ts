@@ -5,12 +5,12 @@ import { stringAttr, numberAttr, type WikiMark, type WikiNode } from "./doc";
  * 같은 값을 읽고 같은 모양으로 그린다.
  *
  * 저장하는 것은 정해 둔 이름(팔레트 색, 크기 단계)이나 검사한 `#rrggbb`뿐이다. CSS 글자를 그대로
- * 저장하지 않는다. 그려 낼 때 이 값을 CSS 변수로 바꾸고, 실제 색은 `app.css`가 화면 모드마다 정한다.
+ * 저장하지 않는다. 그려 낼 때 이 값을 화면 모드별 CSS 변수로 바꾼다.
  */
 
 /**
  * 팔레트 색. 글자 색은 흰 바탕(밝은 화면)과 `#18191a`(어두운 화면) 양쪽에서 대비 4.5:1 이상,
- * 진한 배경은 흰 글자와 4.5:1 이상이 되게 `app.css`에서 골랐다.
+ * 진한 배경은 흰 글자와 4.5:1 이상이다.
  */
 export const HUES = [
   "gray",
@@ -24,6 +24,21 @@ export const HUES = [
   "pink",
 ] as const;
 export type Hue = (typeof HUES)[number];
+
+const PALETTE = {
+  gray: ["#606369", "#b5b7bc", "#eceff3", "#313336"],
+  red: ["#b71824", "#ff9189", "#ffe6e3", "#492826"],
+  orange: ["#a63d00", "#f5a06f", "#ffe8da", "#472b1b"],
+  yellow: ["#875a00", "#d6b265", "#f9edd5", "#3f3112"],
+  green: ["#107823", "#89cb8a", "#e1f5e0", "#223a23"],
+  teal: ["#007671", "#75c9c3", "#d5f7f4", "#0a3b38"],
+  blue: ["#0060c1", "#7ebaff", "#dff0ff", "#21344c"],
+  purple: ["#7444b4", "#c4a4fd", "#f2eaff", "#372d49"],
+  pink: ["#a42c71", "#f494c3", "#ffe5f2", "#462836"],
+} satisfies Record<
+  Hue,
+  [lightText: string, darkText: string, lightFill: string, darkFill: string]
+>;
 
 export const HUE_LABEL: Record<Hue, string> = {
   gray: "회색",
@@ -132,12 +147,12 @@ export const MIN_CONTRAST = 4.5;
 const ON_LIGHT = "#1f2023";
 const ON_DARK = "#ffffff";
 
-/** 이 배경 위에서 더 잘 읽히는 글자 색(거의 검정이나 흰색). */
+/** 이 배경 위에서 기준 대비를 충족하는 글자 색. */
 export function readableOn(background: string): string {
-  return contrastRatio(background, ON_LIGHT) >=
-    contrastRatio(background, ON_DARK)
-    ? ON_LIGHT
-    : ON_DARK;
+  const light = contrastRatio(background, ON_LIGHT);
+  const dark = contrastRatio(background, ON_DARK);
+  if (Math.max(light, dark) < MIN_CONTRAST) return "#000000";
+  return light >= dark ? ON_LIGHT : ON_DARK;
 }
 
 /** 각 화면 모드의 본문 바탕. 직접 넣은 글자 색의 대비를 알릴 때 쓴다(`app.css`의 `--background`). */
@@ -147,14 +162,15 @@ export const PAGE_BACKGROUND = { light: "#ffffff", dark: "#18191a" } as const;
 export type StyleVars = Record<`--${string}`, string>;
 
 /**
- * 글자 색을 CSS 변수로 바꾼다. 실제 색은 `.wiki-color` 규칙이 화면 모드에 맞춰 고른다. 팔레트 색은
- * 토큰이 화면 모드마다 바뀌므로 두 변수에 같은 토큰을 둔다. 변수는 늘 둘 다 둔다. 하나만 두면 바깥
- * 요소의 값을 물려받는다.
+ * 팔레트 글자 색은 셀 배경과 대비를 검사한 값을 우선 쓴다. 셀 밖에서는 팔레트 원래 색을 쓴다.
  */
 export function textColorVars(color: TextColor): StyleVars {
   if (color.kind === "palette") {
-    const token = `var(--wiki-text-${color.hue})`;
-    return { "--wiki-fg": token, "--wiki-fg-dark": token };
+    const [light, dark] = PALETTE[color.hue];
+    return {
+      "--wiki-fg": `var(--wiki-cell-text-${color.hue}, ${light})`,
+      "--wiki-fg-dark": `var(--wiki-cell-text-${color.hue}-dark, ${dark})`,
+    };
   }
   return {
     "--wiki-fg": color.light,
@@ -170,33 +186,32 @@ export function backgroundVars(background: CellBackground): {
   vars: StyleVars;
   strong: boolean;
 } {
-  if (background.kind === "palette") {
-    const fill = background.strong
-      ? `var(--wiki-strong-${background.hue})`
-      : `var(--wiki-soft-${background.hue})`;
-    const on = background.strong
-      ? "var(--wiki-on-strong)"
-      : "var(--foreground)";
-    return {
-      vars: {
-        "--wiki-bg": fill,
-        "--wiki-on": on,
-        "--wiki-bg-dark": fill,
-        "--wiki-on-dark": on,
-      },
-      strong: background.strong,
-    };
-  }
-  const dark = background.dark ?? background.light;
-  return {
-    vars: {
-      "--wiki-bg": background.light,
-      "--wiki-on": readableOn(background.light),
-      "--wiki-bg-dark": dark,
-      "--wiki-on-dark": readableOn(dark),
-    },
-    strong: true,
+  const strong = background.kind === "custom" || background.strong;
+  const [light, dark] = backgroundColors(background);
+  const onLight = strong ? readableOn(light) : "var(--foreground)";
+  const onDark = strong ? readableOn(dark) : "var(--foreground)";
+  const vars: StyleVars = {
+    "--wiki-bg": light,
+    "--wiki-on": onLight,
+    "--wiki-bg-dark": dark,
+    "--wiki-on-dark": onDark,
   };
+  for (const hue of HUES) {
+    const [lightText, darkText] = PALETTE[hue];
+    vars[`--wiki-cell-text-${hue}`] =
+      contrastRatio(lightText, light) >= MIN_CONTRAST ? lightText : onLight;
+    vars[`--wiki-cell-text-${hue}-dark`] =
+      contrastRatio(darkText, dark) >= MIN_CONTRAST ? darkText : onDark;
+  }
+  return { vars, strong };
+}
+
+function backgroundColors(background: CellBackground): [string, string] {
+  if (background.kind === "custom") {
+    return [background.light, background.dark ?? background.light];
+  }
+  const [strong, , light, dark] = PALETTE[background.hue];
+  return background.strong ? [strong, strong] : [light, dark];
 }
 
 /** 편집기 HTML(`renderHTML`)에 쓰는 `style` 글자. 값은 위에서 검사한 것만 들어온다. */
