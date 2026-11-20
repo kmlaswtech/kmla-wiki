@@ -34,10 +34,13 @@ const NAV_LINK =
  */
 export function SiteHeader({
   status,
+  openReports = 0,
   stickyOnNarrow = true,
   tabToSearch = false,
 }: {
   status: MemberStatus;
+  /** 관리자에게 [관리] 옆에 보일 처리되지 않은 신고 수. */
+  openReports?: number;
   stickyOnNarrow?: boolean;
   /** 포커스가 아무 데도 없을 때 Tab이 검색창으로 온다(`SearchBox`). */
   tabToSearch?: boolean;
@@ -99,25 +102,28 @@ export function SiteHeader({
 
         <SearchBox className="min-w-0 flex-1" tabToSearch={tabToSearch} />
 
-        <NavMenu status={status} />
+        <NavMenu status={status} openReports={openReports} />
 
         <nav
           aria-label="둘러보기"
           className="flex items-center gap-0.5 max-sm:hidden"
         >
-          {navItems(status).map(({ to, label, icon: Icon, iconOnWide }) => (
-            <NavLink
-              key={to}
-              to={to}
-              prefetch="intent"
-              aria-label={iconOnWide ? label : undefined}
-              className={({ isActive }) =>
-                cn(NAV_LINK, isActive && "text-foreground")
-              }
-            >
-              {iconOnWide ? <Icon className="size-4" aria-hidden /> : label}
-            </NavLink>
-          ))}
+          {navItems(status, openReports).map(
+            ({ to, label, icon: Icon, iconOnWide, count }) => (
+              <NavLink
+                key={to}
+                to={to}
+                prefetch="intent"
+                aria-label={navLabel(label, count, iconOnWide)}
+                className={({ isActive }) =>
+                  cn(NAV_LINK, isActive && "text-foreground")
+                }
+              >
+                {iconOnWide ? <Icon className="size-4" aria-hidden /> : label}
+                <CountBadge count={count} />
+              </NavLink>
+            ),
+          )}
         </nav>
       </div>
     </header>
@@ -130,23 +136,53 @@ interface NavItem {
   icon: LucideIcon;
   /** 넓은 화면의 머리띠에서는 아이콘만 보인다. */
   iconOnWide?: boolean;
+  /** 이름 옆에 붙일 수(처리할 신고). 0이면 붙이지 않는다. */
+  count?: number;
 }
 
 /** 둘러보기 항목. 넓은 화면의 머리띠와 좁은 화면의 `☰` 메뉴가 함께 쓴다. */
-function navItems(status: MemberStatus): NavItem[] {
+function navItems(status: MemberStatus, openReports: number): NavItem[] {
   return [
     { to: "/recent", label: "최근 변경", icon: History },
     { to: "/special", label: "특수 기능", icon: LayoutList },
     { to: "/random", label: "아무 문서", icon: Shuffle, iconOnWide: true },
     ...(status.isAdmin
-      ? [{ to: "/admin", label: "관리", icon: ShieldAlert }]
+      ? [{ to: "/admin", label: "관리", icon: ShieldAlert, count: openReports }]
       : []),
     { to: "/me", label: "내 정보", icon: User, iconOnWide: true },
   ];
 }
 
+/** 화면 낭독기용 이름. 수가 있으면 무엇의 수인지 함께 읽는다. */
+function navLabel(
+  label: string,
+  count: number | undefined,
+  iconOnWide: boolean | undefined,
+): string | undefined {
+  if (count) return `${label} (처리할 신고 ${count}건)`;
+  return iconOnWide ? label : undefined;
+}
+
+function CountBadge({ count }: { count: number | undefined }) {
+  if (!count) return null;
+  return (
+    <span
+      aria-hidden
+      className="ml-1 inline-flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-4 font-medium text-white"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 /** 좁은 화면의 둘러보기 메뉴. 넓은 화면에서는 같은 항목을 머리띠에 펼쳐 둔다. */
-function NavMenu({ status }: { status: MemberStatus }) {
+function NavMenu({
+  status,
+  openReports,
+}: {
+  status: MemberStatus;
+  openReports: number;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -155,21 +191,39 @@ function NavMenu({ status }: { status: MemberStatus }) {
             type="button"
             size="icon-sm"
             variant="ghost"
-            // 옆의 검색창과 높이를 맞춘다(`SearchBox`).
-            className="shrink-0 sm:hidden coarse:size-9"
-            aria-label="둘러보기 메뉴"
+            aria-label={
+              openReports
+                ? `둘러보기 메뉴 (처리할 신고 ${openReports}건)`
+                : "둘러보기 메뉴"
+            }
+            // 옆의 검색창과 높이를 맞춘다(`SearchBox`). 신고 점을 모서리에 둔다.
+            className="relative shrink-0 sm:hidden coarse:size-9"
           />
         }
       >
         <Menu aria-hidden />
+        {openReports ? (
+          <span
+            aria-hidden
+            className="absolute top-1 right-1 size-2 rounded-full bg-destructive"
+          />
+        ) : null}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-40">
-        {navItems(status).map(({ to, label, icon: Icon }) => (
-          <DropdownMenuItem key={to} render={<Link to={to} />}>
-            <Icon aria-hidden />
-            {label}
-          </DropdownMenuItem>
-        ))}
+        {navItems(status, openReports).map(
+          ({ to, label, icon: Icon, count }) => (
+            <DropdownMenuItem
+              key={to}
+              render={
+                <Link to={to} aria-label={navLabel(label, count, false)} />
+              }
+            >
+              <Icon aria-hidden />
+              {label}
+              <CountBadge count={count} />
+            </DropdownMenuItem>
+          ),
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

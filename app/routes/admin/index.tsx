@@ -5,7 +5,9 @@ import type { Route } from "./+types/index";
 import {
   listAdmins,
   listMyAuthorLookups,
+  listOpenReports,
   OpenLookupList,
+  OpenReportList,
   ReasonDialog,
   revokeAdmin,
 } from "~/features/admin";
@@ -17,10 +19,10 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   // 화면을 가리는 검사다. 실제 권한은 각 RPC가 검사한다.
   const status = await loadMemberStatus();
   if (!status?.isAdmin) throw redirect("/");
-  const [admins, lookups] = await withVerifiedMember(request, () =>
-    Promise.all([listAdmins(), listMyAuthorLookups()]),
+  const [admins, lookups, reports] = await withVerifiedMember(request, () =>
+    Promise.all([listAdmins(), listMyAuthorLookups(), listOpenReports()]),
   );
-  return { admins, lookups };
+  return { admins, lookups, reports };
 }
 
 export const meta: Route.MetaFunction = () => [{ title: "관리 - 큼온 위키" }];
@@ -30,7 +32,7 @@ export const meta: Route.MetaFunction = () => [{ title: "관리 - 큼온 위키"
  * 것(관리자 목록)과 다른 화면으로 가는 길만 둔다.
  */
 export default function AdminRoute({ loaderData }: Route.ComponentProps) {
-  const { admins, lookups } = loaderData;
+  const { admins, lookups, reports } = loaderData;
   const revalidator = useRevalidator();
   const [revoking, setRevoking] = useState<string | null>(null);
 
@@ -46,6 +48,10 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
               차단, 판 숨기기, 관리자 지정, 같은 사람의 다른 편집 보기
             </strong>
             : 문서의 [기록]에서 해당 판 오른쪽의 방패 버튼
+          </li>
+          <li>
+            <strong>한 사람의 편집을 여러 문서에서 되돌리기</strong>: 다른 편집
+            보기 화면의 [일괄 되돌리기] 또는 각 줄의 [여기부터 되돌리기]
           </li>
           <li>
             <strong>문서 보호, 삭제·복구</strong>: 문서 화면의 [관리] 버튼
@@ -64,6 +70,21 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
             (모든 회원에게 공개)
           </li>
         </ul>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-lg font-semibold">
+          신고{reports.length > 0 ? ` ${reports.length}건` : ""}
+        </h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          회원이 관리자에게 알린 판입니다. 누가 신고했는지는 보이지 않습니다.
+          조치한 뒤에는 [처리함], 조치할 일이 없으면 [기각]으로 닫습니다. 닫은
+          결과는 공개 기록에 남지 않습니다.
+        </p>
+        <OpenReportList
+          reports={reports}
+          onChanged={() => void revalidator.revalidate()}
+        />
       </section>
 
       <section>

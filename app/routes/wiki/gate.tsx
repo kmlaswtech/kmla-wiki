@@ -7,6 +7,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/gate";
+import { useOpenReportCount } from "~/features/admin";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
 import { pageHref } from "~/features/markup";
 import { RecentChangesPanel, useRecentChangesPanel } from "~/features/pages";
@@ -77,6 +78,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
   const reading = handles.some((handle) => handle?.reading);
 
   const recentChanges = useRecentChangesPanel(RECENT_PANEL_PATH);
+  const openReports = useOpenReportCount(loaderData.isAdmin);
   const idle = useAfterIdle();
 
   return (
@@ -88,6 +90,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
       ) : null}
       <SiteHeader
         status={loaderData}
+        openReports={openReports}
         stickyOnNarrow={!editing}
         tabToSearch={reading}
       />

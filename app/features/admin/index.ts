@@ -2,11 +2,14 @@ export {
   AuthorEditsResult,
   AuthorLookupForm,
 } from "./components/author-edits-view";
+export { BulkRevertView } from "./components/bulk-revert-view";
 export { ChangeBanDialog } from "./components/change-ban-dialog";
 export { OpenLookupList } from "./components/open-lookup-list";
+export { OpenReportList } from "./components/open-report-list";
 export { PageAdminMenu } from "./components/page-admin-menu";
 export { ReasonDialog } from "./components/reason-dialog";
 export { RevisionAdminMenu } from "./components/revision-admin-menu";
+export { useOpenReportCount } from "./components/use-open-report-count";
 export { liftBan, revokeAdmin } from "./data/mutations";
 export {
   findAuthorLookup,
@@ -17,6 +20,8 @@ export {
   listAuthorEdits,
   listBans,
   listMyAuthorLookups,
+  listOpenReports,
+  previewBulkRevert,
 } from "./data/queries";
 export { authorEditsHref } from "./model/author-lookup";
 export {

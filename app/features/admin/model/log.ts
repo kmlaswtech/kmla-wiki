@@ -13,7 +13,8 @@ export type AdminAction =
   | "hide_revision"
   | "unhide_revision"
   | "view_author_edits"
-  | "change_ban";
+  | "change_ban"
+  | "bulk_revert";
 
 /** 공개 관리 기록의 한 줄. 누가 했는지는 없다("관리자"로만 보인다). */
 export interface AdminLogEntry {
@@ -83,10 +84,13 @@ export function describeAdminLog(entry: AdminLogEntry): string {
       return `관리자가 ${page} 문서의 판(r${entry.revisionId}) 숨김을 해제함`;
     case "view_author_edits":
       return `관리자가 ${who}의 다른 편집을 조회함`;
+    case "bulk_revert":
+      return `관리자가 ${who}의 편집을 여러 문서에서 되돌림${note}`;
   }
 }
 
-// DB 마이그레이션(`*_admin.sql`, `*_admin_lookups_ban_end.sql`) 머리말의 표와 같다.
+// DB 마이그레이션(`*_admin.sql`, `*_admin_lookups_ban_end.sql`, `*_admin_bulk_revert_reports.sql`)
+// 머리말의 표와 같다.
 const MESSAGE: Record<string, string> = {
   "42501": "관리자만 할 수 있습니다.",
   WK010: "관리자는 차단할 수 없습니다. 먼저 관리자에서 해제해 주세요.",
@@ -96,6 +100,7 @@ const MESSAGE: Record<string, string> = {
   WK014: "사유를 2자 이상 적어 주세요.",
   WK016: "조회 허가가 끝났습니다. 사유를 적고 다시 조회해 주세요.",
   WK017: "차단 기간은 1시간부터 10년까지 정할 수 있습니다.",
+  WK018: "일괄 되돌리기는 한 번에 200개 문서까지 할 수 있습니다.",
 };
 
 /** 같은 사람의 다른 편집을 보는 허가가 없거나 끝났다. */

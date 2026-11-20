@@ -25,6 +25,7 @@ import {
   type RevertActionError,
   RevisionList,
 } from "~/features/pages";
+import { ReportButton } from "~/features/reports";
 import { LinkButton } from "~/shared/components/link-button";
 import { Button } from "~/shared/ui/button";
 
@@ -47,6 +48,8 @@ export async function clientLoader({
       title: view.page.title,
       currentRevisionId: view.page.currentRevisionId,
       canRevert: canEditPage(view),
+      // 관리자는 방패 메뉴로 직접 조치한다. 차단된 사람은 신고도 할 수 없다(서버도 막는다).
+      canReport: view.canEdit && !view.isAdmin,
       isAdmin: view.isAdmin,
       revisions,
       myPseudonym,
@@ -95,6 +98,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
     revisions,
     myPseudonym,
     canRevert,
+    canReport,
     isAdmin,
     currentRevisionId,
   } = loaderData;
@@ -193,6 +197,9 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
               >
                 이 판으로 되돌리기
               </Button>
+            ) : null}
+            {canReport && !revision.hiddenAt ? (
+              <ReportButton revisionId={revision.id} pageTitle={title} />
             ) : null}
             {isAdmin ? (
               <RevisionAdminMenu

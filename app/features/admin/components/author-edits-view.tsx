@@ -11,6 +11,7 @@ import {
   type LookupSource,
 } from "../data/queries";
 import { authorEditsHref } from "../model/author-lookup";
+import { bulkRevertHref } from "../model/bulk-revert";
 import { describeAdminError } from "../model/log";
 import { InlineRevisionDiff } from "./inline-revision-diff";
 import { RevisionAdminMenu } from "./revision-admin-menu";
@@ -172,6 +173,12 @@ export function AuthorEditsResult({
           다릅니다. 조회 허가는 {formatDateTime(lookup.expiresAt)}까지입니다.
         </span>
         <span className="ml-auto flex items-center gap-1">
+          <Link
+            to={bulkRevertHref(lookup.id, revisionId)}
+            className="rounded px-1.5 py-0.5 text-primary hover:bg-muted"
+          >
+            일괄 되돌리기
+          </Link>
           이 사람에 대한 조치
           <RevisionAdminMenu
             revision={source}
@@ -191,8 +198,8 @@ export function AuthorEditsResult({
           expanded.has(edit.id) ? (
             <InlineRevisionDiff
               pageId={edit.pageId}
-              revisionId={edit.id}
-              parentRevisionId={edit.parentRevisionId}
+              beforeId={edit.parentRevisionId}
+              afterId={edit.id}
             />
           ) : null
         }
@@ -211,6 +218,13 @@ export function AuthorEditsResult({
                 className="rounded px-1.5 py-0.5 text-primary hover:bg-muted"
               >
                 기록
+              </Link>
+              <Link
+                to={bulkRevertHref(lookup.id, revisionId, edit.id)}
+                className="rounded px-1.5 py-0.5 text-primary hover:bg-muted"
+                aria-label={`r${edit.id}부터 일괄 되돌리기`}
+              >
+                여기부터 되돌리기
               </Link>
               <Button
                 type="button"

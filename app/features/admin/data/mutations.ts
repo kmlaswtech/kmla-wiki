@@ -1,3 +1,4 @@
+import type { BulkRevertOutcome } from "../model/bulk-revert";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap } from "~/shared/supabase/errors";
 
@@ -54,6 +55,44 @@ export async function openAuthorLookup(
     await getSupabase().rpc("open_author_lookup", {
       p_revision_id: revisionId,
       p_reason: reason,
+    }),
+  );
+}
+
+/**
+ * 일괄 되돌리기. `items`는 미리보기 때의 문서와 현재 판이다. 서버가 문서를 잠그고 계획을 다시 세워,
+ * 그사이 현재 판이 바뀐 문서는 건너뛴다. 한 번에 200개까지(WK018).
+ */
+export async function bulkRevert(
+  lookupId: string,
+  fromRevisionId: number | null,
+  items: readonly { pageId: number; currentRevisionId: number }[],
+  reason: string,
+): Promise<BulkRevertOutcome[]> {
+  const rows = unwrap(
+    await getSupabase().rpc("bulk_revert", {
+      p_lookup_id: lookupId,
+      // 생성된 타입은 NULL 가능 여부를 모른다. NULL이면 대상의 모든 편집이다.
+      p_from_revision_id: fromRevisionId as number,
+      p_items: items.map((item) => ({
+        page_id: item.pageId,
+        current_revision_id: item.currentRevisionId,
+      })),
+      p_reason: reason,
+    }),
+  );
+  return rows.map((row) => row.outcome as BulkRevertOutcome);
+}
+
+/** 판 하나의 처리되지 않은 신고를 모두 닫는다. 결과는 비공개로 남는다. */
+export async function resolveReports(
+  revisionId: number,
+  resolution: "handled" | "dismissed",
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("resolve_reports", {
+      p_revision_id: revisionId,
+      p_resolution: resolution,
     }),
   );
 }
