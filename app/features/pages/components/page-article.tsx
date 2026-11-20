@@ -266,17 +266,15 @@ export function PageArticle({
           }
         />
       ) : (
-        <>
-          <TableOfContents headings={document.headings} />
-
-          <WikiContent
-            withToc
-            document={document}
-            existing={resolved.existing}
-            sectionEditHref={sectionEditable ? sectionEditHref : undefined}
-            renderImage={renderImage}
-          />
-        </>
+        // 프로필이 있으면 맨 위에 두고, 프로필이 끝난 뒤에 목차와 본문이 온다.
+        <WikiContent
+          withToc
+          document={document}
+          existing={resolved.existing}
+          sectionEditHref={sectionEditable ? sectionEditHref : undefined}
+          renderImage={renderImage}
+          beforeBody={<TableOfContents headings={document.headings} />}
+        />
       )}
 
       {view.members.length > 0 ? (

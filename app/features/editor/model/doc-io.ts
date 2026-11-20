@@ -4,15 +4,21 @@ import { wikiSchema } from "./schema";
 import {
   emptyDoc,
   isEmptyParagraph,
+  isEmptyProfile,
   normalizeCategories,
+  profileOf,
   type WikiDoc,
+  type WikiDocAttrs,
   type WikiNode,
+  type WikiProfile,
 } from "~/features/markup";
 
-/** 본문 흐름 밖의 문서 정보. 편집기 아래의 따로 된 입력 칸에서 고친다. */
+/** 본문 흐름 밖의 문서 정보. 본문 편집기와 따로 된 입력 칸에서 고친다. */
 export interface DocMeta {
   /** 분류 문서 제목(`분류:생활`). */
   categories: string[];
+  /** 프로필 블록. 없으면 `null`. 본문과 따로 된 편집기에서 고친다. */
+  profile: WikiProfile | null;
 }
 
 /**
@@ -24,7 +30,10 @@ export interface DocMeta {
 export function splitDoc(doc: WikiDoc): { content: WikiDoc; meta: DocMeta } {
   return {
     content: { type: "doc", content: doc.content },
-    meta: { categories: doc.attrs?.categories ?? [] },
+    meta: {
+      categories: doc.attrs?.categories ?? [],
+      profile: profileOf(doc),
+    },
   };
 }
 
@@ -32,11 +41,10 @@ export function splitDoc(doc: WikiDoc): { content: WikiDoc; meta: DocMeta } {
  * 편집기 본문과 문서 정보를 저장할 문서 하나로 합친다.
  *
  * 같은 내용은 언제나 같은 값이 되게 맞춘다: 끝의 빈 문단을 떼고, 분류는 제목으로 바꿔 겹친 것을
- * 빼고, 빈 문서 정보는 적지 않는다. 그래야 "바뀐 것이 있는가"를 값 비교로 알 수 있다.
+ * 빼고, 빈 문서 정보(빈 프로필 포함)는 적지 않는다. 그래야 "바뀐 것이 있는가"를 값 비교로 알 수 있다.
  */
 export function joinDoc(content: WikiDoc, meta: DocMeta): WikiDoc {
-  const blocks = [...content.content];
-  while (blocks.length > 1 && isEmptyParagraph(blocks.at(-1)!)) blocks.pop();
+  const blocks = trimTrailingEmpty(content.content.map(omitUnsetStyle));
 
   const categories = normalizeCategories(meta.categories);
 
@@ -44,8 +52,53 @@ export function joinDoc(content: WikiDoc, meta: DocMeta): WikiDoc {
     type: "doc",
     content: blocks.length > 0 ? blocks : emptyDoc().content,
   };
-  if (categories.length > 0) doc.attrs = { categories };
+  const attrs: WikiDocAttrs = {};
+  if (categories.length > 0) attrs.categories = categories;
+  if (meta.profile && !isEmptyProfile(meta.profile)) {
+    attrs.profile = trimTrailingEmpty(meta.profile.map(omitUnsetStyle));
+  }
+  if (Object.keys(attrs).length > 0) doc.attrs = attrs;
   return doc;
+}
+
+/** 끝의 빈 문단을 뗀다(하나는 남긴다). */
+function trimTrailingEmpty(blocks: WikiNode[]): WikiNode[] {
+  while (blocks.length > 1 && isEmptyParagraph(blocks.at(-1)!)) blocks.pop();
+  return blocks;
+}
+
+/**
+ * 고르지 않은(`null`) 꾸밈 속성. 편집기는 모든 문단·셀에 기본값을 적어 내놓는다. 그대로 저장하면
+ * 문단마다 `"textAlign": null`이 붙어 본문이 커지고, 이 기능 전에 저장한 문서와 값이 달라진다.
+ */
+const UNSET_STYLE_ATTRS: ReadonlySet<string> = new Set([
+  "textAlign",
+  "background",
+]);
+
+function isUnsetStyle([name, value]: [string, unknown]): boolean {
+  return value === null && UNSET_STYLE_ATTRS.has(name);
+}
+
+/** 고칠 것이 없는 노드는 그대로 돌려준다. 입력할 때마다 부르므로 모든 노드를 복사하지 않는다. */
+function omitUnsetStyle(node: WikiNode): WikiNode {
+  const entries = node.attrs ? Object.entries(node.attrs) : [];
+  const stripAttrs = entries.some(isUnsetStyle);
+  const content = node.content?.map(omitUnsetStyle);
+  const contentChanged =
+    content !== undefined &&
+    content.some((child, index) => child !== node.content![index]);
+  if (!stripAttrs && !contentChanged) return node;
+
+  // 키 순서를 지킨다(펼친 객체에서 같은 키를 덮어쓰면 자리가 그대로다).
+  const result: WikiNode = { ...node };
+  if (stripAttrs) {
+    const kept = entries.filter((entry) => !isUnsetStyle(entry));
+    if (kept.length > 0) result.attrs = Object.fromEntries(kept);
+    else delete result.attrs;
+  }
+  if (contentChanged) result.content = content;
+  return result;
 }
 
 /**
@@ -54,15 +107,17 @@ export function joinDoc(content: WikiDoc, meta: DocMeta): WikiDoc {
  */
 export function normalizeDoc(doc: WikiDoc): WikiDoc {
   const { content, meta } = splitDoc(doc);
-  const known = pruneUnknown({
-    type: "doc",
-    content: content.content,
-  }) as WikiDoc;
+  const profile = meta.profile ? normalizeBlocks(meta.profile).content : null;
+  return joinDoc(normalizeBlocks(content.content), { ...meta, profile });
+}
+
+/** 블록 목록을 편집기 스키마로 한 번 읽어 다시 쓴다. 읽지 못하면 모르는 것만 뺀 값. */
+function normalizeBlocks(blocks: readonly WikiNode[]): WikiDoc {
+  const known = pruneUnknown({ type: "doc", content: [...blocks] }) as WikiDoc;
   try {
-    const node = PMNode.fromJSON(wikiSchema(), known);
-    return joinDoc(node.toJSON() as WikiDoc, meta);
+    return PMNode.fromJSON(wikiSchema(), known).toJSON() as WikiDoc;
   } catch {
-    return joinDoc(known, meta);
+    return known;
   }
 }
 

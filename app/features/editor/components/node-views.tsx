@@ -327,15 +327,18 @@ function MediaNodeView({
             ) : null}
           </div>
         </div>
-        {children}
-        {editor.isEditable ? (
-          <MediaControls
-            size={size}
-            align={align}
-            allowOriginal={allowOriginal}
-            onChange={updateAttributes}
-          />
-        ) : null}
+        {/* 그림 아래의 고치기 도구. 표 칸에서는 칸 너비를 정하지 않는다(app.css의 `wiki-media-tools`). */}
+        <div className="wiki-media-tools">
+          {children}
+          {editor.isEditable ? (
+            <MediaControls
+              size={size}
+              align={align}
+              allowOriginal={allowOriginal}
+              onChange={updateAttributes}
+            />
+          ) : null}
+        </div>
       </div>
     </NodeViewWrapper>
   );

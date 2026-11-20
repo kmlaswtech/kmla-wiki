@@ -122,7 +122,7 @@ describe("docToText for media", () => {
           attrs: { videoId: ID, start: 90, size: "full", align: "left" },
         }),
       ),
-    ).toBe(`[유튜브 ${ID} 90초부터 (본문 너비에 맞춤)]`);
+    ).toBe(`[유튜브 ${ID} 90초부터 (너비에 맞춤)]`);
   });
 
   it("leaves out the default video size", () => {

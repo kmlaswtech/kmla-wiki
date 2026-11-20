@@ -17,6 +17,12 @@ export {
 } from "./model/doc";
 export { headingId } from "./model/heading-id";
 export {
+  isEmptyProfile,
+  profileOf,
+  starterProfile,
+  type WikiProfile,
+} from "./model/profile";
+export {
   DEFAULT_VIDEO_SIZE,
   MEDIA_ALIGN_LABEL,
   MEDIA_ALIGNS,
@@ -52,6 +58,34 @@ export {
   replaceSection,
   type Section,
 } from "./model/sections";
+export {
+  backgroundVars,
+  contrastRatio,
+  formatCustomColor,
+  HUE_LABEL,
+  HUES,
+  isHue,
+  isTextAlign,
+  isTextSize,
+  MIN_CONTRAST,
+  normalizeHex,
+  PAGE_BACKGROUND,
+  paletteBackground,
+  parseBackground,
+  parseTextColor,
+  readableOn,
+  styleText,
+  TEXT_ALIGNS,
+  TEXT_SIZE_LABEL,
+  TEXT_SIZES,
+  textColorVars,
+  type CellBackground,
+  type CustomColor,
+  type Hue,
+  type TextAlign,
+  type TextColor,
+  type TextSize,
+} from "./model/style";
 export { docToText, visibleTextLength } from "./model/text";
 export {
   ancestorTitles,

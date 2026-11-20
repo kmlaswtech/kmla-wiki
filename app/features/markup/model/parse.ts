@@ -9,6 +9,7 @@ import {
   type WikiNode,
 } from "./doc";
 import { createHeadingIdAllocator } from "./heading-id";
+import { profileOf } from "./profile";
 import { normalizeCategories, redirectTargetOf, templateTitle } from "./refs";
 import { headingDepth } from "./sections";
 import { titleKey } from "./title";
@@ -51,6 +52,11 @@ export interface ParsedDocument {
   categories: string[];
   /** 넘겨주기 문서면 대상 제목. */
   redirect: string | null;
+  /**
+   * 프로필 블록(틀을 펼치고 각주 번호를 붙인 것). 본문보다 먼저 보이므로 각주 번호도 먼저 받는다.
+   * 프로필 안의 제목은 목차·문단에 들지 않는다. 틀 본문의 프로필은 끼워 넣지 않는다.
+   */
+  profile: WikiNode[] | null;
 }
 
 export interface ParseOptions {
@@ -84,6 +90,15 @@ export function parseWiki(
   const headings: HeadingInfo[] = [];
   const allocate = createHeadingIdAllocator();
   let ownHeadings = 0;
+
+  const rawProfile = profileOf(doc);
+  const profile = rawProfile
+    ? rawProfile.flatMap((block) =>
+        block.type === NODE.template
+          ? expandTemplate(block, context, [])
+          : [prepare(block, context, [])],
+      )
+    : null;
 
   const pushTopLevel = (node: WikiNode, own: boolean) => {
     if (node.type !== NODE.heading) {
@@ -121,6 +136,7 @@ export function parseWiki(
     footnotes: context.footnotes,
     categories: normalizeCategories(doc.attrs?.categories ?? []),
     redirect: redirectTargetOf(doc),
+    profile,
   };
 }
 

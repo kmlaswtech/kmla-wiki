@@ -1,3 +1,4 @@
+import type { Editor } from "@tiptap/core";
 import {
   useCallback,
   useDeferredValue,
@@ -16,6 +17,7 @@ import { clearDraft, loadDraft, saveDraft } from "../storage/drafts";
 import { DocMetaFields } from "./doc-meta-fields";
 import { EditorDialogs } from "./editor-dialogs";
 import type { EditorRequest } from "./editor-ui";
+import { ProfileEditor } from "./profile-editor";
 import { Toolbar } from "./toolbar";
 import { useWikiEditor, WikiEditorContent } from "./wiki-editor";
 import { useLoginOnExpiry } from "~/features/auth";
@@ -33,6 +35,7 @@ import {
   NODE,
   namespaceOf,
   pageHref,
+  starterProfile,
   titleKey,
   type WikiDoc,
 } from "~/features/markup";
@@ -78,7 +81,7 @@ const SAVE_SHORTCUT =
     ? "⌘S"
     : "Ctrl+S";
 
-const NO_META: DocMeta = { categories: [] };
+const NO_META: DocMeta = { categories: [], profile: null };
 
 /** 편집기에 여는 부분: 문단 편집이면 그 문단, 아니면 문서 전체. */
 function editingPart(target: EditTarget): WikiDoc {
@@ -125,6 +128,16 @@ export function EditorForm({
   const [request, setRequest] = useState<EditorRequest | null>(null);
   const [uploading, setUploading] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Safari에서는 단추를 눌러도 초점이 바뀌지 않을 수 있어 포인터 입력으로도 편집기를 고른다.
+  const [profileEditor, setProfileEditor] = useState<Editor | null>(null);
+  const profileEditorRef = useRef<Editor | null>(null);
+  const [activePart, setActivePart] = useState<"body" | "profile">("body");
+  // 프로필 내용을 통째로 바꿀 때(넣기, 임시 저장 버리기) 프로필 편집기를 새로 만든다.
+  const [profileKey, setProfileKey] = useState(0);
+  const onProfileEditor = useCallback((next: Editor | null) => {
+    profileEditorRef.current = next;
+    setProfileEditor(next);
+  }, []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<WikiDoc | null>(null);
@@ -167,8 +180,10 @@ export function EditorForm({
     existing: resolved.existing,
     request: setRequest,
     onChange: setContent,
-    onImageFiles: (files) => void insertImages(files),
+    onImageFiles: (files) => void insertImages(files, "body"),
   });
+  const toolEditor =
+    activePart === "profile" && profileEditor ? profileEditor : editor;
 
   // 원문 차이(충돌 안내, "변경 사항" 탭)에 쓰는 글자. 차이 계산이 무거워서, 보일 때만 그리고 입력이
   // 잠깐 멈춘 뒤에 다시 계산한다.
@@ -286,36 +301,46 @@ export function EditorForm({
     };
   }, [lookup]);
 
-  /** 고른·붙여넣은·끌어놓은 이미지를 한 장씩 올려 커서 자리에 넣는다. */
-  async function insertImages(files: File[]) {
+  /** 이미지 한 장을 올리고 미리보기 정보를 기억한다. 실패하면 알리고 `null`. */
+  async function uploadOne(file: File) {
+    setUploading((count) => count + 1);
+    try {
+      const uploaded = await uploadImage(file);
+      setImages((known) =>
+        new Map(known).set(uploaded.id, {
+          path: uploaded.path,
+          width: uploaded.width,
+          height: uploaded.height,
+        }),
+      );
+      return uploaded;
+    } catch (caught) {
+      toast.error(
+        caught instanceof Error
+          ? caught.message
+          : "이미지를 올리지 못했습니다.",
+      );
+      return null;
+    } finally {
+      setUploading((count) => count - 1);
+    }
+  }
+
+  /** 고른·붙여넣은·끌어놓은 이미지를 한 장씩 올려 그 편집기의 커서 자리에 넣는다. */
+  async function insertImages(files: File[], part: "body" | "profile") {
     for (const file of files) {
-      setUploading((count) => count + 1);
-      try {
-        const uploaded = await uploadImage(file);
-        setImages((known) =>
-          new Map(known).set(uploaded.id, {
-            path: uploaded.path,
-            width: uploaded.width,
-            height: uploaded.height,
-          }),
-        );
-        editor
-          ?.chain()
-          .focus()
-          .insertContent({
-            type: NODE.image,
-            attrs: { id: uploaded.id, alt: uploaded.alt },
-          })
-          .run();
-      } catch (caught) {
-        toast.error(
-          caught instanceof Error
-            ? caught.message
-            : "이미지를 올리지 못했습니다.",
-        );
-      } finally {
-        setUploading((count) => count - 1);
-      }
+      const uploaded = await uploadOne(file);
+      if (!uploaded) continue;
+      // 올리는 동안 프로필을 뺐을 수 있다. 그러면 본문에 넣는다.
+      const into = (part === "profile" && profileEditorRef.current) || editor;
+      into
+        ?.chain()
+        .focus()
+        .insertContent({
+          type: NODE.image,
+          attrs: { id: uploaded.id, alt: uploaded.alt, size: "small" },
+        })
+        .run();
     }
   }
 
@@ -325,6 +350,8 @@ export function EditorForm({
     editor?.commands.setContent(next.content, { emitUpdate: true });
     setContent(next.content);
     setMeta(next.meta);
+    setProfileKey((last) => last + 1);
+    setActivePart("body");
   }
 
   async function save(confirmed: boolean) {
@@ -450,10 +477,11 @@ export function EditorForm({
         ))}
       </div>
 
+      {/* grid로 감싸지 않는다. grid 칸은 안의 최소 폭(큰 이미지의 원본 폭)만큼 넓어져 편집기가 화면을 넘는다. */}
       <div className={cn(tab !== "edit" && "hidden")}>
-        {editor ? (
+        {toolEditor ? (
           <Toolbar
-            editor={editor}
+            editor={toolEditor}
             request={setRequest}
             onPickImage={() => fileInput.current?.click()}
             isTemplatePage={namespaceOf(target.title) === "template"}
@@ -464,6 +492,17 @@ export function EditorForm({
                     // 쓰던 글은 임시 저장에 남긴다. 본문 편집으로 돌아오면 이어서 쓴다.
                     flushDraft(current, summary, dirty);
                     onConvertToRedirect();
+                  }
+            }
+            onAddProfile={
+              sectionMode || meta.profile
+                ? undefined
+                : () => {
+                    setMeta((last) => ({
+                      ...last,
+                      profile: starterProfile(),
+                    }));
+                    setProfileKey((last) => last + 1);
                   }
             }
             className="sticky top-(--site-header-height) z-10"
@@ -480,16 +519,48 @@ export function EditorForm({
             const files = [...(event.target.files ?? [])];
             // 같은 파일을 다시 골라도 onChange가 오게 비운다.
             event.target.value = "";
-            void insertImages(files);
+            void insertImages(files, activePart);
           }}
         />
-        <WikiEditorContent
-          editor={editor}
-          resolved={resolved}
-          images={images}
-          request={setRequest}
-          className="rounded-b-md border border-t-0 bg-background px-4 py-3 focus-within:ring-1 focus-within:ring-ring/50"
-        />
+        <div className="overflow-hidden rounded-b-md border border-t-0 bg-background focus-within:ring-1 focus-within:ring-ring/50">
+          {/* 프로필은 문서 맨 위에 보이므로 본문 편집기 위에 둔다. 문단 편집에서는 고치지 않는다. */}
+          {!sectionMode && meta.profile ? (
+            <div
+              onFocus={() => setActivePart("profile")}
+              onPointerDown={() => setActivePart("profile")}
+            >
+              <ProfileEditor
+                key={profileKey}
+                initialProfile={meta.profile}
+                title={target.title}
+                resolved={resolved}
+                images={images}
+                request={setRequest}
+                onChange={(profile) =>
+                  setMeta((last) => ({ ...last, profile }))
+                }
+                onImageFiles={(files) => void insertImages(files, "profile")}
+                onEditor={onProfileEditor}
+                onRemove={() => {
+                  setMeta((last) => ({ ...last, profile: null }));
+                  setActivePart("body");
+                }}
+              />
+            </div>
+          ) : null}
+          <div
+            onFocus={() => setActivePart("body")}
+            onPointerDown={() => setActivePart("body")}
+          >
+            <WikiEditorContent
+              editor={editor}
+              resolved={resolved}
+              images={images}
+              request={setRequest}
+              className="px-4 py-3"
+            />
+          </div>
+        </div>
         {uploading > 0 ? (
           <p
             role="status"
@@ -558,9 +629,9 @@ export function EditorForm({
         </span>
       </div>
 
-      {editor ? (
+      {toolEditor ? (
         <EditorDialogs
-          editor={editor}
+          editor={toolEditor}
           request={request}
           onClose={() => setRequest(null)}
         />

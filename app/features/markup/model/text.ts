@@ -16,7 +16,9 @@ import {
   mediaAlign,
   mediaSize,
 } from "./media";
+import { profileOf } from "./profile";
 import { templateTitle } from "./refs";
+import { HUE_LABEL, parseBackground, textAlignOf, textSizeOf } from "./style";
 import { headingDepth } from "./sections";
 
 /**
@@ -32,6 +34,8 @@ export function docToText(doc: WikiDoc): string {
   if (typeof redirect === "string" && redirect !== "") {
     lines.push(`#넘겨주기 [[${redirect}]]`, "");
   }
+  const profile = profileOf(doc);
+  if (profile) lines.push(profileToText(profile), "");
   lines.push(blocksToText(doc.content));
   const categories = doc.attrs?.categories ?? [];
   if (categories.length > 0) {
@@ -43,15 +47,22 @@ export function docToText(doc: WikiDoc): string {
     .trim();
 }
 
+/** 프로필. 본문과 같은 표기로 적고 앞뒤에 표시를 둔다. */
+function profileToText(profile: readonly WikiNode[]): string {
+  return ["[프로필]", blocksToText(profile), "[/프로필]"].join("\n");
+}
+
 /** 화면에 보이는 글자의 양. 큰 삭제를 알아챌 때 쓴다(꾸밈 표기는 세지 않는다). */
 export function visibleTextLength(doc: WikiDoc): number {
   let length = 0;
-  walk(doc.content, (node) => {
+  const count = (node: WikiNode) => {
     if (node.type === NODE.text) length += (node.text ?? "").trim().length;
     if (node.type === NODE.footnote) length += stringAttr(node, "note").length;
     if (node.type === NODE.image || node.type === NODE.youtube)
       length += stringAttr(node, "caption").trim().length;
-  });
+  };
+  walk(profileOf(doc) ?? [], count);
+  walk(doc.content, count);
   return length;
 }
 
@@ -69,10 +80,10 @@ function indent(text: string, first: string, rest: string): string {
 function blockToText(node: WikiNode): string {
   switch (node.type) {
     case NODE.paragraph:
-      return inlineToText(node.content ?? []);
+      return alignPrefix(node) + inlineToText(node.content ?? []);
     case NODE.heading: {
       const marker = "#".repeat(headingDepth(node));
-      return `${marker} ${inlineToText(node.content ?? [])}`;
+      return `${marker} ${alignPrefix(node)}${inlineToText(node.content ?? [])}`;
     }
     case NODE.bulletList:
       return (node.content ?? [])
@@ -149,7 +160,13 @@ function mediaLayoutText(node: WikiNode): string {
   );
 }
 
-/** 표 칸 하나. 제목 칸과 합친 칸도 비교에 보이게 표시한다. */
+/** 문단 정렬. 왼쪽(기본)은 적지 않는다. */
+function alignPrefix(node: WikiNode): string {
+  const align = textAlignOf(node);
+  return align ? `(${MEDIA_ALIGN_LABEL[align]} 정렬) ` : "";
+}
+
+/** 표 칸 하나. 제목 칸, 합친 칸, 배경도 비교에 보이게 표시한다. */
 function cellToText(cell: WikiNode): string {
   const marks: string[] = [];
   if (cell.type === NODE.tableHeader) marks.push("제목 칸");
@@ -157,6 +174,8 @@ function cellToText(cell: WikiNode): string {
   const rowspan = numberAttr(cell, "rowspan") ?? 1;
   if (colspan > 1) marks.push(`가로 ${colspan}칸`);
   if (rowspan > 1) marks.push(`세로 ${rowspan}칸`);
+  const background = stringAttr(cell, "background");
+  if (background) marks.push(`배경 ${colorText(background)}`);
   const text = blocksToText(cell.content ?? []).replace(/\n+/g, " / ");
   return marks.length > 0 ? `(${marks.join(", ")}) ${text}` : text;
 }
@@ -165,6 +184,8 @@ function cellToText(cell: WikiNode): string {
 const MARK_ORDER: readonly string[] = [
   MARK.wikiLink,
   MARK.link,
+  MARK.textSize,
+  MARK.textColor,
   MARK.bold,
   MARK.italic,
   MARK.underline,
@@ -172,8 +193,23 @@ const MARK_ORDER: readonly string[] = [
   MARK.code,
 ];
 
+/** 색 값을 읽는 글자로(`빨강`, `빨강 진하게`, `#112233`). */
+function colorText(value: string): string {
+  // 배경 값은 글자 색 값을 모두 포함한다(진한 배경만 더 있다).
+  const color = parseBackground(value);
+  if (color?.kind !== "palette") return value;
+  return `${HUE_LABEL[color.hue]}${color.strong ? " 진하게" : ""}`;
+}
+
 function wrapMark(text: string, mark: WikiMark): string {
   switch (mark.type) {
+    // 나무위키의 `{{{#색 글}}}`, `{{{+1 글}}}` 표기를 빌린다.
+    case MARK.textColor:
+      return `{{{#${colorText(stringAttr(mark, "color"))} ${text}}}}`;
+    case MARK.textSize: {
+      const size = textSizeOf(mark);
+      return size ? `{{{${size > 0 ? "+" : ""}${size} ${text}}}}` : text;
+    }
     case MARK.bold:
       return `**${text}**`;
     case MARK.italic:

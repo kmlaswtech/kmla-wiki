@@ -10,7 +10,12 @@ import {
   para,
   text,
 } from "../model/doc-builders";
-import { parseWiki, WikiContent, type WikiDoc } from "~/features/markup";
+import {
+  docToText,
+  parseWiki,
+  WikiContent,
+  type WikiDoc,
+} from "~/features/markup";
 
 function show(
   body: WikiDoc,
@@ -232,5 +237,218 @@ describe("WikiContent", () => {
     expect(
       container.querySelector("figure[data-youtube] figcaption"),
     ).not.toBeNull();
+  });
+});
+
+describe("WikiContent styling", () => {
+  const colored = (value: string, color: string) => ({
+    type: "text",
+    text: value,
+    marks: [{ type: "textColor", attrs: { color } }],
+  });
+
+  it("draws palette and custom text colors as CSS variables", () => {
+    const { container } = show(
+      doc(para(colored("빨강", "red"), colored("직접", "#112233,#ddeeff"))),
+    );
+    const [red, custom] = container.querySelectorAll(".wiki-color");
+    expect(red).toHaveAttribute("data-text-color", "red");
+    expect(red?.getAttribute("style")).toContain(
+      "var(--wiki-cell-text-red, #b71824)",
+    );
+    expect(custom?.getAttribute("style")).toContain("--wiki-fg-dark: #ddeeff");
+  });
+
+  it("drops values that are not checked", () => {
+    const { container } = show(
+      doc(para(colored("글", "red; background: url(x)")), {
+        type: "paragraph",
+        attrs: { textAlign: "justify" },
+        content: [text("a")],
+      }),
+    );
+    expect(container.querySelector(".wiki-color")).toBeNull();
+    expect(container.querySelector("p[style]")).toBeNull();
+  });
+
+  it("draws text size, paragraph alignment and table styling", () => {
+    const { container } = show(
+      doc(
+        {
+          type: "paragraph",
+          attrs: { textAlign: "center" },
+          content: [
+            {
+              type: "text",
+              text: "큰 글",
+              marks: [{ type: "textSize", attrs: { size: 2 } }],
+            },
+          ],
+        },
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableHeader",
+                  attrs: {
+                    colspan: 2,
+                    align: "center",
+                    background: "blue-strong",
+                  },
+                  content: [para(text("이름"))],
+                },
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    expect(container.querySelector("p")).toHaveStyle({ textAlign: "center" });
+    expect(container.querySelector("[data-text-size='2']")).toHaveTextContent(
+      "큰 글",
+    );
+    const th = container.querySelector("th");
+    expect(th).toHaveAttribute("colspan", "2");
+    expect(th).toHaveAttribute("data-bg", "blue-strong");
+    expect(th).toHaveAttribute("data-bg-strong", "");
+    expect(th?.style.getPropertyValue("--wiki-bg")).toBe("#0060c1");
+    // 칸 정렬은 없다(칸 안의 글은 문단 정렬로 맞춘다). 예전 값이 남아 있어도 그리지 않는다.
+    expect(th?.getAttribute("style")).not.toContain("text-align");
+  });
+});
+
+describe("profile", () => {
+  const profile = [
+    {
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableHeader",
+              attrs: { colspan: 2, background: "blue-strong" },
+              content: [para(text("민족사관고등학교"))],
+            },
+          ],
+        },
+        {
+          type: "tableRow",
+          content: [
+            { type: "tableHeader", content: [para(text("개교"))] },
+            {
+              type: "tableCell",
+              content: [para(text("1996년"), footnote("출처"))],
+            },
+          ],
+        },
+      ],
+    },
+    para(link("역사")),
+  ];
+
+  it("draws the profile with the table of contents beside it, then the body", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <WikiContent
+          withToc
+          document={parseWiki({
+            type: "doc",
+            attrs: { profile },
+            content: [heading(2, "개요"), para(text("본문"), footnote("둘째"))],
+          })}
+          existing={new Set()}
+          beforeBody={<nav data-testid="toc" />}
+        />
+      </MemoryRouter>,
+    );
+    const box = screen.getByRole("complementary", { name: "프로필" });
+    expect(box.querySelector("th[colspan='2']")).toHaveAttribute(
+      "data-bg",
+      "blue-strong",
+    );
+    expect(screen.getByRole("link", { name: "역사" })).toHaveClass(
+      "wiki-link-missing",
+    );
+    // 프로필 → 목차 → 본문 순서. 띄우지 않으므로 본문은 프로필이 끝난 뒤에 온다.
+    const toc = screen.getByTestId("toc");
+    const body = screen.getByText("본문");
+    expect(box.compareDocumentPosition(toc)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(toc.compareDocumentPosition(body)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    // 각주 번호는 보이는 순서대로 프로필부터 매긴다.
+    const notes = container.querySelectorAll("section[data-footnotes] li");
+    expect([...notes].map((note) => note.textContent)).toEqual([
+      "[1]출처",
+      "[2]둘째",
+    ]);
+  });
+
+  it("does not draw the profile of a template preview", () => {
+    render(
+      <MemoryRouter>
+        <WikiContent
+          embedded
+          document={parseWiki({ type: "doc", attrs: { profile }, content: [] })}
+          existing={new Set()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
+  it("ignores broken values and empty profiles", () => {
+    expect(
+      parseWiki({ type: "doc", attrs: { profile: "x" }, content: [] }).profile,
+    ).toBeNull();
+    expect(
+      parseWiki({
+        type: "doc",
+        attrs: { profile: [para()] },
+        content: [],
+      }).profile,
+    ).toBeNull();
+    expect(
+      parseWiki({
+        type: "doc",
+        attrs: { profile: [3, para(text("a"))] },
+        content: [],
+      }).profile,
+    ).toEqual([para(text("a"))]);
+  });
+
+  it("shows profile and styling changes in the diff text", () => {
+    const body = {
+      type: "doc" as const,
+      attrs: { profile: [para(text("민사고"), link("역사"))] },
+      content: [
+        {
+          type: "paragraph",
+          attrs: { textAlign: "center" },
+          content: [
+            {
+              type: "text",
+              text: "글",
+              marks: [{ type: "textColor", attrs: { color: "red" } }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(docToText(body)).toBe(
+      [
+        "[프로필]",
+        "민사고[[역사]]",
+        "[/프로필]",
+        "",
+        "(가운데 정렬) {{{#빨강 글}}}",
+      ].join("\n"),
+    );
   });
 });

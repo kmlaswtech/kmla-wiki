@@ -23,6 +23,8 @@ export interface WikiNode {
 
 /** 문서 단위 정보. 본문 흐름에 자리가 없는 것들이라 문서 속성에 둔다. */
 export interface WikiDocAttrs {
+  /** 프로필(`model/profile.ts`). 블록 노드 목록. 값은 `profileOf`로 검사해 읽는다. */
+  profile?: unknown;
   /** 이 문서가 속한 분류의 전체 제목(`분류:생활`). */
   categories?: string[];
   /** 넘겨주기 문서면 대상 제목. */
@@ -79,6 +81,10 @@ export const MARK = {
   link: "link",
   /** 위키 문서. `attrs.target`(제목, 비면 같은 문서), `attrs.section`(문단 제목). */
   wikiLink: "wikiLink",
+  /** 글자 색. `attrs.color`(팔레트 이름이나 `#rrggbb`, `model/style.ts`). */
+  textColor: "textColor",
+  /** 글자 크기 단계. `attrs.size`(-2~3, 0 없음, `model/style.ts`). */
+  textSize: "textSize",
 } as const;
 
 /** 제목 단계. `#` 하나짜리는 문서 제목 자리라 본문은 2단계부터 쓴다. */

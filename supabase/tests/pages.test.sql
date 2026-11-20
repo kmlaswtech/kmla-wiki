@@ -153,6 +153,44 @@ select throws_ok(
       '{"type":"doc","content":[{"type":"heading","attrs":{"level":-3},"content":[{"type":"text","text":"가"}]}]}'::jsonb)$$,
   'WK012', null, 'heading levels outside 2-4 are rejected');
 
+-- ── 프로필 ──────────────────────────────────────────────────────────────────
+-- 프로필은 본문과 같은 블록 노드 목록이다(`attrs.profile`).
+select page_id as p_profile from public.save_revision('프로필만 있는 문서', null,
+  '{"type":"doc","content":[{"type":"paragraph"}],"attrs":{"profile":[
+     {"type":"paragraph","content":[{"type":"text","text":"은하수 동아리"}]},
+     {"type":"paragraph","content":[
+       {"type":"text","text":"분야 천문 관측 "},
+       {"type":"text","text":"과학관","marks":[{"type":"wikiLink","attrs":{"target":"과학관","section":""}}]}
+     ]}]}}'::jsonb) \gset
+select ok(:p_profile is not null, 'a page with only a profile is not empty');
+select is(
+  (select body_text from public.revisions where page_id = :p_profile),
+  E'은하수 동아리\n분야 천문 관측 과학관',
+  'the profile text is part of the searchable body text'
+);
+select ok(
+  exists (select 1 from public.page_refs where from_page_id = :p_profile and kind = 'link'),
+  'links in the profile are references'
+);
+select throws_ok(
+  $$select * from public.save_revision('프로필 고장', null,
+      '{"type":"doc","content":[],"attrs":{"profile":{"title":"가"}}}'::jsonb)$$,
+  'WK012', null, 'a profile is a list of blocks');
+select throws_ok(
+  $$select * from public.save_revision('프로필 고장', null,
+      '{"type":"doc","content":[],"attrs":{"profile":["가"]}}'::jsonb)$$,
+  'WK012', null, 'profile blocks are nodes');
+select throws_ok(
+  $$select * from public.save_revision('프로필 고장', null,
+      '{"type":"doc","content":[],"attrs":{"profile":[{"type":"paragraph","content":[
+        {"type":"text","text":"x","marks":[{"type":"link","attrs":{"href":"javascript:alert(1)"}}]}]}]}}'::jsonb)$$,
+  'WK012', null, 'links in the profile are checked like the body');
+select throws_ok(
+  $$select * from public.save_revision('프로필 넘겨주기', null,
+      '{"type":"doc","content":[{"type":"paragraph"}],"attrs":{"redirect":"과학관",
+        "profile":[{"type":"paragraph","content":[{"type":"text","text":"가"}]}]}}'::jsonb)$$,
+  'WK015', null, 'a redirect page has no profile');
+
 -- 대소문자만 다른 제목은 같은 문서다.
 select page_id as p3, revision_id as r5 from public.save_revision('PRISM', null, wiki('프리즘')) \gset
 select throws_ok($$select * from public.save_revision('Prism', null, wiki('또 프리즘'))$$, 'WK001', null,
