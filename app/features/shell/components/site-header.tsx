@@ -165,10 +165,7 @@ function NavMenu({ status }: { status: MemberStatus }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-40">
         {navItems(status).map(({ to, label, icon: Icon }) => (
-          <DropdownMenuItem
-            key={to}
-            render={<Link to={to} prefetch="intent" />}
-          >
+          <DropdownMenuItem key={to} render={<Link to={to} />}>
             <Icon aria-hidden />
             {label}
           </DropdownMenuItem>

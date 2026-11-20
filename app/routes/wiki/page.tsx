@@ -6,10 +6,10 @@ import type { Route } from "./+types/page";
 import { positiveInt, titleFromParams } from "./title-param";
 import { PageAdminMenu } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
-import { AddAliasButton } from "~/features/editor";
 import { WikiImage } from "~/features/images";
 import { pageHref } from "~/features/markup";
 import {
+  AddAliasButton,
   canAddAlias,
   getPageView,
   MissingArticle,

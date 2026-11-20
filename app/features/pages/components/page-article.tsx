@@ -9,6 +9,7 @@ import { useCallback, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import type { FoundPage, RedirectInfo } from "../model/types";
+import { canEditPage } from "../model/view";
 import {
   ancestorTitles,
   baseName,
@@ -41,29 +42,6 @@ interface PageArticleProps {
   headerActions?: ReactNode;
   /** "다른 이름" 칸 끝에 둘 `이름 추가` 단추. 더할 수 없으면 비운다. */
   aliasAction?: ReactNode;
-}
-
-/**
- * 이 문서에 다른 이름(이 문서로 넘겨주는 새 문서)을 더할 수 있는가. 이 문서를 고치지 않으므로 보호
- * 여부와는 상관없다. 넘겨주기 문서에 다른 이름을 달면 이중 넘겨주기가 되므로 일반 문서의 지금 판에만.
- */
-export function canAddAlias(view: FoundPage): boolean {
-  return (
-    (view.canEdit || view.isAdmin) &&
-    view.redirect === null &&
-    view.page.deletedAt === null &&
-    (view.revision?.isCurrent ?? false)
-  );
-}
-
-/** 이 사용자가 이 문서를 고칠 수 있는가. 화면용 판단이고 실제 판정은 서버가 한다. */
-export function canEditPage(view: FoundPage): boolean {
-  if (view.isAdmin) return true;
-  return (
-    view.canEdit &&
-    view.page.protection === "open" &&
-    view.page.deletedAt === null
-  );
 }
 
 /** 문서 한 편: 경로, 제목, 안내, 목차, 본문, 하위 문서, 분류, 역링크. */

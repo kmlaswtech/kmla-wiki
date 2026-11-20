@@ -2,6 +2,13 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
+import { getTitleInfo } from "../data/queries";
+import { saveRevision } from "../data/mutations";
+import {
+  describeWriteError,
+  REDIRECT_MESSAGE,
+  WRITE_ERROR,
+} from "../model/errors";
 import { useLoginOnExpiry } from "~/features/auth";
 import {
   parseTitle,
@@ -9,13 +16,6 @@ import {
   redirectPageHref,
   titleKey,
 } from "~/features/markup";
-import {
-  describeWriteError,
-  getTitleInfo,
-  REDIRECT_MESSAGE,
-  saveRevision,
-  WRITE_ERROR,
-} from "~/features/pages";
 import { isWikiError } from "~/shared/supabase/errors";
 import { Button } from "~/shared/ui/button";
 import {

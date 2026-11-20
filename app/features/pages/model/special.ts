@@ -39,7 +39,11 @@ export const SPECIAL_TABS = [
 ] as const;
 
 /** 이름공간을 골라 볼 수 있는 탭. */
-export const SPECIAL_NAMESPACE_TABS: readonly SpecialTab[] = ["all", "short", "long"];
+export const SPECIAL_NAMESPACE_TABS: readonly SpecialTab[] = [
+  "all",
+  "short",
+  "long",
+];
 
 export type SpecialTab = (typeof SPECIAL_TABS)[number]["key"];
 
@@ -51,7 +55,9 @@ export const SPECIAL_NAMESPACES: { key: Namespace; label: string }[] = [
 ];
 
 export function readSpecialTab(value: string | null): SpecialTab {
-  return SPECIAL_TABS.some((tab) => tab.key === value) ? (value as SpecialTab) : "wanted";
+  return SPECIAL_TABS.some((tab) => tab.key === value)
+    ? (value as SpecialTab)
+    : "wanted";
 }
 
 export function readSpecialNamespace(value: string | null): Namespace {

@@ -1,10 +1,7 @@
+export { AddAliasButton } from "./components/add-alias-dialog";
 export { DiffView } from "./components/diff-view";
 export { MissingArticle } from "./components/missing-article";
-export {
-  canAddAlias,
-  canEditPage,
-  PageArticle,
-} from "./components/page-article";
+export { PageArticle } from "./components/page-article";
 export { RecentChangesPanel } from "./components/recent-changes-panel";
 export { useRecentChangesPanel } from "./components/use-recent-changes-panel";
 export { RevertDialog } from "./components/revert-dialog";
@@ -49,9 +46,8 @@ export {
   SPECIAL_PAGE_SIZE,
   specialHref,
   SPECIAL_TABS,
-  type SpecialTab,
 } from "./model/special";
-export { redirectsHere } from "./model/view";
+export { canAddAlias, canEditPage, redirectsHere } from "./model/view";
 export type {
   FoundPage,
   MissingPage,
