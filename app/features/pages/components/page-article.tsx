@@ -9,6 +9,7 @@ import { useCallback, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import type { FoundPage, RedirectInfo } from "../model/types";
+import { canEditPage } from "../model/view";
 import {
   ancestorTitles,
   baseName,
@@ -41,29 +42,6 @@ interface PageArticleProps {
   headerActions?: ReactNode;
   /** "다른 이름" 칸 끝에 둘 `이름 추가` 단추. 더할 수 없으면 비운다. */
   aliasAction?: ReactNode;
-}
-
-/**
- * 이 문서에 다른 이름(이 문서로 넘겨주는 새 문서)을 더할 수 있는가. 이 문서를 고치지 않으므로 보호
- * 여부와는 상관없다. 넘겨주기 문서에 다른 이름을 달면 이중 넘겨주기가 되므로 일반 문서의 지금 판에만.
- */
-export function canAddAlias(view: FoundPage): boolean {
-  return (
-    (view.canEdit || view.isAdmin) &&
-    view.redirect === null &&
-    view.page.deletedAt === null &&
-    (view.revision?.isCurrent ?? false)
-  );
-}
-
-/** 이 사용자가 이 문서를 고칠 수 있는가. 화면용 판단이고 실제 판정은 서버가 한다. */
-export function canEditPage(view: FoundPage): boolean {
-  if (view.isAdmin) return true;
-  return (
-    view.canEdit &&
-    view.page.protection === "open" &&
-    view.page.deletedAt === null
-  );
 }
 
 /** 문서 한 편: 경로, 제목, 안내, 목차, 본문, 하위 문서, 분류, 역링크. */
@@ -132,11 +110,14 @@ export function PageArticle({
         </div>
         {/* 화면에서 가장 눈에 띄는 것은 제목이어야 한다. 버튼은 모두 차분한 외곽선으로 둔다. */}
         <div className="flex shrink-0 gap-1.5">
+          {/* 편집·기록 단추는 마우스를 올리거나 누르기 시작하면 갈 화면의 코드를 미리 받는다. 문서를
+           * 읽다가 가장 많이 가는 곳이다. 편집 화면은 편집기 때문에 코드가 크다. */}
           {viewingOldRevision ? null : editable ? (
             <LinkButton
               size="sm"
               variant="outline"
               to={pageHref(page.title, "edit")}
+              prefetch="intent"
             >
               <Pencil aria-hidden />
               편집
@@ -147,6 +128,7 @@ export function PageArticle({
               size="sm"
               variant="outline"
               to={pageHref(page.title, "edit")}
+              prefetch="intent"
               title={
                 page.protection === "admin"
                   ? "보호된 문서라 관리자만 편집할 수 있습니다."
@@ -162,6 +144,7 @@ export function PageArticle({
             variant="outline"
             className="max-sm:hidden"
             to={pageHref(page.title, "history")}
+            prefetch="intent"
           >
             기록
           </LinkButton>

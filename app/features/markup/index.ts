@@ -8,6 +8,7 @@ export {
   isWikiDoc,
   MARK,
   NODE,
+  redirectDoc,
   SAFE_HREF,
   type WikiDoc,
   type WikiDocAttrs,

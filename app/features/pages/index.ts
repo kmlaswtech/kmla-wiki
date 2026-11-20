@@ -1,11 +1,10 @@
+export { AddAliasButton } from "./components/add-alias-dialog";
 export { DiffView } from "./components/diff-view";
-export {
-  canAddAlias,
-  canEditPage,
-  PageArticle,
-} from "./components/page-article";
+export { MissingArticle } from "./components/missing-article";
+export { PageArticle } from "./components/page-article";
 export { RecentChangesPanel } from "./components/recent-changes-panel";
 export { useRecentChangesPanel } from "./components/use-recent-changes-panel";
+export { RevertDialog } from "./components/revert-dialog";
 export { RevisionList } from "./components/revision-list";
 export { movePage, revertPage, saveRevision } from "./data/mutations";
 export {
@@ -25,7 +24,6 @@ export {
   listRecentlyChangedPages,
   listRedirectIssues,
   listWantedPages,
-  SPECIAL_PAGE_SIZE,
   resolveBody,
   resolveRedirect,
   searchPages,
@@ -38,7 +36,19 @@ export {
 } from "./model/errors";
 export type { RedirectResolution, TitleSuggestion } from "./data/queries";
 export type { HeadingTarget } from "./model/headings";
-export { redirectsHere } from "./model/view";
+export { MAIN_PAGE_TITLE } from "./model/main-page";
+export { REVERT_FIELD, type RevertActionError } from "./model/revert";
+export {
+  SPECIAL_NAMESPACE_TABS,
+  SPECIAL_NAMESPACES,
+  readSpecialNamespace,
+  readSpecialTab,
+  sizeListOffset,
+  SPECIAL_PAGE_SIZE,
+  specialHref,
+  SPECIAL_TABS,
+} from "./model/special";
+export { canAddAlias, canEditPage, redirectsHere } from "./model/view";
 export type {
   FoundPage,
   MissingPage,

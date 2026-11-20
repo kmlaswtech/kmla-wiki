@@ -2,16 +2,20 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { redirectDoc } from "../model/doc-io";
-import { useLoginOnExpiry } from "~/features/auth";
-import { parseTitle, redirectPageHref, titleKey } from "~/features/markup";
+import { getTitleInfo } from "../data/queries";
+import { saveRevision } from "../data/mutations";
 import {
   describeWriteError,
-  getTitleInfo,
   REDIRECT_MESSAGE,
-  saveRevision,
   WRITE_ERROR,
-} from "~/features/pages";
+} from "../model/errors";
+import { useLoginOnExpiry } from "~/features/auth";
+import {
+  parseTitle,
+  redirectDoc,
+  redirectPageHref,
+  titleKey,
+} from "~/features/markup";
 import { isWikiError } from "~/shared/supabase/errors";
 import { Button } from "~/shared/ui/button";
 import {

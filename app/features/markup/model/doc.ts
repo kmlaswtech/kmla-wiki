@@ -94,6 +94,15 @@ export function emptyDoc(): WikiDoc {
   return { type: "doc", content: [{ type: NODE.paragraph }] };
 }
 
+/** 넘겨주기 문서의 본문. 본문과 분류 없이 대상만 둔다(DB가 다른 모양은 거부한다). */
+export function redirectDoc(target: string): WikiDoc {
+  return {
+    type: "doc",
+    content: emptyDoc().content,
+    attrs: { redirect: target },
+  };
+}
+
 /** 저장된 값이 문서 모양인지. 서버가 검사하지만 화면도 낡은 값·깨진 값에 버틴다. */
 export function isWikiDoc(value: unknown): value is WikiDoc {
   return (

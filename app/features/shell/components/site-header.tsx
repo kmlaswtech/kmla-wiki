@@ -109,6 +109,7 @@ export function SiteHeader({
             <NavLink
               key={to}
               to={to}
+              prefetch="intent"
               aria-label={iconOnWide ? label : undefined}
               className={({ isActive }) =>
                 cn(NAV_LINK, isActive && "text-foreground")

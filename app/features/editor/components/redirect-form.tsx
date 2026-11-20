@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { loadLatest, type EditTarget } from "../data/save";
-import { redirectDoc, sameDoc } from "../model/doc-io";
+import { sameDoc } from "../model/doc-io";
 import { clearDraft, loadDraft } from "../storage/drafts";
 import { TitleInput } from "./title-input";
 import { useLoginOnExpiry } from "~/features/auth";
 import {
   pageHref,
   parseTitle,
+  redirectDoc,
   redirectPageHref,
   titleKey,
   visibleTextLength,
