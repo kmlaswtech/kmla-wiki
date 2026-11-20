@@ -208,6 +208,8 @@ export interface OpenReport {
   isCurrent: boolean;
   pageDeleted: boolean;
   reports: ReportNote[];
+  /** 같은 판에서 전에 기각한 신고 수. */
+  dismissedCount: number;
 }
 
 /** 처리되지 않은 신고, 오래된 것부터(관리자 전용). */
@@ -230,6 +232,7 @@ export async function listOpenReports(): Promise<OpenReport[]> {
       note: report.note,
       createdAt: report.created_at,
     })),
+    dismissedCount: row.dismissed_count,
   }));
 }
 

@@ -2,9 +2,10 @@ import { ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { banEditor, grantAdmin, setRevisionHidden } from "../data/mutations";
+import { grantAdmin } from "../data/mutations";
 import { authorEditsHref } from "../model/author-lookup";
-import { BanLengthDialog } from "./ban-length-dialog";
+import { BanEditorDialog } from "./ban-length-dialog";
+import { HideRevisionDialog, hideLabel } from "./hide-revision-dialog";
 import { ReasonDialog } from "./reason-dialog";
 import { Button } from "~/shared/ui/button";
 import {
@@ -22,7 +23,7 @@ interface RevisionAdminMenuProps {
     hiddenAt: string | null;
   };
   pageTitle: string;
-  /** 현재 판은 숨길 수 없다. */
+  /** 현재 판은 앞 판으로 되돌린 뒤 숨긴다. */
   isCurrent: boolean;
   /** 조치가 끝난 뒤 목록을 다시 읽는다. */
   onDone: () => void;
@@ -76,11 +77,8 @@ export function RevisionAdminMenu({
           <DropdownMenuItem onClick={() => setOpen("ban")}>
             이 사람 차단
           </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={isCurrent && !revision.hiddenAt}
-            onClick={() => setOpen("hide")}
-          >
-            {revision.hiddenAt ? "판 숨김 해제" : "이 판 숨기기"}
+          <DropdownMenuItem onClick={() => setOpen("hide")}>
+            {hideLabel(revision, isCurrent)}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setOpen("grant")}>
@@ -89,31 +87,19 @@ export function RevisionAdminMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <BanLengthDialog
+      <BanEditorDialog
         open={open === "ban"}
         onOpenChange={close}
-        title="편집 차단"
-        description={`${target}를 쓴 사람의 편집을 모든 문서에서 막습니다. 열람은 계속할 수 있습니다.`}
-        confirmLabel="차단"
-        destructive
-        onConfirm={(length, reason) => banEditor(revision.id, length, reason)}
+        revisionId={revision.id}
+        target={target}
         onDone={onDone}
       />
 
-      <ReasonDialog
+      <HideRevisionDialog
         open={open === "hide"}
         onOpenChange={close}
-        title={revision.hiddenAt ? "판 숨김 해제" : "판 숨기기"}
-        description={
-          revision.hiddenAt
-            ? `r${revision.id} 판을 다시 모두에게 보이게 합니다.`
-            : `r${revision.id} 판을 일반 사용자에게 보이지 않게 합니다. 실명이 나오는 사건, 비방, 개인정보처럼 기록에 남아 있으면 안 되는 내용에 사용합니다. 숨긴 사실과 사유는 공개됩니다.`
-        }
-        confirmLabel={revision.hiddenAt ? "숨김 해제" : "숨기기"}
-        destructive={!revision.hiddenAt}
-        onConfirm={(reason) =>
-          setRevisionHidden(revision.id, !revision.hiddenAt, reason)
-        }
+        revision={revision}
+        isCurrent={isCurrent}
         onDone={onDone}
       />
 

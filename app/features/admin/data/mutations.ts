@@ -1,6 +1,17 @@
-import type { BulkRevertOutcome } from "../model/bulk-revert";
+import type { BulkRevertResult } from "../model/bulk-revert";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap } from "~/shared/supabase/errors";
+
+/** 신고가 닫혔을 수 있다는 알림. 머리띠의 신고 수(`useOpenReportCount`)가 받아 다시 센다. */
+export const OPEN_REPORTS_CHANGED = "wiki:open-reports-changed";
+
+/**
+ * 신고를 닫는 조치(신고 닫기, 판 숨기기, 문서 삭제, 일괄 되돌리기)가 성공한 뒤 알린다. 화면이 조치마다
+ * 따로 부르지 않게 이 파일의 함수들이 부른다.
+ */
+export function notifyOpenReportsChanged(): void {
+  window.dispatchEvent(new Event(OPEN_REPORTS_CHANGED));
+}
 
 /**
  * 관리 조치. 관리자 여부, 사유, 대상 상태는 모두 서버가 검사한다.
@@ -68,7 +79,7 @@ export async function bulkRevert(
   fromRevisionId: number | null,
   items: readonly { pageId: number; currentRevisionId: number }[],
   reason: string,
-): Promise<BulkRevertOutcome[]> {
+): Promise<BulkRevertResult[]> {
   const rows = unwrap(
     await getSupabase().rpc("bulk_revert", {
       p_lookup_id: lookupId,
@@ -81,7 +92,11 @@ export async function bulkRevert(
       p_reason: reason,
     }),
   );
-  return rows.map((row) => row.outcome as BulkRevertOutcome);
+  notifyOpenReportsChanged();
+  return rows.map((row) => ({
+    pageId: row.page_id,
+    outcome: row.outcome as BulkRevertResult["outcome"],
+  }));
 }
 
 /** 판 하나의 처리되지 않은 신고를 모두 닫는다. 결과는 비공개로 남는다. */
@@ -95,6 +110,7 @@ export async function resolveReports(
       p_resolution: resolution,
     }),
   );
+  notifyOpenReportsChanged();
 }
 
 export async function liftBan(banId: number, reason: string): Promise<void> {
@@ -131,6 +147,7 @@ export async function deletePage(
       p_reason: reason,
     }),
   );
+  notifyOpenReportsChanged();
 }
 
 export async function restorePage(
@@ -157,6 +174,24 @@ export async function setRevisionHidden(
       p_reason: reason,
     }),
   );
+  if (hidden) notifyOpenReportsChanged();
+}
+
+/**
+ * 판을 숨긴다. 현재 판이면 먼저 그 앞의 보이는 판으로 되돌리고, 그런 판이 없으면 문서를 삭제한다.
+ * 그 판의 신고는 닫힌다.
+ */
+export async function revertAndHideRevision(
+  revisionId: number,
+  reason: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("revert_and_hide_revision", {
+      p_revision_id: revisionId,
+      p_reason: reason,
+    }),
+  );
+  notifyOpenReportsChanged();
 }
 
 export async function grantAdmin(

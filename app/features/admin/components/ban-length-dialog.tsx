@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { banEditor } from "../data/mutations";
 import {
   BAN_PRESETS,
   BAN_UNITS,
@@ -19,6 +20,37 @@ import { NativeSelect, NativeSelectOption } from "~/shared/ui/native-select";
 interface BanLengthDialogProps extends ActionDialogProps {
   /** 조치를 실행한다. `length`는 Postgres interval 글이고, `null`이면 기한 없음. */
   onConfirm: (length: string | null, reason: string) => Promise<void>;
+}
+
+/**
+ * 판을 쓴 사람을 차단하는 대화상자. `target`은 "가명 (문서)"다. 판 기록의 메뉴와 일괄 되돌리기 화면이
+ * 쓴다.
+ */
+export function BanEditorDialog({
+  revisionId,
+  target,
+  open,
+  onOpenChange,
+  onDone,
+}: {
+  revisionId: number;
+  target: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDone: () => void;
+}) {
+  return (
+    <BanLengthDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="편집 차단"
+      description={`${target}를 쓴 사람의 편집을 모든 문서에서 막습니다. 열람은 계속할 수 있습니다.`}
+      confirmLabel="차단"
+      destructive
+      onConfirm={(length, reason) => banEditor(revisionId, length, reason)}
+      onDone={onDone}
+    />
+  );
 }
 
 /**

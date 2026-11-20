@@ -107,6 +107,9 @@ select throws_ok(
   'WK018', null,
   'a bulk revert takes at most 200 pages');
 
+-- 걷어 낼 판(가의 b1)과 삭제할 문서의 판(다의 b3)에 신고가 있다. 실행하면 닫힌다.
+select public.report_revision(id, 'vandalism') from unnest(array[:b1, :b3]::bigint[]) as id;
+
 -- 나(충돌)와 라2(본문 같음)도 보내지만 건너뛴다.
 select set_eq(
   format(
@@ -174,6 +177,10 @@ select is(
 
 -- 허가가 끝나면 미리보기도 실행도 못 한다.
 select logout();
+select is(
+  (select count(*)::integer from private.reports where revision_id in (:b1, :b3) and resolution = 'handled'), 2,
+  'a bulk revert closes the reports on the revisions it removes'
+);
 update private.author_lookups set expires_at = now() - interval '1 second';
 select login(:admin);
 select throws_ok(format($$select * from public.preview_bulk_revert(%L)$$, :'lookup'), 'WK016', null,

@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BULK_REVERT_MAX,
   bulkRevertHref,
+  clearSelection,
   describeBulkRevertResult,
   firstEditSince,
   isSelectable,
   isSelectedByDefault,
+  markProcessed,
   selectedRows,
   type BulkRevertRow,
 } from "~/features/admin/model/bulk-revert";
@@ -64,6 +67,53 @@ describe("selection", () => {
         ]),
       ).map((r) => r.pageId),
     ).toEqual([2]);
+  });
+
+  it("chooses at most the limit by default, from the top", () => {
+    const rows = Array.from({ length: BULK_REVERT_MAX + 5 }, (_, i) =>
+      row(i + 1, "revert"),
+    );
+    const ids = selectedRows(rows, new Map()).map((r) => r.pageId);
+    expect(ids).toHaveLength(BULK_REVERT_MAX);
+    expect(ids.at(-1)).toBe(BULK_REVERT_MAX);
+    // 위의 줄이 빠지면(처리함) 다음 줄이 골라진다.
+    expect(
+      selectedRows(rows.slice(5), new Map())
+        .map((r) => r.pageId)
+        .at(-1),
+    ).toBe(BULK_REVERT_MAX + 5);
+  });
+
+  it("clears every choosable row", () => {
+    const rows = [row(1, "revert"), row(2, "delete"), row(3, "conflict")];
+    expect(selectedRows(rows, clearSelection(rows))).toEqual([]);
+  });
+});
+
+describe("markProcessed", () => {
+  it("shows what this screen just did instead of the re-read status", () => {
+    const rows = [
+      row(1, "conflict", { keptCount: 1 }),
+      row(2, "deleted"),
+      row(3, "revert"),
+      row(4, "clean"),
+    ];
+    const marked = markProcessed(
+      rows,
+      new Map([
+        [1, "reverted"],
+        [2, "deleted"],
+        [3, "reverted"],
+      ] as const),
+    );
+    expect(marked.map((r) => r.status)).toEqual([
+      "reverted",
+      "deleted",
+      // 대상이 그 뒤 다시 편집해 되돌릴 일이 생겼으면 그대로 둔다.
+      "revert",
+      "clean",
+    ]);
+    expect(isSelectable(marked[0]!)).toBe(false);
   });
 });
 

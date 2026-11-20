@@ -120,6 +120,28 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."revision_target"(bigint) FROM PUBLIC;
 
+-- 문서를 삭제한다(숨긴다). 삭제 판을 `관리자` 이름으로 쓰고, 삭제된 문서의 판은 보이지 않으므로 그
+-- 판들의 신고를 닫는다. 잠금, 검사, 기록은 부르는 쪽이 한다.
+CREATE OR REPLACE FUNCTION private.delete_page_as_admin (
+  p_page_id  bigint,
+  p_admin_id bigint,
+  p_body     jsonb,
+  p_summary  text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
+  update public.pages set deleted_at = now() where id = p_page_id;
+  perform private.close_reports(array(select revision.id from public.revisions as revision where revision.page_id = p_page_id));
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."delete_page_as_admin"(bigint, bigint, jsonb, text) FROM PUBLIC;
+
 -- 차단 길이에서 끝나는 시각을 낸다. NULL은 기한 없음이다. 서버 시계로 세고, 개월은 Postgres가 그
 -- 달의 마지막 날로 맞춘다(1월 31일 + 1개월 = 2월 28일).
 CREATE OR REPLACE FUNCTION private.ban_end (
@@ -307,8 +329,7 @@ begin
   end if;
 
   select body into v_body from public.revisions where id = v_page.current_revision_id;
-  perform private.write_revision(p_page_id, v_admin_id, coalesce(v_body, private.empty_doc()), v_reason, 'delete', true);
-  update public.pages set deleted_at = now() where id = p_page_id;
+  perform private.delete_page_as_admin(p_page_id, v_admin_id, coalesce(v_body, private.empty_doc()), v_reason);
   perform private.log_admin_action('delete_page', v_reason, v_page.title);
 end;
 $function$;
@@ -896,12 +917,21 @@ begin
       );
       v_reverted := v_reverted + 1;
       outcome := 'reverted';
+      -- 걷어 낸 판(돌아갈 판 뒤의 대상의 판)에 걸린 신고를 닫는다.
+      perform private.close_reports(array(
+        select author.revision_id
+        from private.revision_authors as author
+        join public.revisions as revision on revision.id = author.revision_id
+        where author.member_id = v_lookup.target_member_id
+          and revision.page_id = v_plan.page_id
+          and revision.id >= coalesce(p_from_revision_id, 0)
+          and revision.id > v_plan.restore_revision_id
+      ));
     else
       -- `delete_page`와 같다. 현재 본문 그대로 삭제 판을 쓰고 숨긴다. 관리자가 복구할 수 있다.
       select revision.body into v_body
       from public.revisions as revision where revision.id = v_plan.current_revision_id;
-      perform private.write_revision(v_plan.page_id, v_admin_id, v_body, '일괄 되돌리기로 삭제', 'delete', true);
-      update public.pages set deleted_at = now() where id = v_plan.page_id;
+      perform private.delete_page_as_admin(v_plan.page_id, v_admin_id, v_body, '일괄 되돌리기로 삭제');
       v_deleted := v_deleted + 1;
       outcome := 'deleted';
     end if;
@@ -1056,6 +1086,64 @@ GRANT EXECUTE ON FUNCTION "public"."set_protection"(bigint, text, text) TO "post
 
 REVOKE ALL ON FUNCTION "public"."set_protection"(bigint, text, text) FROM PUBLIC, "anon";
 
+-- 판을 숨긴다. 현재 판이면 먼저 그 앞의 보이는 판으로 되돌린다(`관리자` 이름의 새 판). 보이는 앞 판이
+-- 없으면(문서의 첫 판이거나 앞 판이 모두 숨겨졌다) 빈 본문으로 문서를 삭제한다. 숨긴 내용이 삭제 판이나
+-- 복구로 다시 나오지 않게 한다. 숨기기는 `set_revision_hidden`이 하고 기록하며 신고도 닫는다.
+CREATE OR REPLACE FUNCTION public.revert_and_hide_revision (
+  p_revision_id bigint,
+  p_reason      text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_admin_id bigint := private.require_admin();
+  v_reason text := private.require_reason(p_reason);
+  v_page public.pages;
+  v_restore public.revisions;
+begin
+  select page.* into v_page
+  from public.revisions as revision
+  join public.pages as page on page.id = revision.page_id
+  where revision.id = p_revision_id
+  for update of page;
+  if v_page.id is null then
+    raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+
+  if v_page.current_revision_id = p_revision_id then
+    select * into v_restore
+    from public.revisions as revision
+    where revision.page_id = v_page.id and revision.id < p_revision_id and revision.hidden_at is null
+    order by revision.id desc
+    limit 1;
+    if v_restore.id is null then
+      perform private.delete_page_as_admin(v_page.id, v_admin_id, private.empty_doc(), v_reason);
+      perform private.log_admin_action('delete_page', v_reason, v_page.title);
+    else
+      perform private.write_revision(
+        v_page.id, v_admin_id, private.settle_redirect_body(v_page.title, v_restore.body),
+        format('r%s 판으로 되돌림', v_restore.id), 'revert', true
+      );
+    end if;
+  end if;
+
+  perform public.set_revision_hidden(p_revision_id, true, v_reason);
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) FROM PUBLIC, "anon";
+
 CREATE OR REPLACE FUNCTION public.set_revision_hidden (
   p_revision_id bigint,
   p_hidden      boolean,
@@ -1094,6 +1182,9 @@ begin
     case when p_hidden then 'hide_revision' else 'unhide_revision' end,
     v_reason, v_page.title, p_revision_id, v_revision.author_pseudonym
   );
+  if p_hidden then
+    perform private.close_reports(array[p_revision_id]);
+  end if;
 end;
 $function$;
 

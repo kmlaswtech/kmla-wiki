@@ -6,9 +6,10 @@
 -- 신고(`report_revision`)가 기존 코드를 쓰는 뜻:
 --   WK005  덧붙임이 300자를 넘는다(detail = 'note')
 --   WK006  없거나 숨긴 판, 삭제된 문서의 판이다
---   WK011  같은 판에 대한 내 신고가 아직 처리되지 않았다
+--   WK011  같은 판에 대한 내 신고가 아직 처리되지 않았거나 이미 기각되었다
 --   WK014  종류가 기타인데 덧붙임이 2자보다 짧다
 -- 신고 닫기(`resolve_reports`)의 WK011은 그 판에 처리되지 않은 신고가 없다는 뜻이다.
+-- 되돌리고 숨기기(`revert_and_hide_revision`)는 `set_revision_hidden`의 코드를 그대로 쓴다.
 
 SET local check_function_bodies = off;
 
@@ -142,6 +143,43 @@ CREATE OR REPLACE FUNCTION private.bulk_revert_plan (
   order by planned.current_revision_id desc;
 $function$;
 
+CREATE OR REPLACE FUNCTION private.close_reports (
+  p_revision_ids bigint[]
+)
+  RETURNS integer
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_count integer;
+begin
+  update private.reports
+     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
+   where revision_id = any (p_revision_ids) and resolved_at is null;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION private.delete_page_as_admin (
+  p_page_id  bigint,
+  p_admin_id bigint,
+  p_body     jsonb,
+  p_summary  text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
+  update public.pages set deleted_at = now() where id = p_page_id;
+  perform private.close_reports(array(select revision.id from public.revisions as revision where revision.page_id = p_page_id));
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.bulk_revert (
   p_lookup_id        text,
   p_from_revision_id bigint,
@@ -208,12 +246,21 @@ begin
       );
       v_reverted := v_reverted + 1;
       outcome := 'reverted';
+      -- 걷어 낸 판(돌아갈 판 뒤의 대상의 판)에 걸린 신고를 닫는다.
+      perform private.close_reports(array(
+        select author.revision_id
+        from private.revision_authors as author
+        join public.revisions as revision on revision.id = author.revision_id
+        where author.member_id = v_lookup.target_member_id
+          and revision.page_id = v_plan.page_id
+          and revision.id >= coalesce(p_from_revision_id, 0)
+          and revision.id > v_plan.restore_revision_id
+      ));
     else
       -- `delete_page`와 같다. 현재 본문 그대로 삭제 판을 쓰고 숨긴다. 관리자가 복구할 수 있다.
       select revision.body into v_body
       from public.revisions as revision where revision.id = v_plan.current_revision_id;
-      perform private.write_revision(v_plan.page_id, v_admin_id, v_body, '일괄 되돌리기로 삭제', 'delete', true);
-      update public.pages set deleted_at = now() where id = v_plan.page_id;
+      perform private.delete_page_as_admin(v_plan.page_id, v_admin_id, v_body, '일괄 되돌리기로 삭제');
       v_deleted := v_deleted + 1;
       outcome := 'deleted';
     end if;
@@ -247,6 +294,35 @@ $function$;
 
 REVOKE ALL ON FUNCTION "public"."count_open_reports"() FROM PUBLIC, "anon";
 
+CREATE OR REPLACE FUNCTION public.delete_page (
+  p_page_id bigint,
+  p_reason  text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_admin_id bigint := private.require_admin();
+  v_reason text := private.require_reason(p_reason);
+  v_page public.pages;
+  v_body jsonb;
+begin
+  select * into v_page from public.pages where id = p_page_id for update;
+  if v_page.id is null then
+    raise exception 'page not found' using errcode = 'WK006';
+  end if;
+  if v_page.deleted_at is not null then
+    raise exception 'already deleted' using errcode = 'WK011';
+  end if;
+
+  select body into v_body from public.revisions where id = v_page.current_revision_id;
+  perform private.delete_page_as_admin(p_page_id, v_admin_id, coalesce(v_body, private.empty_doc()), v_reason);
+  perform private.log_admin_action('delete_page', v_reason, v_page.title);
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.list_open_reports()
   RETURNS TABLE (
     revision_id         bigint,
@@ -259,7 +335,8 @@ CREATE OR REPLACE FUNCTION public.list_open_reports()
     is_current          boolean,
     page_deleted        boolean,
     first_reported_at   timestamp with time zone,
-    reports             jsonb
+    reports             jsonb,
+    dismissed_count     integer
   )
   LANGUAGE plpgsql
   STABLE
@@ -272,7 +349,11 @@ begin
   select
     revision.id, page.id, page.title, revision.author_pseudonym, revision.parent_revision_id,
     revision.created_at, revision.hidden_at, revision.id = page.current_revision_id,
-    page.deleted_at is not null, grouped.first_reported_at, grouped.reports
+    page.deleted_at is not null, grouped.first_reported_at, grouped.reports,
+    (
+      select count(*)::integer from private.reports as earlier
+      where earlier.revision_id = grouped.revision_id and earlier.resolution = 'dismissed'
+    )
   from (
     select
       report.revision_id,
@@ -360,6 +441,15 @@ begin
   ) then
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
+  -- 기각된 판은 같은 사람이 다시 신고하지 않는다. 판의 내용은 바뀌지 않으므로 같은 판단이 나온다.
+  if exists (
+    select 1 from private.reports as report
+    where report.revision_id = p_revision_id
+      and report.reporter_member_id = v_member_id
+      and report.resolution = 'dismissed'
+  ) then
+    raise exception 'already dismissed' using errcode = 'WK011';
+  end if;
   -- 같은 사람의 신고를 한 줄로 세운다. 동시에 보낸 신고가 모두 세기를 통과해 한도를 넘지 않게 한다.
   perform 1 from private.members where id = v_member_id for update;
   if (
@@ -411,6 +501,97 @@ $function$;
 
 REVOKE ALL ON FUNCTION "public"."resolve_reports"(bigint, text) FROM PUBLIC, "anon";
 
+CREATE OR REPLACE FUNCTION public.revert_and_hide_revision (
+  p_revision_id bigint,
+  p_reason      text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_admin_id bigint := private.require_admin();
+  v_reason text := private.require_reason(p_reason);
+  v_page public.pages;
+  v_restore public.revisions;
+begin
+  select page.* into v_page
+  from public.revisions as revision
+  join public.pages as page on page.id = revision.page_id
+  where revision.id = p_revision_id
+  for update of page;
+  if v_page.id is null then
+    raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+
+  if v_page.current_revision_id = p_revision_id then
+    select * into v_restore
+    from public.revisions as revision
+    where revision.page_id = v_page.id and revision.id < p_revision_id and revision.hidden_at is null
+    order by revision.id desc
+    limit 1;
+    if v_restore.id is null then
+      perform private.delete_page_as_admin(v_page.id, v_admin_id, private.empty_doc(), v_reason);
+      perform private.log_admin_action('delete_page', v_reason, v_page.title);
+    else
+      perform private.write_revision(
+        v_page.id, v_admin_id, private.settle_redirect_body(v_page.title, v_restore.body),
+        format('r%s 판으로 되돌림', v_restore.id), 'revert', true
+      );
+    end if;
+  end if;
+
+  perform public.set_revision_hidden(p_revision_id, true, v_reason);
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) FROM PUBLIC, "anon";
+
+CREATE OR REPLACE FUNCTION public.set_revision_hidden (
+  p_revision_id bigint,
+  p_hidden      boolean,
+  p_reason      text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_reason text;
+  v_revision public.revisions;
+  v_page public.pages;
+begin
+  perform private.require_admin();
+  v_reason := private.require_reason(p_reason);
+
+  select * into v_revision from public.revisions where id = p_revision_id for update;
+  if v_revision.id is null then
+    raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+  select * into v_page from public.pages where id = v_revision.page_id;
+
+  if (v_revision.hidden_at is not null) = p_hidden then
+    raise exception 'already in that state' using errcode = 'WK011';
+  end if;
+  if p_hidden and v_page.current_revision_id = p_revision_id then
+    raise exception 'cannot hide the current revision' using errcode = 'WK012';
+  end if;
+
+  update public.revisions
+     set hidden_at = case when p_hidden then now() end
+   where id = p_revision_id;
+  perform private.log_admin_action(
+    case when p_hidden then 'hide_revision' else 'unhide_revision' end,
+    v_reason, v_page.title, p_revision_id, v_revision.author_pseudonym
+  );
+  if p_hidden then
+    perform private.close_reports(array[p_revision_id]);
+  end if;
+end;
+$function$;
+
 ALTER TABLE "private"."reports"
   ADD CONSTRAINT "reports_reporter_member_id_fkey" FOREIGN KEY (reporter_member_id) REFERENCES private.members(id) ON DELETE SET NULL;
 
@@ -431,7 +612,13 @@ CREATE UNIQUE INDEX reports_open_unique ON private.reports USING btree (revision
 
 CREATE INDEX reports_reporter_idx ON private.reports USING btree (reporter_member_id, created_at DESC);
 
+CREATE INDEX reports_revision_idx ON private.reports USING btree (revision_id);
+
 REVOKE ALL ON FUNCTION "private"."bulk_revert_plan"(bigint, bigint, bigint[]) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[]) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION "private"."delete_page_as_admin"(bigint, bigint, jsonb, text) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION "public"."bulk_revert"(text, bigint, jsonb, text) TO "authenticated";
 
@@ -480,3 +667,11 @@ REVOKE ALL ON FUNCTION "public"."resolve_reports"(bigint, text) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."resolve_reports"(bigint, text) TO "postgres";
 
 GRANT EXECUTE ON FUNCTION "public"."resolve_reports"(bigint, text) TO "service_role";
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "authenticated";
+
+REVOKE ALL ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."revert_and_hide_revision"(bigint, text) TO "service_role";

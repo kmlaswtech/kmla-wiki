@@ -12,15 +12,18 @@ import { authorEditsHref } from "../model/author-lookup";
 import {
   BULK_REVERT_MAX,
   bulkRevertHref,
+  clearSelection,
   describeBulkRevertResult,
   firstEditSince,
-  isChecked,
   isSelectable,
+  markProcessed,
   selectedRows,
+  type BulkRevertOutcome,
   type BulkRevertRow,
 } from "../model/bulk-revert";
 import { describeAdminError } from "../model/log";
 import { InlineRevisionDiff } from "./inline-revision-diff";
+import { BanEditorDialog } from "./ban-length-dialog";
 import { ReasonDialog } from "./reason-dialog";
 import { pageHref } from "~/features/markup";
 import { formatDateTime } from "~/shared/lib/time";
@@ -36,7 +39,12 @@ interface BulkRevertViewProps {
   expiresAt: string;
   /** 시작점. `null`이면 대상의 모든 편집. */
   fromRevisionId: number | null;
+  /** 시작점 판의 문서와 시각. 범위가 맞는지 관리자가 확인한다. */
+  fromEdit: { pageTitle: string; createdAt: string } | null;
   rows: BulkRevertRow[];
+  /** 마지막 실행의 요약. 라우트가 가진다(다시 읽을 때 허가가 끝나도 남게). */
+  result: string | null;
+  onResult: (summary: string) => void;
   /** 실행한 뒤 미리보기를 다시 읽는다. */
   onDone: () => void;
 }
@@ -55,7 +63,10 @@ export function BulkRevertView({
   source,
   expiresAt,
   fromRevisionId,
-  rows,
+  fromEdit,
+  rows: loadedRows,
+  result,
+  onResult,
   onDone,
 }: BulkRevertViewProps) {
   const navigate = useNavigate();
@@ -64,13 +75,21 @@ export function BulkRevertView({
   const [overrides, setOverrides] = useState<ReadonlyMap<number, boolean>>(
     new Map(),
   );
+  // 이 화면에서 처리한 문서와 결과. 다시 읽은 줄에 덧씌운다(`markProcessed`).
+  const [processed, setProcessed] = useState<
+    ReadonlyMap<number, BulkRevertOutcome>
+  >(new Map());
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const [banning, setBanning] = useState(false);
+  const [banned, setBanned] = useState(false);
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const rows = markProcessed(loadedRows, processed);
   const selected = selectedRows(rows, overrides);
+  const selectedIds = new Set(selected.map((row) => row.pageId));
+  const selectableCount = rows.filter(isSelectable).length;
   const tooMany = selected.length > BULK_REVERT_MAX;
 
   function setChecked(pageId: number, checked: boolean) {
@@ -126,17 +145,33 @@ export function BulkRevertView({
       <h1 className="mb-4 border-b pb-3 text-2xl font-bold">일괄 되돌리기</h1>
 
       <div className="mb-4 space-y-2 text-sm">
-        <p className="text-muted-foreground">
-          대상: {source.authorPseudonym} ({source.pageTitle})를 쓴 사람의 편집.
-          가명은 문서마다 다릅니다. 조회 허가는 {formatDateTime(expiresAt)}
-          까지입니다.
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-muted-foreground">
+            대상: {source.authorPseudonym} ({source.pageTitle})를 쓴 사람의
+            편집. 조회 허가는 {formatDateTime(expiresAt)}까지입니다.
+          </p>
+          {banned ? (
+            <span role="status">차단했습니다.</span>
+          ) : (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => setBanning(true)}
+            >
+              이 사람 차단
+            </Button>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">
             범위:{" "}
             {fromRevisionId === null
               ? "모든 편집"
-              : `r${fromRevisionId}부터 그 뒤의 편집`}
+              : `r${fromRevisionId}${
+                  fromEdit
+                    ? `(${fromEdit.pageTitle}, ${formatDateTime(fromEdit.createdAt)})`
+                    : ""
+                }부터 그 뒤의 편집`}
           </span>
           <Button
             size="xs"
@@ -193,6 +228,34 @@ export function BulkRevertView({
           보입니다. 처리한 뒤 다시 읽으면 나머지가 나옵니다.
         </p>
       ) : null}
+      {selectableCount > 0 ? (
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+          <span>
+            고른 문서 {selected.length}개 / 고를 수 있는 문서 {selectableCount}
+            개
+          </span>
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => setOverrides(new Map())}
+          >
+            모두 선택
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => setOverrides(clearSelection(rows))}
+          >
+            모두 풀기
+          </Button>
+          {selectableCount > BULK_REVERT_MAX ? (
+            <span className="text-muted-foreground">
+              처음에는 위에서 {BULK_REVERT_MAX}개까지 고릅니다. 처리하면 다음
+              문서가 골라집니다.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <p className="py-6 text-center text-muted-foreground">
           이 범위에 되돌릴 편집이 없습니다.
@@ -201,7 +264,7 @@ export function BulkRevertView({
         <ul className="divide-y rounded-md border text-sm">
           {rows.map((row) => {
             const selectable = isSelectable(row);
-            const checked = isChecked(row, overrides);
+            const checked = selectedIds.has(row.pageId);
             const open = expanded.has(row.pageId);
             return (
               <li key={row.pageId} className="px-3 py-2">
@@ -287,7 +350,7 @@ export function BulkRevertView({
         confirmLabel="처리"
         destructive
         onConfirm={async (reason) => {
-          const outcomes = await bulkRevert(
+          const results = await bulkRevert(
             lookupId,
             fromRevisionId,
             selected.map((row) => ({
@@ -296,10 +359,29 @@ export function BulkRevertView({
             })),
             reason,
           );
-          setResult(describeBulkRevertResult(outcomes, selected.length));
+          setProcessed((current) => {
+            const next = new Map(current);
+            for (const { pageId, outcome } of results)
+              next.set(pageId, outcome);
+            return next;
+          });
+          onResult(
+            describeBulkRevertResult(
+              results.map((item) => item.outcome),
+              selected.length,
+            ),
+          );
           setExpanded(new Set());
         }}
         onDone={onDone}
+      />
+
+      <BanEditorDialog
+        open={banning}
+        onOpenChange={setBanning}
+        revisionId={sourceRevisionId}
+        target={`${source.authorPseudonym} (${source.pageTitle})`}
+        onDone={() => setBanned(true)}
       />
     </div>
   );
@@ -322,7 +404,9 @@ function StatusBadge({ row }: { row: BulkRevertRow }) {
     case "conflict":
       return <Badge variant="outline">충돌</Badge>;
     case "deleted":
-      return <Badge variant="outline">이미 삭제됨</Badge>;
+      return <Badge variant="outline">삭제됨</Badge>;
+    case "reverted":
+      return <Badge variant="outline">방금 되돌림</Badge>;
   }
 }
 

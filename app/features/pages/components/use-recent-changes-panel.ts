@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useFetcher, useLocation } from "react-router";
 
 import type { RecentChange } from "../model/types";
+import { useVisibleInterval } from "~/shared/hooks/use-visible-interval";
 
 /** 다시 읽는 최소 간격. */
 const REFRESH_MS = 30_000;
@@ -40,12 +41,7 @@ export function useRecentChangesPanel(
   }, [pathname, refresh]);
 
   // 타이머는 화면을 옮겨도 그대로 둔다.
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+  useVisibleInterval(refresh, POLL_MS);
 
   return fetcher.data?.changes;
 }

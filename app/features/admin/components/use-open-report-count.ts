@@ -1,23 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 
+import { OPEN_REPORTS_CHANGED } from "../data/mutations";
 import { countOpenReports } from "../data/queries";
+import { useVisibleInterval } from "~/shared/hooks/use-visible-interval";
 
 /** 화면을 옮길 때 다시 세는 최소 간격. */
 const REFRESH_MS = 30_000;
-
-/** 신고를 닫았다는 알림. 신고 목록이 보내고 머리띠의 수가 받는다. */
-const CHANGED_EVENT = "wiki:open-reports-changed";
-
-/** 신고를 닫은 뒤 부른다. 머리띠의 수를 곧바로 다시 센다. */
-export function notifyOpenReportsChanged(): void {
-  window.dispatchEvent(new Event(CHANGED_EVENT));
-}
+/** 한 화면에 머물 때 다시 세는 간격. */
+const POLL_MS = 60_000;
 
 /**
  * 처리되지 않은 신고가 걸린 판 수. 머리띠의 [관리]에 붙인다. 관리자일 때만 센다. 화면을 옮길 때
- * 다시 세고(30초에 한 번까지, 관리 화면으로 갈 때는 늘), 신고를 닫았다는 알림을 받으면 곧바로 센다.
- * 읽지 못하면 앞의 값을 둔다.
+ * 다시 세고(30초에 한 번까지, 관리 화면으로 갈 때는 늘), 한 화면에 머물면 탭이 보일 때 1분마다 센다.
+ * 신고를 닫는 조치가 알리면(`OPEN_REPORTS_CHANGED`) 곧바로 센다. 읽지 못하면 앞의 값을 둔다.
  */
 export function useOpenReportCount(enabled: boolean): number {
   const { pathname } = useLocation();
@@ -38,9 +34,11 @@ export function useOpenReportCount(enabled: boolean): number {
 
   useEffect(() => {
     if (!enabled) return;
-    window.addEventListener(CHANGED_EVENT, recount);
-    return () => window.removeEventListener(CHANGED_EVENT, recount);
+    window.addEventListener(OPEN_REPORTS_CHANGED, recount);
+    return () => window.removeEventListener(OPEN_REPORTS_CHANGED, recount);
   }, [enabled, recount]);
+
+  useVisibleInterval(recount, POLL_MS, enabled);
 
   return enabled ? count : 0;
 }

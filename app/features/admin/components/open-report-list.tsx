@@ -2,21 +2,23 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { resolveReports } from "../data/mutations";
+import { notifyOpenReportsChanged, resolveReports } from "../data/mutations";
 import type { OpenReport } from "../data/queries";
 import { describeAdminError } from "../model/log";
+import { HideRevisionDialog, hideLabel } from "./hide-revision-dialog";
 import { InlineRevisionDiff } from "./inline-revision-diff";
 import { RevisionAdminMenu } from "./revision-admin-menu";
-import { notifyOpenReportsChanged } from "./use-open-report-count";
 import { pageHref } from "~/features/markup";
 import { reportCategoryLabel } from "~/features/reports";
 import { formatDateTime } from "~/shared/lib/time";
+import { isWikiError } from "~/shared/supabase/errors";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
 /**
  * 처리되지 않은 신고를 판별로 보인다(관리자 전용). 판을 펼쳐 바로 전 판과 비교하고, 판 기록과 같은
- * 관리 메뉴로 조치한 뒤 신고를 닫는다. 신고자는 오지 않는다.
+ * 관리 메뉴로 조치한다. 숨기기(현재 판이면 되돌리고 숨기기)는 단추로 바로 보이고, 숨기면 신고도
+ * 닫힌다. 다른 조치를 했거나 조치할 일이 없으면 [처리함]이나 [기각]으로 닫는다. 신고자는 오지 않는다.
  */
 export function OpenReportList({
   reports,
@@ -52,6 +54,7 @@ function OpenReportItem({
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [hiding, setHiding] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,10 +63,13 @@ function OpenReportItem({
     setError(null);
     try {
       await resolveReports(report.revisionId, resolution);
-      notifyOpenReportsChanged();
       onChanged();
     } catch (caught) {
-      setError(describeAdminError(caught));
+      // 다른 관리자가 먼저 닫았다(WK011). 목록과 머리띠의 수에서 빼면 된다.
+      if (isWikiError(caught, "WK011")) {
+        notifyOpenReportsChanged();
+        onChanged();
+      } else setError(describeAdminError(caught));
     } finally {
       setPending(false);
     }
@@ -87,6 +93,11 @@ function OpenReportItem({
         {report.hiddenAt ? <Badge variant="outline">숨김</Badge> : null}
         {report.pageDeleted ? (
           <Badge variant="outline">삭제된 문서</Badge>
+        ) : null}
+        {report.dismissedCount > 0 ? (
+          <Badge variant="outline">
+            전에 기각한 신고 {report.dismissedCount}건
+          </Badge>
         ) : null}
         <span className="ml-auto flex items-center gap-1">
           <Button
@@ -115,6 +126,16 @@ function OpenReportItem({
             isCurrent={report.isCurrent}
             onDone={onChanged}
           />
+          {report.hiddenAt ? null : (
+            <Button
+              size="xs"
+              variant="destructive"
+              disabled={pending}
+              onClick={() => setHiding(true)}
+            >
+              {hideLabel(report, report.isCurrent)}
+            </Button>
+          )}
           <Button
             size="xs"
             variant="outline"
@@ -154,6 +175,14 @@ function OpenReportItem({
           {error}
         </p>
       ) : null}
+
+      <HideRevisionDialog
+        open={hiding}
+        onOpenChange={setHiding}
+        revision={{ id: report.revisionId, hiddenAt: report.hiddenAt }}
+        isCurrent={report.isCurrent}
+        onDone={onChanged}
+      />
 
       {open ? (
         <div className="pt-1">

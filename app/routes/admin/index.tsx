@@ -77,9 +77,10 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
           신고{reports.length > 0 ? ` ${reports.length}건` : ""}
         </h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          회원이 관리자에게 알린 판입니다. 누가 신고했는지는 보이지 않습니다.
-          조치한 뒤에는 [처리함], 조치할 일이 없으면 [기각]으로 닫습니다. 닫은
-          결과는 공개 기록에 남지 않습니다.
+          판을 숨기거나(현재 판이면 되돌리고 숨기기), 문서를 삭제하거나, 일괄
+          되돌리기로 걷어 내면 신고가 저절로 닫힙니다. 다른 조치를 했으면
+          [처리함], 조치할 일이 없으면 [기각]으로 닫습니다. 기각한 판은 같은
+          회원이 다시 신고할 수 없습니다. 닫은 결과는 공개 기록에 남지 않습니다.
         </p>
         <OpenReportList
           reports={reports}

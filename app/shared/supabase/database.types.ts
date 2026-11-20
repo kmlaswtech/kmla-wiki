@@ -395,6 +395,7 @@ export type Database = {
       list_open_reports: {
         Args: Record<PropertyKey, never>
         Returns: {
+          dismissed_count: number
           first_reported_at: string
           hidden_at: string
           is_current: boolean
@@ -500,6 +501,10 @@ export type Database = {
       }
       restore_page: {
         Args: { p_page_id: number; p_reason: string }
+        Returns: undefined
+      }
+      revert_and_hide_revision: {
+        Args: { p_reason: string; p_revision_id: number }
         Returns: undefined
       }
       revert_page: {

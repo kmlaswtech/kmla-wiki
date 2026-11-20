@@ -32,10 +32,37 @@ ALTER TABLE "private"."reports"
 -- 한 사람의 1시간 신고 수.
 CREATE INDEX reports_reporter_idx ON private.reports USING btree (reporter_member_id, created_at DESC);
 
+-- 판별 신고. 기각 수(`list_open_reports`), 기각 뒤 재신고 검사(`report_revision`), 판 삭제의 cascade가
+-- 쓴다. 아래 색인은 처리되지 않은 신고만 담아서 이것들에 쓰지 못한다.
+CREATE INDEX reports_revision_idx ON private.reports USING btree (revision_id);
+
 -- 같은 판에 대한 내 신고가 처리되기 전에는 다시 신고하지 않는다. 관리자 목록과 머리띠의 수도 이
 -- 색인으로 처리되지 않은 신고를 읽는다.
 CREATE UNIQUE INDEX reports_open_unique ON private.reports USING btree (revision_id, reporter_member_id)
   WHERE (resolved_at IS NULL);
+
+-- 조치(판 숨기기, 문서 삭제, 일괄 되돌리기)가 부른다. 그 판들에 걸린 처리되지 않은 신고를 `handled`로
+-- 닫고 닫은 건수를 돌려준다. 처리한 관리자는 지금 로그인한 회원이다.
+CREATE OR REPLACE FUNCTION private.close_reports (
+  p_revision_ids bigint[]
+)
+  RETURNS integer
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_count integer;
+begin
+  update private.reports
+     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
+   where revision_id = any (p_revision_ids) and resolved_at is null;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[]) FROM PUBLIC;
 
 -- 처리되지 않은 신고가 걸린 판 수(관리자 전용).
 CREATE OR REPLACE FUNCTION public.count_open_reports()
@@ -63,6 +90,7 @@ REVOKE ALL ON FUNCTION "public"."count_open_reports"() FROM PUBLIC, "anon";
 
 -- 처리되지 않은 신고를 판별로 묶는다(관리자 전용). 신고자는 돌려주지 않는다. 오래된 신고부터. 판이
 -- 지워지면 신고도 지워지므로(on delete cascade) 판 수는 `count_open_reports`와 같다.
+-- `dismissed_count`는 같은 판에서 전에 기각한 신고 수다. 관리자가 앞의 판단을 참고한다.
 CREATE OR REPLACE FUNCTION public.list_open_reports()
   RETURNS TABLE (
     revision_id         bigint,
@@ -75,7 +103,8 @@ CREATE OR REPLACE FUNCTION public.list_open_reports()
     is_current          boolean,
     page_deleted        boolean,
     first_reported_at   timestamp with time zone,
-    reports             jsonb
+    reports             jsonb,
+    dismissed_count     integer
   )
   LANGUAGE plpgsql
   STABLE
@@ -88,7 +117,11 @@ begin
   select
     revision.id, page.id, page.title, revision.author_pseudonym, revision.parent_revision_id,
     revision.created_at, revision.hidden_at, revision.id = page.current_revision_id,
-    page.deleted_at is not null, grouped.first_reported_at, grouped.reports
+    page.deleted_at is not null, grouped.first_reported_at, grouped.reports,
+    (
+      select count(*)::integer from private.reports as earlier
+      where earlier.revision_id = grouped.revision_id and earlier.resolution = 'dismissed'
+    )
   from (
     select
       report.revision_id,
@@ -152,6 +185,15 @@ begin
       and page.deleted_at is null
   ) then
     raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+  -- 기각된 판은 같은 사람이 다시 신고하지 않는다. 판의 내용은 바뀌지 않으므로 같은 판단이 나온다.
+  if exists (
+    select 1 from private.reports as report
+    where report.revision_id = p_revision_id
+      and report.reporter_member_id = v_member_id
+      and report.resolution = 'dismissed'
+  ) then
+    raise exception 'already dismissed' using errcode = 'WK011';
   end if;
   -- 같은 사람의 신고를 한 줄로 세운다. 동시에 보낸 신고가 모두 세기를 통과해 한도를 넘지 않게 한다.
   perform 1 from private.members where id = v_member_id for update;
