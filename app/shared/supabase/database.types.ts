@@ -282,12 +282,23 @@ export type Database = {
     Functions: {
       admin_count: { Args: Record<PropertyKey, never>; Returns: number }
       ban_editor: {
-        Args: { p_days: number; p_reason: string; p_revision_id: number }
+        Args: { p_ends_at: string; p_reason: string; p_revision_id: number }
         Returns: number
+      }
+      change_ban_end: {
+        Args: { p_ban_log_id: number; p_ends_at: string; p_reason: string }
+        Returns: undefined
       }
       delete_page: {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
+      }
+      get_author_lookup: {
+        Args: { p_lookup_id: string }
+        Returns: {
+          expires_at: string
+          source_revision_id: number
+        }[]
       }
       get_my_status: {
         Args: Record<PropertyKey, never>
@@ -332,11 +343,7 @@ export type Database = {
         }[]
       }
       list_author_edits: {
-        Args: {
-          p_before_revision_id?: number
-          p_reason: string
-          p_revision_id: number
-        }
+        Args: { p_before_revision_id?: number; p_lookup_id: string }
         Returns: {
           byte_delta: number
           created_at: string
@@ -365,6 +372,10 @@ export type Database = {
         }[]
       }
       my_pseudonym: { Args: { p_page_id: number }; Returns: string }
+      open_author_lookup: {
+        Args: { p_reason: string; p_revision_id: number }
+        Returns: string
+      }
       orphan_pages: {
         Args: { p_after?: string; p_limit?: number }
         Returns: {

@@ -56,21 +56,32 @@ export interface AuthorEdit extends RecentChange {
   pageDeleted: boolean;
 }
 
+/** 조회 허가의 근거 판과 끝나는 시각. 허가가 없거나 끝났으면 `WK016`으로 던진다. */
+export async function getAuthorLookup(
+  lookupId: string,
+): Promise<{ sourceRevisionId: number; expiresAt: string }> {
+  const rows = unwrap(
+    await getSupabase().rpc("get_author_lookup", { p_lookup_id: lookupId }),
+  );
+  const row = rows[0];
+  if (!row) throw new Error("lookup not found");
+  return {
+    sourceRevisionId: row.source_revision_id,
+    expiresAt: row.expires_at,
+  };
+}
+
 /**
- * 판 하나에서 시작해 같은 사람의 다른 편집을 본다(관리자 전용).
- *
- * 문서별 가명이 지키는 것을 푸는 기능이라, 첫 쪽을 볼 때 사유와 함께 공개 기록에 남는다.
- * 이어 보기(`before`)는 다시 기록하지 않는다.
+ * 같은 사람의 다른 편집, 최신순 50개씩(관리자 전용). 유효한 조회 허가(`openAuthorLookup`)가
+ * 있어야 하고, 허가가 끝났으면 `WK016`으로 던진다.
  */
 export async function listAuthorEdits(
-  revisionId: number,
-  reason: string,
+  lookupId: string,
   before?: number,
 ): Promise<AuthorEdit[]> {
   const rows = unwrap(
     await getSupabase().rpc("list_author_edits", {
-      p_revision_id: revisionId,
-      p_reason: reason,
+      p_lookup_id: lookupId,
       p_before_revision_id: before,
     }),
   );

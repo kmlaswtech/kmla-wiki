@@ -3,6 +3,7 @@ import { useOutletContext, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/bans";
 import {
+  ChangeBanDialog,
   isBanActive,
   liftBan,
   listBans,
@@ -33,6 +34,7 @@ export default function BansRoute({ loaderData }: Route.ComponentProps) {
   const status = useOutletContext<MemberStatus>();
   const revalidator = useRevalidator();
   const [lifting, setLifting] = useState<BanEntry | null>(null);
+  const [changing, setChanging] = useState<BanEntry | null>(null);
 
   return (
     <div>
@@ -64,14 +66,22 @@ export default function BansRoute({ loaderData }: Route.ComponentProps) {
                 사유: {ban.reason}
               </span>
               {status.isAdmin && ban.active ? (
-                <Button
-                  className="ml-auto"
-                  size="xs"
-                  variant="outline"
-                  onClick={() => setLifting(ban)}
-                >
-                  해제
-                </Button>
+                <span className="ml-auto flex gap-1">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setChanging(ban)}
+                  >
+                    기간 변경
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setLifting(ban)}
+                  >
+                    해제
+                  </Button>
+                </span>
               ) : null}
             </li>
           ))}
@@ -87,6 +97,12 @@ export default function BansRoute({ loaderData }: Route.ComponentProps) {
         onConfirm={(reason) =>
           lifting ? liftBan(lifting.id, reason) : Promise.resolve()
         }
+        onDone={() => void revalidator.revalidate()}
+      />
+
+      <ChangeBanDialog
+        ban={changing}
+        onClose={() => setChanging(null)}
         onDone={() => void revalidator.revalidate()}
       />
     </div>

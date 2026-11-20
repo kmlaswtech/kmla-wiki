@@ -24,6 +24,8 @@ interface ReasonDialogProps {
   destructive?: boolean;
   /** 사유 위에 둘 추가 입력(차단 기간 등). */
   children?: ReactNode;
+  /** 추가 입력이 올바르지 않으면 `false`. */
+  canConfirm?: boolean;
   /** 조치를 실행한다. 실패하면 던진다. */
   onConfirm: (reason: string) => Promise<void>;
   /** 성공한 뒤(화면 갱신, 이동). */
@@ -43,6 +45,7 @@ export function ReasonDialog({
   confirmLabel,
   destructive = false,
   children,
+  canConfirm = true,
   onConfirm,
   onDone,
 }: ReasonDialogProps) {
@@ -115,7 +118,7 @@ export function ReasonDialog({
             <Button
               type="submit"
               variant={destructive ? "destructive" : "default"}
-              disabled={pending || reason.trim().length < 2}
+              disabled={pending || !canConfirm || reason.trim().length < 2}
             >
               {pending ? <Spinner /> : null}
               {confirmLabel}
