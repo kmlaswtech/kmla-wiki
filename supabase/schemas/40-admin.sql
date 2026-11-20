@@ -458,13 +458,7 @@ begin
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
 
-  select lookup.id into v_lookup_id
-  from private.author_lookups as lookup
-  where lookup.admin_member_id = v_admin_id
-    and lookup.target_member_id = v_target.member_id
-    and lookup.expires_at > now() + interval '2 minutes'
-  order by lookup.expires_at desc
-  limit 1;
+  v_lookup_id := private.reusable_lookup(v_admin_id, v_target.member_id);
   if v_lookup_id is not null then
     return v_lookup_id;
   end if;
@@ -490,6 +484,76 @@ REVOKE ALL ON FUNCTION "public"."open_author_lookup"(bigint, text) FROM "postgre
 GRANT EXECUTE ON FUNCTION "public"."open_author_lookup"(bigint, text) TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."open_author_lookup"(bigint, text) FROM PUBLIC, "anon";
+
+-- 이 판을 쓴 사람에 대해 내가 연, 다시 쓸 수 있는 허가. 없으면 NULL. 사유를 적고 연 허가로 돌아가는
+-- 길이라 기록을 남기지 않는다. 다른 사람의 허가나 새 허가는 만들지 않는다.
+CREATE OR REPLACE FUNCTION public.find_author_lookup (
+  p_revision_id bigint
+)
+  RETURNS uuid
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_admin_id bigint := private.require_admin();
+  v_target record;
+begin
+  select * into v_target from private.revision_target(p_revision_id);
+  if v_target.member_id is null then
+    return null;
+  end if;
+  return private.reusable_lookup(v_admin_id, v_target.member_id);
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."find_author_lookup"(bigint) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."find_author_lookup"(bigint) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."find_author_lookup"(bigint) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."find_author_lookup"(bigint) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."find_author_lookup"(bigint) FROM PUBLIC, "anon";
+
+-- 내가 연, 아직 유효한 조회 허가. 근거 판의 문서와 가명은 허가를 열 때의 공개 기록에서 가져온다.
+CREATE OR REPLACE FUNCTION public.list_my_author_lookups()
+  RETURNS TABLE (
+    lookup_id          uuid,
+    source_revision_id bigint,
+    page_title         text,
+    pseudonym          text,
+    expires_at         timestamp with time zone
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_admin_id bigint := private.require_admin();
+begin
+  return query
+  select lookup.id, lookup.source_revision_id, log.page_title, log.pseudonym, lookup.expires_at
+  from private.author_lookups as lookup
+  left join public.admin_log as log on log.id = lookup.admin_log_id
+  where lookup.admin_member_id = v_admin_id
+    and lookup.expires_at > now()
+  order by lookup.expires_at desc;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."list_my_author_lookups"() TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."list_my_author_lookups"() TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."list_my_author_lookups"() FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_my_author_lookups"() TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."list_my_author_lookups"() FROM PUBLIC, "anon";
 
 -- 허가의 근거 판과 끝나는 시각.
 CREATE OR REPLACE FUNCTION public.get_author_lookup (
@@ -532,6 +596,7 @@ CREATE OR REPLACE FUNCTION public.list_author_edits (
 )
   RETURNS TABLE (
     revision_id        bigint,
+    page_id            bigint,
     page_title         text,
     pseudonym          text,
     kind               text,
@@ -556,7 +621,7 @@ begin
 
   return query
   select
-    revision.id, page.title, revision.author_pseudonym, revision.kind, revision.summary,
+    revision.id, page.id, page.title, revision.author_pseudonym, revision.kind, revision.summary,
     revision.byte_delta, revision.created_at, revision.parent_revision_id,
     revision.id = page.current_revision_id, revision.hidden_at, page.deleted_at is not null
   from private.revision_authors as author
@@ -888,6 +953,28 @@ ALTER TABLE "private"."author_lookups"
   ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX author_lookups_admin_target_idx ON private.author_lookups USING btree (admin_member_id, target_member_id, expires_at);
+
+-- 같은 관리자, 같은 사람에 대해 2분 넘게 남은 허가. 곧 끝날 허가는 다시 쓰지 않는다.
+CREATE OR REPLACE FUNCTION private.reusable_lookup (
+  p_admin_id  bigint,
+  p_target_id bigint
+)
+  RETURNS uuid
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select lookup.id
+  from private.author_lookups as lookup
+  where lookup.admin_member_id = p_admin_id
+    and lookup.target_member_id = p_target_id
+    and lookup.expires_at > now() + interval '2 minutes'
+  order by lookup.expires_at desc
+  limit 1;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."reusable_lookup"(bigint, bigint) FROM PUBLIC;
 
 -- 관리자 본인이 연, 아직 유효한 조회 허가. 없거나, 끝났거나, ID 꼴이 아니면(손으로 고친 주소) WK016.
 CREATE OR REPLACE FUNCTION private.author_lookup (

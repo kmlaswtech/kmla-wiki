@@ -55,6 +55,7 @@ export async function listBans(): Promise<BanEntry[]> {
 }
 
 export interface AuthorEdit extends RecentChange {
+  pageId: number;
   isCurrent: boolean;
   pageDeleted: boolean;
 }
@@ -98,9 +99,45 @@ export async function listAuthorEdits(
     byteDelta: row.byte_delta,
     createdAt: row.created_at,
     hiddenAt: row.hidden_at,
+    pageId: row.page_id,
     pageTitle: row.page_title,
     isCurrent: row.is_current,
     pageDeleted: row.page_deleted,
+  }));
+}
+
+/**
+ * 이 판을 쓴 사람에 대해 내가 연, 다시 쓸 수 있는(2분 넘게 남은) 조회 허가. 없으면 `null`. 이미
+ * 사유를 적고 연 허가로 돌아가는 길이라 기록을 남기지 않는다.
+ */
+export async function findAuthorLookup(
+  revisionId: number,
+): Promise<string | null> {
+  return unwrap(
+    await getSupabase().rpc("find_author_lookup", {
+      p_revision_id: revisionId,
+    }),
+  );
+}
+
+export interface OpenLookup {
+  id: string;
+  sourceRevisionId: number;
+  /** 허가를 열 때 근거가 된 판의 문서와 가명(공개 기록과 같다). */
+  pageTitle: string | null;
+  pseudonym: string | null;
+  expiresAt: string;
+}
+
+/** 내가 연, 아직 유효한 조회 허가. 끝나는 때가 늦은 순. */
+export async function listMyAuthorLookups(): Promise<OpenLookup[]> {
+  const rows = unwrap(await getSupabase().rpc("list_my_author_lookups"));
+  return rows.map((row) => ({
+    id: row.lookup_id,
+    sourceRevisionId: row.source_revision_id,
+    pageTitle: row.page_title,
+    pseudonym: row.pseudonym,
+    expiresAt: row.expires_at,
   }));
 }
 

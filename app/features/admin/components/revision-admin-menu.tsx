@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { banEditor, grantAdmin, setRevisionHidden } from "../data/mutations";
+import { authorEditsHref } from "../model/author-lookup";
 import { BanLengthDialog } from "./ban-length-dialog";
 import { ReasonDialog } from "./reason-dialog";
 import { Button } from "~/shared/ui/button";
@@ -25,6 +26,8 @@ interface RevisionAdminMenuProps {
   isCurrent: boolean;
   /** 조치가 끝난 뒤 목록을 다시 읽는다. */
   onDone: () => void;
+  /** "이 사람의 다른 편집 보기"를 보일지. 그 화면 안에서는 끈다. */
+  showAuthorEdits?: boolean;
 }
 
 type Open = "ban" | "hide" | "grant" | null;
@@ -40,6 +43,7 @@ export function RevisionAdminMenu({
   pageTitle,
   isCurrent,
   onDone,
+  showAuthorEdits = true,
 }: RevisionAdminMenuProps) {
   const [open, setOpen] = useState<Open>(null);
   const target = `${revision.authorPseudonym} (${pageTitle})`;
@@ -62,11 +66,13 @@ export function RevisionAdminMenu({
           <ShieldAlert />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            render={<Link to={`/admin/author-edits?from=${revision.id}`} />}
-          >
-            이 사람의 다른 편집 보기
-          </DropdownMenuItem>
+          {showAuthorEdits ? (
+            <DropdownMenuItem
+              render={<Link to={authorEditsHref(revision.id)} />}
+            >
+              이 사람의 다른 편집 보기
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onClick={() => setOpen("ban")}>
             이 사람 차단
           </DropdownMenuItem>

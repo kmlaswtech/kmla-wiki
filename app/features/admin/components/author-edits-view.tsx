@@ -1,5 +1,6 @@
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { openAuthorLookup } from "../data/mutations";
 import {
@@ -7,7 +8,9 @@ import {
   listAuthorEdits,
   type AuthorEdit,
 } from "../data/queries";
+import { authorEditsHref } from "../model/author-lookup";
 import { describeAdminError } from "../model/log";
+import { InlineRevisionDiff } from "./inline-revision-diff";
 import { RevisionAdminMenu } from "./revision-admin-menu";
 import { pageHref } from "~/features/markup";
 import { RevisionList } from "~/features/pages";
@@ -35,13 +38,11 @@ export interface AuthorLookupView {
 export function AuthorLookupForm({
   revisionId,
   expired,
-  onOpened,
 }: {
   revisionId: number;
   expired: boolean;
-  /** 허가가 열렸다. 그 ID를 주소에 담는다. */
-  onOpened: (lookupId: string) => Promise<void> | void;
 }) {
+  const navigate = useNavigate();
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +51,9 @@ export function AuthorLookupForm({
     setPending(true);
     setError(null);
     try {
-      await onOpened(await openAuthorLookup(revisionId, reason));
+      const lookupId = await openAuthorLookup(revisionId, reason);
+      // 허가 ID를 주소에 담는다. 새로 고치거나 돌아와도 같은 목록이 열린다.
+      await navigate(authorEditsHref(revisionId, lookupId), { replace: true });
     } catch (caught) {
       setError(describeAdminError(caught));
     } finally {
@@ -80,7 +83,7 @@ export function AuthorLookupForm({
           <strong className="text-foreground">
             사유와 함께 공개 관리 기록에 남습니다.
           </strong>{" "}
-          허가는 10분 동안 유지되고, 이 사람이 누구인지는 보이지 않습니다.
+          허가는 10분 동안 유지됩니다.
         </p>
         <div className="grid gap-1.5">
           <Label htmlFor="lookup-reason">조회 사유</Label>
@@ -108,13 +111,13 @@ export function AuthorLookupForm({
 }
 
 export function AuthorEditsResult({
+  revisionId,
   lookup,
-  retryHref,
   onChanged,
 }: {
+  /** 주소의 판. 허가가 끝났을 때 이 판에서 다시 조회한다. */
+  revisionId: number;
   lookup: AuthorLookupView;
-  /** 허가가 끝났을 때 다시 조회하는 곳. */
-  retryHref: string;
   /** 관리 조치가 끝났다. 첫 쪽을 다시 읽는다. */
   onChanged: () => void;
 }) {
@@ -127,6 +130,16 @@ export function AuthorEditsResult({
   const pages = loaded.base === lookup.edits ? loaded.pages : [];
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 바로 전 판과의 비교를 펼친 판들.
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
+
+  function toggle(id: number) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
 
   const edits = [lookup.edits, ...pages].flat();
   const lastPageFull =
@@ -162,6 +175,7 @@ export function AuthorEditsResult({
               pageTitle={source.pageTitle}
               isCurrent={source.isCurrent}
               onDone={onChanged}
+              showAuthorEdits={false}
             />
           </span>
         ) : null}
@@ -171,6 +185,15 @@ export function AuthorEditsResult({
         revisions={edits}
         pageTitle={(edit) => edit.pageTitle}
         showPage
+        detail={(edit) =>
+          expanded.has(edit.id) ? (
+            <InlineRevisionDiff
+              pageId={edit.pageId}
+              revisionId={edit.id}
+              parentRevisionId={edit.parentRevisionId}
+            />
+          ) : null
+        }
         actions={(edit) => (
           <>
             {edit.isCurrent ? <Badge variant="secondary">현재 판</Badge> : null}
@@ -183,6 +206,24 @@ export function AuthorEditsResult({
             >
               기록
             </Link>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-expanded={expanded.has(edit.id)}
+              aria-label={
+                expanded.has(edit.id)
+                  ? `r${edit.id} 비교 접기`
+                  : `r${edit.id} 바로 전 판과 비교 펼치기`
+              }
+              onClick={() => toggle(edit.id)}
+            >
+              <ChevronDown
+                className={
+                  expanded.has(edit.id) ? "rotate-180 transition" : "transition"
+                }
+              />
+            </Button>
           </>
         )}
       />
@@ -190,7 +231,10 @@ export function AuthorEditsResult({
       {error ? (
         <p role="alert" className="mt-4 text-center text-sm text-destructive">
           {error}{" "}
-          <Link to={retryHref} className="text-primary hover:underline">
+          <Link
+            to={authorEditsHref(revisionId)}
+            className="text-primary hover:underline"
+          >
             다시 조회
           </Link>
         </p>

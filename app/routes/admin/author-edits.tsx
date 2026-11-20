@@ -1,9 +1,11 @@
-import { data, redirect, useNavigate, useRevalidator } from "react-router";
+import { data, redirect, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/author-edits";
 import {
   AuthorEditsResult,
   AuthorLookupForm,
+  authorEditsHref,
+  findAuthorLookup,
   getAuthorLookup,
   isLookupExpired,
   listAuthorEdits,
@@ -21,7 +23,14 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const revisionId = Number(from);
 
   const lookupId = params.get("lookup");
-  if (!lookupId) return { revisionId, lookup: null };
+  if (!lookupId) {
+    // 이 사람에 대해 이미 연 허가가 있으면(나갔다 돌아옴, 같은 사람의 다른 판) 사유를 다시 받지 않는다.
+    const open = await withVerifiedMember(request, () =>
+      findAuthorLookup(revisionId),
+    );
+    if (open) throw redirect(authorEditsHref(revisionId, open));
+    return { revisionId, lookup: null };
+  }
 
   try {
     const [lookup, edits] = await withVerifiedMember(request, () =>
@@ -49,25 +58,20 @@ export const meta: Route.MetaFunction = () => [
  */
 export default function AuthorEditsRoute({ loaderData }: Route.ComponentProps) {
   const { revisionId, lookup } = loaderData;
-  const navigate = useNavigate();
   const revalidator = useRevalidator();
-  const formHref = `/admin/author-edits?from=${revisionId}`;
 
   if (lookup === null || lookup === "expired") {
     return (
       <AuthorLookupForm
         revisionId={revisionId}
         expired={lookup === "expired"}
-        onOpened={(lookupId) =>
-          navigate(`${formHref}&lookup=${lookupId}`, { replace: true })
-        }
       />
     );
   }
   return (
     <AuthorEditsResult
+      revisionId={revisionId}
       lookup={lookup}
-      retryHref={formHref}
       onChanged={() => void revalidator.revalidate()}
     />
   );

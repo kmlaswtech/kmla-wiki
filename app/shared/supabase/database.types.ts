@@ -293,6 +293,7 @@ export type Database = {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
       }
+      find_author_lookup: { Args: { p_revision_id: number }; Returns: string }
       get_author_lookup: {
         Args: { p_lookup_id: string }
         Returns: {
@@ -351,11 +352,22 @@ export type Database = {
           is_current: boolean
           kind: string
           page_deleted: boolean
+          page_id: number
           page_title: string
           parent_revision_id: number
           pseudonym: string
           revision_id: number
           summary: string
+        }[]
+      }
+      list_my_author_lookups: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          expires_at: string
+          lookup_id: string
+          page_title: string
+          pseudonym: string
+          source_revision_id: number
         }[]
       }
       mark_image_deleted: { Args: { p_image_id: string }; Returns: undefined }

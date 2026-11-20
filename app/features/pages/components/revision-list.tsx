@@ -21,6 +21,8 @@ interface RevisionListProps<Row extends RevisionSummary> {
   actions?: (revision: Row) => ReactNode;
   /** 줄 맨 앞에 붙일 것(판 기록의 비교할 판 고르기). */
   leading?: (revision: Row) => ReactNode;
+  /** 줄 아래 전체 폭에 펼칠 것(관리자의 "다른 편집 보기"에서 바로 전 판과의 비교). */
+  detail?: (revision: Row) => ReactNode;
 }
 
 /** 판 목록 한 벌. 판 기록, 최근 변경, 관리자의 "다른 편집 보기"가 같이 쓴다. */
@@ -31,6 +33,7 @@ export function RevisionList<Row extends RevisionSummary>({
   myPseudonym,
   actions,
   leading,
+  detail,
 }: RevisionListProps<Row>) {
   if (revisions.length === 0) {
     return (
@@ -102,9 +105,18 @@ export function RevisionList<Row extends RevisionSummary>({
               ) : null}
               {actions?.(revision)}
             </span>
+            {detail ? <DetailSlot>{detail(revision)}</DetailSlot> : null}
           </li>
         );
       })}
     </ul>
   );
+}
+
+/** 줄 맨 끝(폰에서 요약 다음) 전체 폭. 내용이 없으면 자리를 만들지 않는다. */
+function DetailSlot({ children }: { children: ReactNode }) {
+  if (children === null || children === undefined || children === false) {
+    return null;
+  }
+  return <div className="order-last basis-full pt-1">{children}</div>;
 }

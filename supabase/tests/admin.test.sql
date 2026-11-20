@@ -18,6 +18,10 @@ select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '도�
   'a member cannot ban');
 select throws_ok(format($$select public.open_author_lookup(%s, '확인')$$, :b1), '42501', null,
   'a member cannot open a lookup of another author''s edits');
+select throws_ok(format($$select public.find_author_lookup(%s)$$, :b1), '42501', null,
+  'a member cannot look for an open lookup');
+select throws_ok($$select * from public.list_my_author_lookups()$$, '42501', null,
+  'a member cannot list lookups');
 select throws_ok(format($$select public.set_protection(%s, 'admin', '보호')$$, :p1), '42501', null,
   'a member cannot protect a page');
 select throws_ok(format($$select public.delete_page(%s, '삭제')$$, :p1), '42501', null,
@@ -69,6 +73,20 @@ select is(
 select is(
   (select count(*) from public.admin_log where action = 'view_author_edits'), 1::bigint,
   'and nothing more is recorded'
+);
+select is(
+  public.find_author_lookup(:b2), :'lookup1'::uuid,
+  'the open lookup is found from any revision by the same author, without a reason'
+);
+select is(public.find_author_lookup(:a1), null::uuid, 'but not from another author''s revision');
+select is(
+  (select count(*) from public.admin_log where action = 'view_author_edits'), 1::bigint,
+  'finding a lookup records nothing'
+);
+select results_eq(
+  $$select lookup_id, page_title from public.list_my_author_lookups()$$,
+  format($$values (%L::uuid, '훼손 문서 하나'::text)$$, :'lookup1'),
+  'an admin lists their own open lookups'
 );
 select throws_ok(
   format($$select * from public.list_author_edits(%L)$$, gen_random_uuid()), 'WK016', null,
