@@ -40,9 +40,8 @@ export default function BansRoute({ loaderData }: Route.ComponentProps) {
     <div>
       <h1 className="mb-2 border-b pb-3 text-2xl font-bold">차단 내역</h1>
       <p className="mb-4 text-sm text-muted-foreground">
-        차단은 편집만 막고, 모든 문서에 적용됩니다. 여기에는 근거가 된
-        문서에서의 가명만 나옵니다. 같은 사람의 다른 문서 가명은 나오지
-        않습니다.
+        차단된 회원은 모든 문서에서 편집이 제한됩니다. 가명은 차단 근거가 된
+        문서의 가명입니다.
       </p>
 
       {bans.length === 0 ? (
@@ -54,7 +53,7 @@ export default function BansRoute({ loaderData }: Route.ComponentProps) {
           {bans.map((ban) => (
             <li key={ban.id} className="flex flex-wrap items-center gap-2 py-3">
               <Badge variant={ban.active ? "destructive" : "outline"}>
-                {ban.active ? "차단 중" : ban.liftedAt ? "해제됨" : "기간 끝남"}
+                {ban.active ? "차단 중" : ban.liftedAt ? "해제됨" : "만료"}
               </Badge>
               <span className="font-mono text-xs">{ban.pseudonym}</span>
               <span className="text-muted-foreground">({ban.pageTitle})</span>

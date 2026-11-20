@@ -124,8 +124,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
           <span className="font-normal text-muted-foreground">기록</span>
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          편집자는 이 문서에서만 쓰이는 가명으로 표시됩니다. 같은 사람도 다른
-          문서에서는 다른 가명입니다.
+          편집자 가명은 문서마다 다릅니다.
         </p>
       </header>
 
@@ -144,9 +143,9 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
               void navigate(`${pageHref(title, "diff")}?from=${from}&to=${to}`);
             }}
           >
-            고른 두 판 비교
+            선택한 두 판 비교
           </Button>
-          <span>왼쪽 칸에서 이전 판, 오른쪽 칸에서 이후 판을 고릅니다.</span>
+          <span>왼쪽은 이전 판, 오른쪽은 이후 판을 선택합니다.</span>
         </div>
       ) : null}
 
@@ -219,7 +218,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
             variant="outline"
             to={`${pageHref(title, "history")}?before=${oldest.id}`}
           >
-            더 예전 기록
+            이전 기록 더 보기
           </LinkButton>
         </div>
       ) : null}

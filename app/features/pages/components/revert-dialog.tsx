@@ -52,16 +52,16 @@ export function RevertDialog({
             value={revisionId ?? ""}
           />
           <DialogHeader>
-            <DialogTitle>r{revisionId} 판으로 되돌릴까요?</DialogTitle>
+            <DialogTitle>r{revisionId}로 되돌릴까요?</DialogTitle>
             <DialogDescription>
-              지금 판의 내용을 r{revisionId} 판 내용으로 바꾼 새 판이 생깁니다.
-              기록은 지워지지 않아 다시 되돌릴 수 있습니다.{" "}
+              r{revisionId}의 내용이 새 판으로 저장됩니다. 기존 편집 기록은
+              남습니다.{" "}
               {currentRevisionId !== null && revisionId !== null ? (
                 <Link
                   to={`${pageHref(title, "diff")}?from=${Math.min(revisionId, currentRevisionId)}&to=${Math.max(revisionId, currentRevisionId)}`}
                   className="text-primary hover:underline"
                 >
-                  지금 판과 비교
+                  최신 판과 비교
                 </Link>
               ) : null}
             </DialogDescription>
@@ -97,7 +97,7 @@ export function RevertDialog({
               disabled={busy}
               onClick={onClose}
             >
-              그만두기
+              취소
             </Button>
             <Button type="submit" disabled={busy}>
               {busy ? <Spinner /> : null}

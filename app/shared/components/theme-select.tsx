@@ -4,9 +4,9 @@ import { useTheme } from "next-themes";
 import { Button } from "~/shared/ui/button";
 
 const OPTIONS: { value: string; label: string; icon: LucideIcon }[] = [
-  { value: "system", label: "기기 설정", icon: Monitor },
-  { value: "light", label: "라이트", icon: Sun },
-  { value: "dark", label: "다크", icon: Moon },
+  { value: "system", label: "기기 설정 따르기", icon: Monitor },
+  { value: "light", label: "밝게", icon: Sun },
+  { value: "dark", label: "어둡게", icon: Moon },
 ];
 
 /**

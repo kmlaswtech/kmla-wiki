@@ -351,8 +351,7 @@ export function TitleInput({
       </Popover.Root>
       {missingSection ? (
         <p id={warningId} className="mt-1.5 text-sm text-destructive">
-          {query} 문서에 이 문단이 없습니다. 이대로 넣으면 링크는 문서 맨 위로
-          갑니다.
+          이 문단을 찾을 수 없습니다. 그대로 삽입하면 문서 맨 위로 연결됩니다.
         </p>
       ) : null}
     </div>

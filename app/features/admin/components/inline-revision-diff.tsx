@@ -40,7 +40,7 @@ export function InlineRevisionDiff({
         const before = text(beforeId);
         const after = text(afterId);
         if (before === null || after === null) {
-          setState({ status: "error", message: "비교할 판을 볼 수 없습니다." });
+          setState({ status: "error", message: "판을 불러오지 못했습니다." });
           return;
         }
         setState({ status: "ready", before, after });

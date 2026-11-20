@@ -18,7 +18,7 @@ function hideMode(
 }
 
 const HIDE_PURPOSE =
-  "실명이 나오는 사건, 비방, 개인정보처럼 기록에 남아 있으면 안 되는 내용에 사용합니다. 숨긴 사실과 사유는 공개되고, 이 판의 신고는 처리함으로 닫힙니다.";
+  "기록에서 가려야 할 개인정보나 비방이 있을 때 사용합니다. 숨김 조치와 사유는 공개되며, 이 판에 대한 신고는 자동으로 처리됩니다.";
 
 const MODES: Record<
   HideMode,
@@ -46,7 +46,7 @@ const MODES: Record<
     label: "되돌리고 숨기기",
     confirmLabel: "되돌리고 숨기기",
     describe: (id) =>
-      `r${id}은 현재 판이라, 먼저 그 앞의 보이는 판으로 되돌린 뒤 일반 사용자에게 보이지 않게 합니다. 앞에 보이는 판이 없으면 문서를 삭제합니다. ${HIDE_PURPOSE}`,
+      `현재 판 r${id}를 숨기기 전에 직전 공개 판으로 되돌립니다. 되돌릴 공개 판이 없으면 문서가 삭제됩니다. ${HIDE_PURPOSE}`,
     run: revertAndHideRevision,
   },
 };

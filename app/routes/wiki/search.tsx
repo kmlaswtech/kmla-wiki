@@ -45,9 +45,7 @@ export default function SearchRoute({ loaderData }: Route.ComponentProps) {
       </h1>
 
       {query === "" ? (
-        <p className="text-muted-foreground">
-          위의 검색창에 찾을 말을 넣어 주세요.
-        </p>
+        <p className="text-muted-foreground">검색어를 입력해 주세요.</p>
       ) : (
         <>
           {/* 찾는 문서가 없으면 바로 만들 수 있게 한다. */}
@@ -59,13 +57,13 @@ export default function SearchRoute({ loaderData }: Route.ComponentProps) {
               >
                 {asTitle}
               </Link>{" "}
-              문서는 아직 없습니다. 눌러서 만들 수 있습니다.
+              일치하는 제목의 문서가 없습니다.
             </p>
           ) : null}
 
           {hits.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">
-              찾은 문서가 없습니다.
+              검색 결과가 없습니다.
             </p>
           ) : (
             <ul className="divide-y">

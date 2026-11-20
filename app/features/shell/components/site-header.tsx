@@ -145,7 +145,7 @@ function navItems(status: MemberStatus, openReports: number): NavItem[] {
   return [
     { to: "/recent", label: "최근 변경", icon: History },
     { to: "/special", label: "특수 기능", icon: LayoutList },
-    { to: "/random", label: "아무 문서", icon: Shuffle, iconOnWide: true },
+    { to: "/random", label: "무작위 문서", icon: Shuffle, iconOnWide: true },
     ...(status.isAdmin
       ? [{ to: "/admin", label: "관리", icon: ShieldAlert, count: openReports }]
       : []),

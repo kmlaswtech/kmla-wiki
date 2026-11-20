@@ -32,10 +32,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   ) : (
     <section>
       <h1 className="mb-2 text-3xl font-bold">큼온 위키</h1>
-      <p className="text-muted-foreground">
-        아직 대문이 없습니다. <code>{MAIN_PAGE_TITLE}</code> 문서를 만들면
-        여기에 보입니다.
-      </p>
+      <p className="text-muted-foreground">아직 대문이 없습니다.</p>
       {view.canEdit ? (
         <LinkButton className="mt-4" to={pageHref(MAIN_PAGE_TITLE, "edit")}>
           대문 만들기

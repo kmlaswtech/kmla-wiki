@@ -61,7 +61,7 @@ export function AddAliasButton({
         onClick={() => setOpen(true)}
       >
         <Plus aria-hidden />
-        이름 추가
+        다른 이름 추가
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -173,8 +173,8 @@ function AliasForm({
                 {problem.title}
               </Link>
               {problem.ours
-                ? "은(는) 이미 이 문서의 다른 이름입니다."
-                : " 문서가 이미 존재합니다. 다른 이름을 작성하거나, 해당 문서를 이 문서로 넘겨주게 고쳐 주세요."}
+                ? "은(는) 이미 등록된 이름입니다."
+                : " 문서가 이미 있습니다. 다른 이름을 입력하거나 기존 문서를 넘겨주기로 바꿔 주세요."}
             </>
           )}
         </p>

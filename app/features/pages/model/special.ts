@@ -8,13 +8,12 @@ export const SPECIAL_TABS = [
   {
     key: "wanted",
     label: "작성이 필요한 문서",
-    description: "다른 문서에서 링크했지만 아직 없는 문서입니다.",
+    description: "다른 문서에 링크가 있지만 아직 작성되지 않은 문서입니다.",
   },
   {
     key: "orphan",
     label: "고립된 문서",
-    description:
-      "어느 문서도 링크하지 않아 검색으로만 찾을 수 있는 문서입니다. 관련 문서에서 링크를 걸어 주세요.",
+    description: "다른 문서에서 링크하지 않은 문서입니다.",
   },
   {
     key: "redirects",

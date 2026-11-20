@@ -14,21 +14,19 @@ export function MissingArticle({ view }: { view: MissingPage }) {
       <p className="text-muted-foreground">이 문서는 아직 없습니다.</p>
       {view.title && view.validTitle && view.canEdit ? (
         <div className="mt-4 flex flex-wrap gap-2">
-          <LinkButton to={pageHref(view.title, "edit")}>
-            이 문서 만들기
-          </LinkButton>
+          <LinkButton to={pageHref(view.title, "edit")}>문서 만들기</LinkButton>
           {/* 줄임말·옛 이름처럼 이미 있는 문서의 다른 이름이라면 넘겨주기로 만든다. */}
           <LinkButton
             variant="outline"
             to={`${pageHref(view.title, "edit")}?as=redirect`}
           >
-            다른 문서로 넘겨주기
+            넘겨주기 만들기
           </LinkButton>
         </div>
       ) : null}
       {view.backlinks.length > 0 ? (
         <section className="mt-8 text-sm">
-          <h2 className="mb-2 font-semibold">이 문서를 가리키는 문서</h2>
+          <h2 className="mb-2 font-semibold">이 문서로 연결되는 문서</h2>
           <ul className="flex flex-wrap gap-x-4 gap-y-1">
             {view.backlinks.map((link) => (
               <li key={link.title}>

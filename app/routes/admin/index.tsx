@@ -41,17 +41,16 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
       <h1 className="border-b pb-3 text-2xl font-bold">관리</h1>
 
       <section>
-        <h2 className="mb-2 text-lg font-semibold">어디서 무엇을 하나</h2>
+        <h2 className="mb-2 text-lg font-semibold">관리 기능 위치</h2>
         <ul className="list-disc space-y-1 pl-5 text-sm">
           <li>
-            <strong>
-              차단, 판 숨기기, 관리자 지정, 같은 사람의 다른 편집 보기
-            </strong>
-            : 문서의 [기록]에서 해당 판 오른쪽의 방패 버튼
+            편집자 관리와 판 숨김은 문서의 편집 기록에서 해당 판의 방패 버튼을
+            누릅니다.
           </li>
           <li>
-            <strong>한 사람의 편집을 여러 문서에서 되돌리기</strong>: 다른 편집
-            보기 화면의 [일괄 되돌리기] 또는 각 줄의 [여기부터 되돌리기]
+            여러 문서를 되돌리려면 ‘다른 편집 조회’에서 ‘일괄 되돌리기’를
+            선택합니다. 특정 판부터 되돌리려면 ‘이 판부터 되돌리기’를
+            선택합니다.
           </li>
           <li>
             <strong>문서 보호, 삭제·복구</strong>: 문서 화면의 [관리] 버튼
@@ -77,10 +76,10 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
           신고{reports.length > 0 ? ` ${reports.length}건` : ""}
         </h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          판을 숨기거나(현재 판이면 되돌리고 숨기기), 문서를 삭제하거나, 일괄
-          되돌리기로 걷어 내면 신고가 저절로 닫힙니다. 다른 조치를 했으면
-          [처리함], 조치할 일이 없으면 [기각]으로 닫습니다. 기각한 판은 같은
-          회원이 다시 신고할 수 없습니다. 닫은 결과는 공개 기록에 남지 않습니다.
+          신고 대상이 판 숨김, 문서 삭제 또는 일괄 되돌리기로 제거되면 신고가
+          자동으로 처리됩니다. 별도로 조치했다면 ‘처리 완료’, 조치가 필요 없다면
+          ‘기각’을 선택하세요. 같은 회원은 기각된 판을 다시 신고할 수 없습니다.
+          신고 처리 결과는 공개 기록에 남지 않습니다.
         </p>
         <OpenReportList
           reports={reports}
@@ -89,10 +88,9 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
       </section>
 
       <section>
-        <h2 className="mb-2 text-lg font-semibold">진행 중인 조회</h2>
+        <h2 className="mb-2 text-lg font-semibold">이용 가능한 편집 조회</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          내가 연 &quot;다른 편집 보기&quot; 허가입니다. 끝나기 전에는 사유를
-          다시 적지 않고 들어갈 수 있습니다.
+          표시된 시간까지 사유를 다시 입력하지 않고 조회할 수 있습니다.
         </p>
         <OpenLookupList lookups={lookups} />
       </section>
@@ -100,8 +98,8 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
       <section>
         <h2 className="mb-2 text-lg font-semibold">관리자 {admins.length}명</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          관리자끼리는 아래 이름으로 구분합니다. 이 이름은 문서의 가명과 이어
-          보이지 않고, 일반 회원에게는 인원수만 보입니다.
+          아래 이름은 관리자에게만 표시되며 문서의 가명과 연결되지 않습니다.
+          일반 회원에게는 관리자 수만 공개됩니다.
         </p>
         <ul className="divide-y rounded-md border text-sm">
           {admins.map((admin) => (
@@ -125,7 +123,7 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
         </ul>
         {admins.length <= 1 ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            마지막 관리자는 해제할 수 없습니다.
+            마지막 관리자의 권한은 해제할 수 없습니다.
           </p>
         ) : null}
       </section>
@@ -133,8 +131,8 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
       <ReasonDialog
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
-        title="관리자 해제"
-        description={`${revoking ?? ""}의 관리자 권한을 거둡니다. 공개 기록에는 "관리자 1명을 해제함"으로 남습니다.`}
+        title="관리자 권한 해제"
+        description={`‘${revoking ?? ""}’의 관리자 권한을 해제합니다. 공개 기록에는 해제된 관리자의 이름이 표시되지 않습니다.`}
         confirmLabel="해제"
         destructive
         onConfirm={(reason) => revokeAdmin(revoking ?? "", reason)}

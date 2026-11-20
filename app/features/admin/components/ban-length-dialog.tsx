@@ -44,7 +44,7 @@ export function BanEditorDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="편집 차단"
-      description={`${target}를 쓴 사람의 편집을 모든 문서에서 막습니다. 열람은 계속할 수 있습니다.`}
+      description={`대상 · ${target}. 선택한 판의 작성자는 모든 문서에서 편집이 차단됩니다. 문서는 계속 읽을 수 있습니다.`}
       confirmLabel="차단"
       destructive
       onConfirm={(length, reason) => banEditor(revisionId, length, reason)}
@@ -110,7 +110,7 @@ function BanLengthForm({
           {custom ? (
             <>
               <Input
-                aria-label="기간 숫자"
+                aria-label="차단 기간 값"
                 className="w-24"
                 inputMode="numeric"
                 value={input.amount}
@@ -136,7 +136,9 @@ function BanLengthForm({
           ) : null}
         </div>
         {invalid ? (
-          <p className="text-xs text-destructive">1 이상의 수를 넣어 주세요.</p>
+          <p className="text-xs text-destructive">
+            차단 기간은 1 이상이어야 합니다.
+          </p>
         ) : null}
       </div>
     </ReasonForm>

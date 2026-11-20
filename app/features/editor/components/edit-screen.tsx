@@ -15,10 +15,9 @@ import { formatDateTime } from "~/shared/lib/time";
 export type EditBlocked = "protected" | "deleted" | "invalid-title";
 
 const BLOCKED_MESSAGE: Record<EditBlocked, string> = {
-  protected: "보호된 문서라 관리자만 편집할 수 있습니다.",
-  deleted: "삭제된 문서입니다. 다시 만들려면 관리자에게 복구를 요청해 주세요.",
-  "invalid-title":
-    "이 제목으로는 문서를 만들 수 없습니다. [ ] { } | # < > 는 제목에 쓸 수 없습니다.",
+  protected: "보호된 문서입니다. 관리자만 편집할 수 있습니다.",
+  deleted: "삭제된 문서입니다. 관리자에게 복구를 요청해 주세요.",
+  "invalid-title": "문서 제목에는 [ ] { } | # < > 문자를 사용할 수 없습니다.",
 };
 
 /**
@@ -75,9 +74,11 @@ export function EditScreen({
       {ban ? (
         // 실제 차단은 서버가 한다. 여기서는 쓰기 전에 알려 헛수고를 막는다.
         <p className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
-          편집이 차단된 상태입니다
-          {ban.endsAt ? ` (${formatDateTime(ban.endsAt)}까지)` : " (기한 없음)"}
-          . 사유: {ban.reason}
+          편집이 차단되었습니다.
+          {ban.endsAt
+            ? ` (${formatDateTime(ban.endsAt)}까지)`
+            : " (기한 없음)"}{" "}
+          사유: {ban.reason}
         </p>
       ) : blocked ? (
         <p className="rounded-md border p-4 text-sm">
@@ -164,16 +165,13 @@ function EditNotice() {
       className="mb-3 rounded-md border bg-muted/40 px-3 py-2 text-sm"
     >
       <ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
+        <li>학교 밖에 공개되어도 괜찮은 학교생활 정보만 작성해 주세요.</li>
         <li>
-          학교생활에 관한 정보를 적습니다. 상식선에서 학교 밖에 퍼져도 괜찮은
-          내용만 작성합니다.
+          특정 학생이나 외부인에 관한 문서를 만들거나, 이들을 알아볼 수 있는
+          내용을 작성하지 마세요.
         </li>
         <li>
-          특정 학생 또는 외부인에 대한 문서를 만들거나, 특정할 수 있게 쓰지
-          않습니다.
-        </li>
-        <li>
-          저장한 글은 기록에 계속 남습니다. 사견이나 비방글을 작성하지 않습니다.
+          저장한 편집은 기록에 남습니다. 개인 의견이나 비방은 쓰지 마세요.
         </li>
       </ul>
       <p className="mt-1.5">

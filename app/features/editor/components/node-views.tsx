@@ -127,7 +127,7 @@ export function TemplateView({
               if (typeof pos === "number") request({ kind: "template", pos });
             }}
           >
-            고치기
+            틀 설정
           </EditNodeButton>
         ) : null}
       </div>
@@ -146,7 +146,7 @@ export function TemplateView({
 }
 
 /**
- * 노드 속성을 고치는 한 줄 입력칸(접기 제목, 이미지 대체 글, 캡션).
+ * 노드 속성을 고치는 한 줄 입력칸(접기 제목, 이미지 대체 텍스트, 캡션).
  *
  * 한글을 조합하는 동안에는 노드에 쓰지 않는다. 글자마다 편집기 트랜잭션을 보내면 노드 뷰가 다시
  * 그려지면서 조합 중인 글자가 씹힌다. 입력칸이 제 값을 들고 있다가 조합이 끝날 때 쓴다. 실행 취소처럼
@@ -212,8 +212,9 @@ export function ImageView(props: ReactNodeViewProps) {
     >
       <AttrInput
         value={alt}
-        placeholder="대체 글 (화면 낭독기가 읽음. 비우면 캡션을 읽음)"
-        aria-label="이미지 대체 글"
+        placeholder="이미지 대체 텍스트"
+        aria-label="이미지 대체 텍스트"
+        title="대체 텍스트를 비우면 화면 낭독기가 캡션을 읽습니다."
         readOnly={!editor.isEditable}
         onCommit={(value) => updateAttributes({ alt: value })}
         className="mt-1 w-full max-w-md bg-transparent text-sm text-muted-foreground outline-none placeholder:text-muted-foreground/70"
@@ -265,7 +266,7 @@ export function YoutubeView(props: ReactNodeViewProps) {
               if (typeof pos === "number") request({ kind: "youtube", pos });
             }}
           >
-            주소 고치기
+            영상 주소 변경
           </EditNodeButton>
         ) : null}
       </div>
@@ -317,7 +318,7 @@ function MediaNodeView({
               <AttrInput
                 size={1}
                 value={caption}
-                placeholder="캡션 (비워 두면 보이지 않습니다)"
+                placeholder="캡션 (선택)"
                 aria-label="캡션"
                 readOnly={!editor.isEditable}
                 onCommit={(value) => updateAttributes({ caption: value })}

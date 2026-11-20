@@ -44,7 +44,7 @@ interface ToolbarProps {
   request: (request: EditorRequest) => void;
   /** 이미지 버튼을 눌렀을 때. 주지 않으면 버튼을 그리지 않는다. */
   onPickImage?: () => void;
-  /** 틀 문서를 고치는 중인가. 그러면 값 자리 넣기가 보인다. */
+  /** 틀 문서를 고치는 중인가. 그러면 매개변수 넣기가 보인다. */
   isTemplatePage?: boolean;
   /** 이 문서를 넘겨주기로 바꾼다(넘겨주기 입력으로 간다). 주지 않으면 메뉴에 없다. */
   onConvertToRedirect?: () => void;
@@ -169,7 +169,7 @@ export function Toolbar({
       <Divider />
 
       <ToolButton
-        label="글머리 목록"
+        label="글머리 기호 목록"
         active={state.bulletList}
         onClick={() => chain().toggleBulletList().run()}
       >
@@ -216,29 +216,29 @@ export function Toolbar({
       {state.inTable ? (
         <Menu label="표" active icon={<Table />}>
           <DropdownMenuItem onClick={() => chain().addRowAfter().run()}>
-            아래에 줄 더하기
+            아래에 행 추가
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => chain().addColumnAfter().run()}>
-            오른쪽에 칸 더하기
+            오른쪽에 열 추가
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => chain().deleteRow().run()}>
-            이 줄 지우기
+            행 삭제
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => chain().deleteColumn().run()}>
-            이 칸 지우기
+            열 삭제
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => chain().mergeOrSplit().run()}>
-            칸 합치기·나누기
+            셀 합치기·나누기
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => chain().toggleHeaderRow().run()}>
-            제목 줄 켜고 끄기
+            머리글 행 전환
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
             onClick={() => chain().deleteTable().run()}
           >
-            표 지우기
+            표 삭제
           </DropdownMenuItem>
         </Menu>
       ) : (
@@ -263,7 +263,7 @@ export function Toolbar({
           접기
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => request({ kind: "template" })}>
-          <Puzzle />틀 넣기
+          <Puzzle />틀 삽입
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => chain().toggleCodeBlock().run()}>
           <Code />
@@ -297,7 +297,7 @@ export function Toolbar({
                     .run()
                 }
               >
-                값 자리 {`{{{${index}}}}`}
+                매개변수 {`{{{${index}}}}`}
               </DropdownMenuItem>
             ))}
           </>

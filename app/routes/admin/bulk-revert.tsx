@@ -85,16 +85,16 @@ export default function BulkRevertRoute({ loaderData }: Route.ComponentProps) {
             role="status"
             className="mb-3 rounded-md bg-muted px-3 py-2 text-sm"
           >
-            처리했습니다: {summary}
+            작업 완료 · {summary}
           </p>
         ) : null}
         <p role="status" className="text-sm">
-          조회 허가가 끝났습니다.{" "}
+          조회 시간이 만료되었습니다.{" "}
           <Link
             to={authorEditsHref(loaderData.sourceRevisionId)}
             className="text-primary hover:underline"
           >
-            사유를 적고 다시 조회
+            사유를 입력하고 다시 조회
           </Link>
         </p>
       </div>

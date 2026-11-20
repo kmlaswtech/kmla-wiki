@@ -34,7 +34,7 @@ export default function RecentRoute({ loaderData }: Route.ComponentProps) {
       {changes.length === HISTORY_PAGE_SIZE && oldest ? (
         <div className="mt-4 text-center">
           <LinkButton variant="outline" to={`/recent?before=${oldest.id}`}>
-            더 예전 변경
+            더 보기
           </LinkButton>
         </div>
       ) : null}

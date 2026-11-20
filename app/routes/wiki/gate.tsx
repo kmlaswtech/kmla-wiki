@@ -96,11 +96,10 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
       />
       {loaderData.ban ? (
         <p className="border-b bg-destructive/10 px-4 py-2 text-center text-sm">
-          편집이 차단된 상태입니다. 열람은 그대로 할 수 있습니다. 자세한 내용은{" "}
+          편집이 차단되었습니다.{" "}
           <a href="/me" className="underline">
-            내 정보
+            차단 상세 보기
           </a>
-          에서 볼 수 있습니다.
         </p>
       ) : null}
       {/* 본문과 곁 칸은 바깥(`canvas`) 위에 뜬 상자다. 면과 테두리는 테마 토큰(`surface`,

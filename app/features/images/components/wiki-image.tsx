@@ -65,7 +65,7 @@ export function WikiImage({ info, alt }: WikiImageProps) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm text-muted-foreground">
         <ImageOff className="size-4" aria-hidden />
-        {alt || "이미지"} (볼 수 없음)
+        {alt || "이미지"} (불러올 수 없음)
       </span>
     );
   }

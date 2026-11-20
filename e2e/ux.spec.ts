@@ -9,7 +9,7 @@ const path = (name: string, action = "w") =>
 async function loginAsMember(page: Page) {
   await page.goto("/login");
   await page.getByLabel("개발용 계정").selectOption("alice@wiki.test");
-  await page.getByRole("button", { name: "이 계정으로 들어가기" }).click();
+  await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page.getByRole("link", { name: "큼온 위키" })).toBeVisible();
 }
 
@@ -43,8 +43,8 @@ test("편집 중 글을 잃지 않는다: 취소 확인, 나가기 확인, 단�
 
   // 고친 뒤 취소하면 묻는다.
   await page.getByRole("link", { name: "취소" }).click();
-  await expect(page.getByText("쓰던 글을 버릴까요?")).toBeVisible();
-  await page.getByRole("button", { name: "계속 쓰기" }).click();
+  await expect(page.getByText("편집 내용을 버릴까요?")).toBeVisible();
+  await page.getByRole("button", { name: "계속 편집" }).click();
   await expect(page).toHaveURL(/\/edit\//);
 
   // Ctrl/⌘+S로 저장한다.
@@ -59,15 +59,15 @@ test("편집 중 글을 잃지 않는다: 취소 확인, 나가기 확인, 단�
   await page.goto(path("편집 보호", "edit"));
   await writeBody(page, "둘째 내용");
   await page.getByRole("link", { name: "최근 변경" }).click();
-  await expect(page.getByText("편집을 그만두고 나갈까요?")).toBeVisible();
+  await expect(page.getByText("편집 화면에서 나갈까요?")).toBeVisible();
   await page.getByRole("button", { name: "나가기" }).click();
   await expect(page).toHaveURL(/\/recent$/);
 
   await page.goto(path("편집 보호", "edit"));
   await expect(
-    page.getByText("저장하지 않은 글을 불러왔습니다."),
+    page.getByText("이 브라우저의 임시 저장 내용을 불러왔습니다."),
   ).toBeVisible();
-  await page.getByRole("button", { name: "버리고 현재 판으로" }).click();
+  await page.getByRole("button", { name: "임시 저장 내용 버리기" }).click();
   await expect(editorOf(page)).toHaveText("첫 내용");
 
   // 고친 것이 없으면 묻지 않고 나간다.
@@ -95,9 +95,9 @@ test("검색창: 후보를 골라 바로 가고, 정확한 제목은 Enter로 �
     title("검색 대상"),
   );
 
-  // 결과 목록을 보고 싶으면 "전체 검색"을 고른다.
+  // 결과 목록을 보고 싶으면 "검색 결과 보기"를 고른다.
   await search.fill(`대상 ${RUN}`);
-  await page.getByRole("option", { name: /전체 검색/ }).click();
+  await page.getByRole("option", { name: /검색 결과 보기/ }).click();
   await expect(page).toHaveURL(/\/search\?q=/);
   await expect(
     page.getByRole("main").getByRole("link", { name: title("검색 대상") }),
@@ -162,7 +162,7 @@ test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 
     .getByRole("dialog")
     .getByLabel("각주 내용")
     .fill("각주 내용입니다");
-  await page.getByRole("dialog").getByRole("button", { name: "넣기" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "삽입" }).click();
   await editorOf(page).press("End");
   await page.keyboard.press("Enter");
   await page.keyboard.type("### 가 아래");

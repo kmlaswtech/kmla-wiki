@@ -163,8 +163,7 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
       (extension) => views.get(extension.name) ?? extension,
     ),
     Placeholder.configure({
-      placeholder:
-        "여기에 내용을 씁니다. 제목은 ## , 목록은 - 로 시작해도 됩니다.",
+      placeholder: "본문을 입력하세요.",
     }),
     WikiShortcuts.configure({ request: options.request }),
     MissingLinks.configure({ isMissing: options.isMissing }),

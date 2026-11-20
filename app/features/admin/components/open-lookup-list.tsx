@@ -9,7 +9,7 @@ export function OpenLookupList({ lookups }: { lookups: OpenLookup[] }) {
   if (lookups.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        진행 중인 조회가 없습니다.
+        이용 가능한 조회가 없습니다.
       </p>
     );
   }

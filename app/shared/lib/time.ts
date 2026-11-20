@@ -38,10 +38,10 @@ export function formatRelativeTime(value: string, now: number): string | null {
   const elapsedMs = Math.max(0, now - ms);
 
   if (elapsedMs < MINUTE_MS) return "방금";
-  if (elapsedMs < HOUR_MS) return `${Math.floor(elapsedMs / MINUTE_MS)}분전`;
-  if (elapsedMs < DAY_MS) return `${Math.floor(elapsedMs / HOUR_MS)}시간전`;
+  if (elapsedMs < HOUR_MS) return `${Math.floor(elapsedMs / MINUTE_MS)}분 전`;
+  if (elapsedMs < DAY_MS) return `${Math.floor(elapsedMs / HOUR_MS)}시간 전`;
 
-  return `${Math.floor(elapsedMs / DAY_MS)}일전`;
+  return `${Math.floor(elapsedMs / DAY_MS)}일 전`;
 }
 
 /** 툴팁과 스크린 리더에 쓰는 전체 시각. 값이 이상하면 `null`. */

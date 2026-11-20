@@ -46,7 +46,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
 }
 
 export const meta: Route.MetaFunction = () => [
-  { title: "같은 사람의 다른 편집 - 큼온 위키" },
+  { title: "작성자의 다른 편집 - 큼온 위키" },
 ];
 
 /**
