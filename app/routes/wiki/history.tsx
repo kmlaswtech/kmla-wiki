@@ -19,8 +19,10 @@ import {
   getPageView,
   HISTORY_PAGE_SIZE,
   listHistory,
+  REVERT_FIELD,
   revertPage,
   RevertDialog,
+  type RevertActionError,
   RevisionList,
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
@@ -62,17 +64,23 @@ export async function clientAction({
   params,
 }: Route.ClientActionArgs) {
   const form = await request.formData();
-  const revisionId = positiveInt(formText(form, "revisionId"));
+  const revisionId = positiveInt(formText(form, REVERT_FIELD.revisionId));
   if (!revisionId)
-    return data({ error: "되돌릴 판을 찾을 수 없습니다." }, { status: 400 });
+    return data(
+      { error: "되돌릴 판을 찾을 수 없습니다." } satisfies RevertActionError,
+      { status: 400 },
+    );
 
   try {
     await withVerifiedMember(request, () =>
-      revertPage(revisionId, formText(form, "summary").trim()),
+      revertPage(revisionId, formText(form, REVERT_FIELD.summary).trim()),
     );
   } catch (error) {
     if (error instanceof Response) throw error;
-    return data({ error: describeWriteError(error) }, { status: 400 });
+    return data(
+      { error: describeWriteError(error) } satisfies RevertActionError,
+      { status: 400 },
+    );
   }
   return redirect(pageHref(titleFromParams(params)));
 }

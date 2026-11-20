@@ -37,6 +37,7 @@ export {
 export type { RedirectResolution, TitleSuggestion } from "./data/queries";
 export type { HeadingTarget } from "./model/headings";
 export { MAIN_PAGE_TITLE } from "./model/main-page";
+export { REVERT_FIELD, type RevertActionError } from "./model/revert";
 export {
   SPECIAL_NAMESPACE_TABS,
   SPECIAL_NAMESPACES,

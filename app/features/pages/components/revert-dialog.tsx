@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useFetcher } from "react-router";
 
+import { REVERT_FIELD, type RevertActionError } from "../model/revert";
 import { pageHref } from "~/features/markup";
 import { Button } from "~/shared/ui/button";
 import {
@@ -18,8 +19,7 @@ import { Spinner } from "~/shared/ui/spinner";
 /**
  * 되돌리기 전에 묻고, 사유(선택)를 받는다.
  *
- * 지금 화면 라우트의 action(`revisionId`, `summary`)으로 보낸다. 실패하면 action이 `{ error }`를
- * 돌려준다.
+ * 지금 화면 라우트의 action으로 보낸다. 필드 이름과 실패 응답은 `model/revert.ts`를 따른다.
  */
 export function RevertDialog({
   title,
@@ -32,7 +32,7 @@ export function RevertDialog({
   currentRevisionId: number | null;
   onClose: () => void;
 }) {
-  const fetcher = useFetcher<{ error?: string }>();
+  const fetcher = useFetcher<RevertActionError>();
   const [summary, setSummary] = useState("");
   const busy = fetcher.state !== "idle";
   const autoSummary = `r${revisionId} 판으로 되돌림`;
@@ -46,7 +46,11 @@ export function RevertDialog({
     >
       <DialogContent>
         <fetcher.Form method="post" className="contents">
-          <input type="hidden" name="revisionId" value={revisionId ?? ""} />
+          <input
+            type="hidden"
+            name={REVERT_FIELD.revisionId}
+            value={revisionId ?? ""}
+          />
           <DialogHeader>
             <DialogTitle>r{revisionId} 판으로 되돌릴까요?</DialogTitle>
             <DialogDescription>
@@ -67,7 +71,7 @@ export function RevertDialog({
             <Label htmlFor="revert-summary">사유 (선택)</Label>
             <Input
               id="revert-summary"
-              name="summary"
+              name={REVERT_FIELD.summary}
               type="text"
               value={summary}
               maxLength={150}
