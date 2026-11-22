@@ -25,7 +25,6 @@ import {
   MARK,
   pageHref,
   parseTitle,
-  SAFE_HREF,
   titleKey,
 } from "~/features/markup";
 
@@ -150,11 +149,17 @@ const OpenLinkOnModClick = Extension.create({
     return [
       new Plugin({
         props: {
-          handleClick: (view, pos, event) => {
+          handleClick: (view, _pos, event) => {
             if (!(event.ctrlKey || event.metaKey) || event.button !== 0) {
               return false;
             }
-            const href = linkHrefAt(view.state, pos);
+            // 링크 끝이나 줄 끝 빈 곳을 눌러도 그 자리의 글자 표시가 링크라서, 위치가 아니라 실제로
+            // 누른 `<a>`로 링크를 찾는다.
+            const target = event.target;
+            const anchor =
+              target instanceof Element ? target.closest("a") : null;
+            if (!anchor || !view.dom.contains(anchor)) return false;
+            const href = linkHref(view.state, view.posAtDOM(anchor, 0));
             if (href === null) return false;
             window.open(href, "_blank", "noopener,noreferrer");
             event.preventDefault();
@@ -166,17 +171,15 @@ const OpenLinkOnModClick = Extension.create({
   },
 });
 
-/** 그 자리의 링크가 가리키는 주소. 링크가 없거나 열 수 없는 주소면 `null`. */
-function linkHrefAt(state: EditorState, pos: number): string | null {
-  const $pos = state.doc.resolve(pos);
-  const marks = [
-    ...($pos.nodeAfter?.marks ?? []),
-    ...($pos.nodeBefore?.marks ?? []),
-  ];
-  for (const mark of marks) {
+/** 새 탭으로 열 바깥 주소. `mailto:`는 새 탭으로 열면 빈 탭이 남으므로 열지 않는다. */
+const NEW_TAB_HREF = /^https?:/i;
+
+/** `pos` 바로 뒤 글자의 링크가 가리키는 주소. 링크가 없거나 열 수 없는 주소면 `null`. */
+function linkHref(state: EditorState, pos: number): string | null {
+  for (const mark of state.doc.resolve(pos).nodeAfter?.marks ?? []) {
     if (mark.type.name === MARK.link) {
       const href = String(mark.attrs.href ?? "");
-      return SAFE_HREF.test(href) ? href : null;
+      return NEW_TAB_HREF.test(href) ? href : null;
     }
     if (mark.type.name === MARK.wikiLink) {
       // 같은 문서 안의 문단 링크(제목 없음)는 편집 중인 문서를 새로 열 뿐이라 열지 않는다.

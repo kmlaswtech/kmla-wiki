@@ -1,5 +1,5 @@
 import { ChevronRight, CornerDownRight, Lock, Pencil } from "lucide-react";
-import { useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 
 import type { FoundPage, RedirectInfo } from "../model/types";
@@ -60,11 +60,20 @@ export function PageArticle({
   // 돈다. 저장하며 그 문단을 지웠으면 맨 위에 둔다.
   const location = useLocation();
   const { headings } = document;
+  const scrolledFor = useRef<string | null>(null);
   useEffect(() => {
     const index = readSectionScroll(location.state);
-    if (index === null) return;
+    if (index === null || scrolledFor.current === location.key) return;
+    scrolledFor.current = location.key;
     const id = headings.find((heading) => heading.sectionIndex === index)?.id;
     if (id) window.document.getElementById(id)?.scrollIntoView();
+    // 기록에서 지운다. 뒤로 가기·새로고침으로 돌아왔을 때 브라우저가 되살린 위치를 덮지 않게 한다.
+    // React Router의 `navigate`로 지우면 loader가 다시 돌므로 history를 직접 고친다(`usr`가
+    // React Router가 navigation state를 두는 자리다).
+    const entry: unknown = window.history.state;
+    if (entry && typeof entry === "object") {
+      window.history.replaceState({ ...entry, usr: null }, "");
+    }
   }, [location, headings]);
 
   const ancestors = ancestorTitles(page.title);
