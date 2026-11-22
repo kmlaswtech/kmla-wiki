@@ -1,6 +1,6 @@
 import { ChevronRight, CornerDownRight, Lock, Pencil } from "lucide-react";
-import { useCallback, useMemo, type ReactNode } from "react";
-import { Link } from "react-router";
+import { useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { Link, useLocation } from "react-router";
 
 import type { FoundPage, RedirectInfo } from "../model/types";
 import { canEditPage } from "../model/view";
@@ -10,6 +10,7 @@ import {
   emptyDoc,
   pageHref,
   parseWiki,
+  readSectionScroll,
   redirectPageHref,
   TableOfContents,
   titleKey,
@@ -54,6 +55,17 @@ export function PageArticle({
     (index: number) => `${pageHref(page.title, "edit")}?section=${index}`,
     [page.title],
   );
+
+  // 문단 편집을 저장하고 왔으면 그 문단 제목으로 옮긴다. `ScrollRestoration`이 맨 위로 올린 뒤에
+  // 돈다. 저장하며 그 문단을 지웠으면 맨 위에 둔다.
+  const location = useLocation();
+  const { headings } = document;
+  useEffect(() => {
+    const index = readSectionScroll(location.state);
+    if (index === null) return;
+    const id = headings.find((heading) => heading.sectionIndex === index)?.id;
+    if (id) window.document.getElementById(id)?.scrollIntoView();
+  }, [location, headings]);
 
   const ancestors = ancestorTitles(page.title);
   const adminProtected = page.protection === "admin";

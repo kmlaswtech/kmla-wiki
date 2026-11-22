@@ -55,7 +55,9 @@ export {
   getSection,
   isBlank,
   isEmptyParagraph,
+  readSectionScroll,
   replaceSection,
+  sectionScrollState,
   type Section,
 } from "./model/sections";
 export {

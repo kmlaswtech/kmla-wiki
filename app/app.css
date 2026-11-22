@@ -384,9 +384,7 @@
   .wiki-content :is(td, th) > :last-child {
     @apply mb-0;
   }
-  .wiki-content details {
-    @apply rounded-md border px-4 py-2;
-  }
+  /* 문서 보기의 접기는 상자 없이 제목 줄만 둔다. 편집기의 접기 상자는 `.wiki-fold-edit`가 그린다. */
   .wiki-content summary {
     @apply cursor-pointer font-semibold;
   }
