@@ -56,6 +56,7 @@ export function PageArticle({
   );
 
   const ancestors = ancestorTitles(page.title);
+  const adminProtected = page.protection === "admin";
 
   return (
     <article>
@@ -81,7 +82,7 @@ export function PageArticle({
         <div className="min-w-0 flex-1">
           <h1 className="flex items-center gap-2 text-3xl leading-10 font-bold break-words break-keep">
             {page.title}
-            {page.protection === "admin" ? (
+            {adminProtected ? (
               <Lock
                 className="size-5 shrink-0 text-muted-foreground"
                 aria-label="보호된 문서"
@@ -112,25 +113,21 @@ export function PageArticle({
             </LinkButton>
           ) : (
             // 고칠 수 없어도 편집기로 열어 볼 수는 있다. 표·틀을 그대로 복사해 다른 문서에 쓸 수 있다.
-            // 폰에서는 짧게 `편집`이라고만 쓴다. 보호 문서는 제목 옆 자물쇠가 이미 알리므로 단추의
-            // 자물쇠를 뺀다. 다른 까닭(차단, 삭제된 문서)으로 못 고칠 때는 제목 옆에 자물쇠가 없으므로
-            // 단추에 남긴다. 터치 화면에서는 `title` 설명이 보이지 않는다.
+            // 폰에서는 `편집`만 쓴다. 자물쇠는 제목 옆에 자물쇠가 없을 때(차단, 삭제)만 남긴다.
             <LinkButton
               size="sm"
               variant="outline"
               to={pageHref(page.title, "edit")}
               prefetch="intent"
               title={
-                page.protection === "admin"
+                adminProtected
                   ? "보호된 문서입니다. 관리자만 편집할 수 있습니다."
                   : "지금은 편집할 수 없습니다."
               }
             >
               <Lock
                 aria-hidden
-                className={
-                  page.protection === "admin" ? "max-sm:hidden" : undefined
-                }
+                className={adminProtected ? "max-sm:hidden" : undefined}
               />
               <span className="max-sm:hidden">편집 화면 보기</span>
               <span className="sm:hidden">편집</span>

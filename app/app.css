@@ -599,17 +599,6 @@
   .wiki-head > nav {
     @apply my-0!;
   }
-  /* 폰에서는 세로로 쌓는다. 목차는 늘이지 않고 제 폭으로 왼쪽에 둔다. 프로필 표는 나무위키처럼 폭을
-   * 다 채운다. 옆에 둘 것이 없어 내용 폭으로 두면 가운데에 좁게 떠 보인다. */
-  @media (width < 40rem) {
-    .wiki-head > nav {
-      @apply self-start;
-    }
-    .wiki-profile .wiki-table-scroll > table,
-    .wiki-profile .tableWrapper > table {
-      @apply w-full;
-    }
-  }
   @media (width >= 40rem) {
     .wiki-head {
       @apply flex-row-reverse items-start justify-between gap-6;
@@ -623,10 +612,11 @@
     }
   }
   /* 프로필 안의 표는 가운데에 두고, 너비는 내용(그림 크기, 글)이 정한다. 큰 그림은 칸 안의 그림
-   * 규칙대로 프로필 너비에 맞춰 줄어든다. */
+   * 규칙대로 프로필 너비에 맞춰 줄어든다. 폰에서는 나무위키처럼 폭을 다 채운다. 옆에 둘 것이 없어
+   * 내용 폭으로 두면 가운데에 좁게 떠 보인다. */
   .wiki-profile .wiki-table-scroll > table,
   .wiki-profile .tableWrapper > table {
-    @apply mx-auto;
+    @apply mx-auto max-sm:w-full;
   }
 
   .wiki-content :is(td, th):has(> figure.wiki-media:only-child),
