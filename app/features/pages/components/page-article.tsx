@@ -60,6 +60,7 @@ export function PageArticle({
   // 돈다. 저장하며 그 문단을 지웠으면 맨 위에 둔다.
   const location = useLocation();
   const { headings } = document;
+  // 한 navigation에 한 번만 옮긴다. loader가 다시 돌아 `headings`가 바뀌어도 다시 옮기지 않는다.
   const scrolledFor = useRef<string | null>(null);
   useEffect(() => {
     const index = readSectionScroll(location.state);

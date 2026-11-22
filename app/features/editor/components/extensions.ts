@@ -21,10 +21,10 @@ import {
   YoutubeView,
 } from "./node-views";
 import {
-  headingId,
   MARK,
   pageHref,
   parseTitle,
+  sectionAnchor,
   titleKey,
 } from "~/features/markup";
 
@@ -137,7 +137,6 @@ const MissingLinks = Extension.create<Pick<WikiEditorOptions, "isMissing">>({
   },
 });
 
-/** 편집 화면의 확장 전부: 스키마에 노드 뷰와 지름길을 더한다. */
 /**
  * Ctrl+클릭(맥은 Cmd+클릭)으로 링크를 새 탭에서 연다. 그냥 클릭은 지금처럼 커서만 옮긴다.
  * 새 탭으로 여는 것은 저장하지 않은 편집 내용을 잃지 않기 위해서다.
@@ -185,14 +184,13 @@ function linkHref(state: EditorState, pos: number): string | null {
       // 같은 문서 안의 문단 링크(제목 없음)는 편집 중인 문서를 새로 열 뿐이라 열지 않는다.
       const title = parseTitle(String(mark.attrs.target ?? ""));
       if (!title) return null;
-      const section = String(mark.attrs.section ?? "").trim();
-      const anchor = section ? `#${encodeURI(headingId(section))}` : "";
-      return `${pageHref(title)}${anchor}`;
+      return `${pageHref(title)}${sectionAnchor(String(mark.attrs.section ?? ""))}`;
     }
   }
   return null;
 }
 
+/** 편집 화면의 확장 전부: 스키마에 노드 뷰와 지름길을 더한다. */
 export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
   const views = new Map<string, AnyExtension>([
     [

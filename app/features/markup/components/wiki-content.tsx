@@ -20,7 +20,7 @@ import {
   type WikiMark,
   type WikiNode,
 } from "../model/doc";
-import { headingId } from "../model/heading-id";
+import { sectionAnchor } from "../model/heading-id";
 import { mediaAlign, mediaSize } from "../model/media";
 import {
   backgroundVars,
@@ -658,7 +658,7 @@ function WikiLink({
   context: RenderContext;
   children: ReactNode;
 }) {
-  const anchor = section.trim() ? `#${encodeURI(headingId(section))}` : "";
+  const anchor = sectionAnchor(section);
   const title = parseTitle(rawTitle);
 
   // 같은 문서 안의 문단.
