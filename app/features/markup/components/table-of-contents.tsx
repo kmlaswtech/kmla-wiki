@@ -15,7 +15,7 @@ export function TableOfContents({
     <nav
       id={TOC_ID}
       aria-label="목차"
-      className="my-4 inline-block max-w-full rounded-lg border bg-muted/40 px-4 py-3 text-sm"
+      className="my-4 w-fit max-w-full rounded-lg border bg-muted/40 px-4 py-3 text-sm"
     >
       <p className="mb-1 font-semibold">목차</p>
       <ol className="space-y-0.5">
