@@ -11,6 +11,11 @@ export function headingId(text: string): string {
     .replace(/[^\p{L}\p{N}\-_.·]/gu, "");
 }
 
+/** 문서 링크 뒤에 붙는 문단 주소(`#신청-방법`). 문단이 없으면 빈 문자열. */
+export function sectionAnchor(section: string): string {
+  return section.trim() ? `#${encodeURI(headingId(section))}` : "";
+}
+
 /** 같은 이름의 문단이 여럿이면 둘째부터 `-2`, `-3`을 붙인다. */
 export function createHeadingIdAllocator(): (text: string) => string {
   const used = new Map<string, number>();

@@ -15,7 +15,7 @@ export {
   type WikiMark,
   type WikiNode,
 } from "./model/doc";
-export { headingId } from "./model/heading-id";
+export { headingId, sectionAnchor } from "./model/heading-id";
 export {
   isEmptyProfile,
   profileOf,
@@ -55,7 +55,9 @@ export {
   getSection,
   isBlank,
   isEmptyParagraph,
+  readSectionScroll,
   replaceSection,
+  sectionScrollState,
   type Section,
 } from "./model/sections";
 export {

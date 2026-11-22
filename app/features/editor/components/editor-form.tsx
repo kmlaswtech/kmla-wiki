@@ -35,6 +35,7 @@ import {
   NODE,
   namespaceOf,
   pageHref,
+  sectionScrollState,
   starterProfile,
   titleKey,
   type WikiDoc,
@@ -377,7 +378,13 @@ export function EditorForm({
         if (outcome.rebased) {
           toast.success("편집한 문단을 최신 판에 반영했습니다.");
         }
-        await navigate(pageHref(outcome.saved.title));
+        // 문단만 고쳤으면 문서 화면이 그 문단으로 스크롤한다.
+        await navigate(
+          pageHref(outcome.saved.title),
+          target.sectionIndex === null
+            ? undefined
+            : { state: sectionScrollState(target.sectionIndex) },
+        );
         return;
       }
 

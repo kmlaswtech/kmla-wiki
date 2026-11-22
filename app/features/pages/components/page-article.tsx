@@ -1,6 +1,6 @@
 import { ChevronRight, CornerDownRight, Lock, Pencil } from "lucide-react";
-import { useCallback, useMemo, type ReactNode } from "react";
-import { Link } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { Link, useLocation } from "react-router";
 
 import type { FoundPage, RedirectInfo } from "../model/types";
 import { canEditPage } from "../model/view";
@@ -10,6 +10,7 @@ import {
   emptyDoc,
   pageHref,
   parseWiki,
+  readSectionScroll,
   redirectPageHref,
   TableOfContents,
   titleKey,
@@ -54,6 +55,27 @@ export function PageArticle({
     (index: number) => `${pageHref(page.title, "edit")}?section=${index}`,
     [page.title],
   );
+
+  // 문단 편집을 저장하고 왔으면 그 문단 제목으로 옮긴다. `ScrollRestoration`이 맨 위로 올린 뒤에
+  // 돈다. 저장하며 그 문단을 지웠으면 맨 위에 둔다.
+  const location = useLocation();
+  const { headings } = document;
+  // 한 navigation에 한 번만 옮긴다. loader가 다시 돌아 `headings`가 바뀌어도 다시 옮기지 않는다.
+  const scrolledFor = useRef<string | null>(null);
+  useEffect(() => {
+    const index = readSectionScroll(location.state);
+    if (index === null || scrolledFor.current === location.key) return;
+    scrolledFor.current = location.key;
+    const id = headings.find((heading) => heading.sectionIndex === index)?.id;
+    if (id) window.document.getElementById(id)?.scrollIntoView();
+    // 기록에서 지운다. 뒤로 가기·새로고침으로 돌아왔을 때 브라우저가 되살린 위치를 덮지 않게 한다.
+    // React Router의 `navigate`로 지우면 loader가 다시 돌므로 history를 직접 고친다(`usr`가
+    // React Router가 navigation state를 두는 자리다).
+    const entry: unknown = window.history.state;
+    if (entry && typeof entry === "object") {
+      window.history.replaceState({ ...entry, usr: null }, "");
+    }
+  }, [location, headings]);
 
   const ancestors = ancestorTitles(page.title);
   const adminProtected = page.protection === "admin";

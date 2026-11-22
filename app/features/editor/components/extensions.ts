@@ -20,7 +20,13 @@ import {
   TemplateView,
   YoutubeView,
 } from "./node-views";
-import { MARK, parseTitle, titleKey } from "~/features/markup";
+import {
+  MARK,
+  pageHref,
+  parseTitle,
+  sectionAnchor,
+  titleKey,
+} from "~/features/markup";
 
 export interface WikiEditorOptions {
   /** 툴바 밖에서 대화상자를 여는 길(`[[`, `{{`, Ctrl+K). */
@@ -131,6 +137,59 @@ const MissingLinks = Extension.create<Pick<WikiEditorOptions, "isMissing">>({
   },
 });
 
+/**
+ * Ctrl+클릭(맥은 Cmd+클릭)으로 링크를 새 탭에서 연다. 그냥 클릭은 지금처럼 커서만 옮긴다.
+ * 새 탭으로 여는 것은 저장하지 않은 편집 내용을 잃지 않기 위해서다.
+ */
+const OpenLinkOnModClick = Extension.create({
+  name: "wikiOpenLinkOnModClick",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          handleClick: (view, _pos, event) => {
+            if (!(event.ctrlKey || event.metaKey) || event.button !== 0) {
+              return false;
+            }
+            // 링크 끝이나 줄 끝 빈 곳을 눌러도 그 자리의 글자 표시가 링크라서, 위치가 아니라 실제로
+            // 누른 `<a>`로 링크를 찾는다.
+            const target = event.target;
+            const anchor =
+              target instanceof Element ? target.closest("a") : null;
+            if (!anchor || !view.dom.contains(anchor)) return false;
+            const href = linkHref(view.state, view.posAtDOM(anchor, 0));
+            if (href === null) return false;
+            window.open(href, "_blank", "noopener,noreferrer");
+            event.preventDefault();
+            return true;
+          },
+        },
+      }),
+    ];
+  },
+});
+
+/** 새 탭으로 열 바깥 주소. `mailto:`는 새 탭으로 열면 빈 탭이 남으므로 열지 않는다. */
+const NEW_TAB_HREF = /^https?:/i;
+
+/** `pos` 바로 뒤 글자의 링크가 가리키는 주소. 링크가 없거나 열 수 없는 주소면 `null`. */
+function linkHref(state: EditorState, pos: number): string | null {
+  for (const mark of state.doc.resolve(pos).nodeAfter?.marks ?? []) {
+    if (mark.type.name === MARK.link) {
+      const href = String(mark.attrs.href ?? "");
+      return NEW_TAB_HREF.test(href) ? href : null;
+    }
+    if (mark.type.name === MARK.wikiLink) {
+      // 같은 문서 안의 문단 링크(제목 없음)는 편집 중인 문서를 새로 열 뿐이라 열지 않는다.
+      const title = parseTitle(String(mark.attrs.target ?? ""));
+      if (!title) return null;
+      return `${pageHref(title)}${sectionAnchor(String(mark.attrs.section ?? ""))}`;
+    }
+  }
+  return null;
+}
+
 /** 편집 화면의 확장 전부: 스키마에 노드 뷰와 지름길을 더한다. */
 export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
   const views = new Map<string, AnyExtension>([
@@ -169,5 +228,6 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
     }),
     WikiShortcuts.configure({ request: options.request }),
     MissingLinks.configure({ isMissing: options.isMissing }),
+    OpenLinkOnModClick,
   ];
 }
