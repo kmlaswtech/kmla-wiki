@@ -63,6 +63,8 @@ function DialogContent({
         // 첫 tabbable(닫기 버튼)에 포커스 링이 붙지 않게 팝업 자신으로 보낸다. `false`로 끄면 inert 트랩 안에 갈 곳이 없다.
         ref={popupRef}
         initialFocus={popupRef}
+        // 머리 부분(`DialogHeader`)이 닫기 단추 자리를 비우는 데 쓴다.
+        data-close-button={showCloseButton ? "" : undefined}
         className={cn(
           "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           // 폰·패드에서는 화면 위쪽에 붙인다. 가운데에 두면 입력란을 누를 때 올라오는 키보드가 아래 단추를 가린다.
@@ -97,7 +99,13 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn(
+        "flex flex-col gap-2",
+        // 닫기 단추(`top-4 right-4`)는 본문 여백(`p-6`)보다 안쪽까지 온다. 긴 제목·설명이 그 밑에
+        // 깔리지 않게 단추 폭만큼 비운다. 손가락 화면에서는 단추가 한 단계 크다.
+        "in-data-[close-button]:pr-8 coarse:in-data-[close-button]:pr-10",
+        className,
+      )}
       {...props}
     />
   );

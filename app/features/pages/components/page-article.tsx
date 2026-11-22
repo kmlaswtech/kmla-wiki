@@ -1,10 +1,4 @@
-import {
-  ChevronRight,
-  CornerDownRight,
-  Ellipsis,
-  Lock,
-  Pencil,
-} from "lucide-react";
+import { ChevronRight, CornerDownRight, Lock, Pencil } from "lucide-react";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -26,13 +20,6 @@ import { RelativeTime } from "~/shared/components/relative-time";
 import { formatDateTime } from "~/shared/lib/time";
 import { cn } from "~/shared/lib/utils";
 import { Badge } from "~/shared/ui/badge";
-import { Button } from "~/shared/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "~/shared/ui/dropdown-menu";
 
 interface PageArticleProps {
   view: FoundPage;
@@ -88,9 +75,9 @@ export function PageArticle({
         </nav>
       ) : null}
 
-      {/* 버튼은 제목 옆에 둔다. 폰에서도 제목 아래에 버튼 줄이 따로 생기지 않게, 좁은 화면에서는
-       * `편집`과 `⋯`만 남기고 나머지를 메뉴에 넣는다. */}
-      <header className="mb-4 flex items-start justify-between gap-3 border-b pb-3 sm:gap-4">
+      {/* 버튼은 넓은 화면에서는 제목 옆에, 폰에서는 수정 시각 아래 줄에 오른쪽으로 둔다(나무위키와
+       * 같은 배치). 폰에서 제목 옆에 두면 긴 제목이 좁게 접힌다. */}
+      <header className="mb-4 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="flex items-center gap-2 text-3xl leading-10 font-bold break-words break-keep">
             {page.title}
@@ -109,7 +96,7 @@ export function PageArticle({
           </p>
         </div>
         {/* 화면에서 가장 눈에 띄는 것은 제목이어야 한다. 버튼은 모두 차분한 외곽선으로 둔다. */}
-        <div className="flex shrink-0 gap-1.5">
+        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
           {/* 편집·기록 단추는 마우스를 올리거나 누르기 시작하면 갈 화면의 코드를 미리 받는다. 문서를
            * 읽다가 가장 많이 가는 곳이다. 편집 화면은 편집기 때문에 코드가 크다. */}
           {viewingOldRevision ? null : editable ? (
@@ -119,11 +106,15 @@ export function PageArticle({
               to={pageHref(page.title, "edit")}
               prefetch="intent"
             >
-              <Pencil aria-hidden />
+              {/* 폰에서는 아이콘을 뺀다. 글자만으로 충분하고 줄 자리가 좁다. */}
+              <Pencil aria-hidden className="max-sm:hidden" />
               편집
             </LinkButton>
           ) : (
             // 고칠 수 없어도 편집기로 열어 볼 수는 있다. 표·틀을 그대로 복사해 다른 문서에 쓸 수 있다.
+            // 폰에서는 짧게 `편집`이라고만 쓴다. 보호 문서는 제목 옆 자물쇠가 이미 알리므로 단추의
+            // 자물쇠를 뺀다. 다른 까닭(차단, 삭제된 문서)으로 못 고칠 때는 제목 옆에 자물쇠가 없으므로
+            // 단추에 남긴다. 터치 화면에서는 `title` 설명이 보이지 않는다.
             <LinkButton
               size="sm"
               variant="outline"
@@ -135,14 +126,19 @@ export function PageArticle({
                   : "지금은 편집할 수 없습니다."
               }
             >
-              <Lock aria-hidden />
-              <span className="max-sm:sr-only">편집 화면 보기</span>
+              <Lock
+                aria-hidden
+                className={
+                  page.protection === "admin" ? "max-sm:hidden" : undefined
+                }
+              />
+              <span className="max-sm:hidden">편집 화면 보기</span>
+              <span className="sm:hidden">편집</span>
             </LinkButton>
           )}
           <LinkButton
             size="sm"
             variant="outline"
-            className="max-sm:hidden"
             to={pageHref(page.title, "history")}
             prefetch="intent"
           >
@@ -152,42 +148,11 @@ export function PageArticle({
             <LinkButton
               size="sm"
               variant="outline"
-              className="max-sm:hidden"
               to={pageHref(page.title, "move")}
             >
               이동
             </LinkButton>
           ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  // 옆의 `sm` 버튼과 높이를 맞춘다.
-                  className="sm:hidden coarse:size-9"
-                  aria-label="문서 메뉴"
-                />
-              }
-            >
-              <Ellipsis aria-hidden />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-auto min-w-32">
-              <DropdownMenuItem
-                render={<Link to={pageHref(page.title, "history")} />}
-              >
-                기록
-              </DropdownMenuItem>
-              {editable ? (
-                <DropdownMenuItem
-                  render={<Link to={pageHref(page.title, "move")} />}
-                >
-                  이동
-                </DropdownMenuItem>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
           {headerActions}
         </div>
       </header>

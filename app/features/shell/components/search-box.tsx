@@ -137,8 +137,10 @@ export function SearchBox({
           event.preventDefault();
           return;
         }
-        // 제출 뒤에는 검색창을 비운다. 검색어는 검색 화면 제목에 남는다.
+        // 제출 뒤에는 검색창을 비운다. 검색어는 검색 화면 제목에 남는다. 포커스도 뺀다. 남겨 두면
+        // 폰에서는 키보드가 결과를 가린다.
         window.setTimeout(reset, 0);
+        input.current?.blur();
       }}
     >
       <input type="hidden" name="q" value={trimmed} />

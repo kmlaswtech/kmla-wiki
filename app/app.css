@@ -599,6 +599,17 @@
   .wiki-head > nav {
     @apply my-0!;
   }
+  /* 폰에서는 세로로 쌓는다. 목차는 늘이지 않고 제 폭으로 왼쪽에 둔다. 프로필 표는 나무위키처럼 폭을
+   * 다 채운다. 옆에 둘 것이 없어 내용 폭으로 두면 가운데에 좁게 떠 보인다. */
+  @media (width < 40rem) {
+    .wiki-head > nav {
+      @apply self-start;
+    }
+    .wiki-profile .wiki-table-scroll > table,
+    .wiki-profile .tableWrapper > table {
+      @apply w-full;
+    }
+  }
   @media (width >= 40rem) {
     .wiki-head {
       @apply flex-row-reverse items-start justify-between gap-6;
