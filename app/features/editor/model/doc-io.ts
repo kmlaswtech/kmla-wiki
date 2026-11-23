@@ -74,6 +74,7 @@ function trimTrailingEmpty(blocks: WikiNode[]): WikiNode[] {
 const UNSET_STYLE_ATTRS: ReadonlySet<string> = new Set([
   "textAlign",
   "background",
+  "verticalAlign",
 ]);
 
 function isUnsetStyle([name, value]: [string, unknown]): boolean {

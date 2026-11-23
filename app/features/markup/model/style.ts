@@ -246,12 +246,26 @@ export function isTextAlign(value: unknown): value is TextAlign {
 }
 
 /**
- * 문단·제목의 정렬. 모르는 값은 `null`(왼쪽). 표 칸에는 따로 정렬을 두지 않는다. 칸 안의 글도
+ * 문단·제목의 정렬. 모르는 값은 `null`(왼쪽). 표 칸에는 따로 가로 정렬을 두지 않는다. 칸 안의 글도
  * 문단이므로 문단 정렬로 맞춘다.
  */
 export function textAlignOf(node: WikiNode): TextAlign | null {
   const value = stringAttr(node, "textAlign");
   return isTextAlign(value) ? value : null;
+}
+
+/** 표 칸의 세로 정렬. 위(기본)는 저장하지 않는다. 값은 CSS `vertical-align` 값과 같다. */
+export const CELL_VALIGNS = ["middle", "bottom"] as const;
+export type CellVAlign = (typeof CELL_VALIGNS)[number];
+
+export function isCellVAlign(value: unknown): value is CellVAlign {
+  return (CELL_VALIGNS as readonly unknown[]).includes(value);
+}
+
+/** 표 칸의 세로 정렬. 모르는 값은 `null`(위). */
+export function cellVAlignOf(cell: WikiNode): CellVAlign | null {
+  const value = stringAttr(cell, "verticalAlign");
+  return isCellVAlign(value) ? value : null;
 }
 
 export function textSizeOf(mark: WikiMark): TextSize | null {

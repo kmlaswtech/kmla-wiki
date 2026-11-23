@@ -24,6 +24,7 @@ import { sectionAnchor } from "../model/heading-id";
 import { mediaAlign, mediaSize } from "../model/media";
 import {
   backgroundVars,
+  cellVAlignOf,
   parseBackground,
   parseTextColor,
   textAlignOf,
@@ -480,7 +481,7 @@ function TableCell({
       rowSpan={rowSpan && rowSpan > 1 ? rowSpan : undefined}
       data-bg={fill ? stringAttr(cell, "background") : undefined}
       data-bg-strong={fill?.strong ? "" : undefined}
-      style={fill?.vars}
+      style={{ ...fill?.vars, verticalAlign: cellVAlignOf(cell) ?? undefined }}
     >
       {children}
     </Cell>

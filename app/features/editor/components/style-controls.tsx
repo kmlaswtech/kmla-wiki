@@ -327,10 +327,8 @@ export function CellStyleButton({ editor }: { editor: Editor }) {
   const background = useEditorState({
     editor,
     selector: ({ editor: current }): string | null => {
-      const cell = current.isActive(NODE.tableHeader)
-        ? current.getAttributes(NODE.tableHeader)
-        : current.getAttributes(NODE.tableCell);
-      return typeof cell.background === "string" ? cell.background : null;
+      const value = activeCellAttrs(current).background;
+      return typeof value === "string" ? value : null;
     },
   });
 
@@ -345,25 +343,38 @@ export function CellStyleButton({ editor }: { editor: Editor }) {
       <ColorPicker
         kind="background"
         value={background}
-        // 팝오버가 초점을 가져가도 편집기의 선택(고른 셀)은 남는다. 초점을 편집기로 되돌리지 않는다.
-        onChange={(next) =>
-          editor.commands.command(({ commands, tr }) => {
-            const { selection } = tr;
-            if (!(selection instanceof CellSelection)) {
-              return commands.setCellAttribute("background", next);
-            }
-            selection.forEachCell((cell, pos) => {
-              if (cell.attrs.background !== next) {
-                tr.setNodeMarkup(pos, undefined, {
-                  ...cell.attrs,
-                  background: next,
-                });
-              }
-            });
-            return true;
-          })
-        }
+        onChange={(next) => setCellAttr(editor, "background", next)}
       />
     </PopoverToolButton>
   );
+}
+
+/** 커서가 있는 칸(제목 칸이나 보통 칸)의 속성. */
+export function activeCellAttrs(editor: Editor): Record<string, unknown> {
+  return editor.getAttributes(
+    editor.isActive(NODE.tableHeader) ? NODE.tableHeader : NODE.tableCell,
+  );
+}
+
+/**
+ * 셀 속성을 고른 칸 전부에 건다. 칸을 여러 개 고르지 않았으면 커서가 있는 칸에 건다. 팝오버나 메뉴가
+ * 초점을 가져가도 편집기의 선택(고른 칸)은 남으므로 초점을 편집기로 되돌리지 않는다.
+ */
+export function setCellAttr(
+  editor: Editor,
+  name: string,
+  value: string | null,
+): boolean {
+  return editor.commands.command(({ commands, tr }) => {
+    const { selection } = tr;
+    if (!(selection instanceof CellSelection)) {
+      return commands.setCellAttribute(name, value);
+    }
+    selection.forEachCell((cell, pos) => {
+      if (cell.attrs[name] !== value) {
+        tr.setNodeMarkup(pos, undefined, { ...cell.attrs, [name]: value });
+      }
+    });
+    return true;
+  });
 }

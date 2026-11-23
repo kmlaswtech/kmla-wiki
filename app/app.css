@@ -399,10 +399,12 @@
     @apply px-0.5 no-underline;
   }
   /* 각주 번호는 위첨자라 작다. 손가락으로 누를 때는 둘레를 넓힌다(인라인이라 줄 간격은 그대로다).
+   * 넓힌 좌우 여백은 음수 바깥 여백으로 되돌려, 보이는 글자 간격은 마우스 화면(`px-0.5`)과 같게 둔다.
+   * 바깥 여백은 2px를 넘기지 않는다. 넘기면 `[1][2]`에서 뒤 번호의 누르는 자리가 앞 번호 글자를 덮는다.
    * 문서 보기와 편집기가 같은 크기를 쓴다. */
   .wiki-content sup a,
   .wiki-editor .wiki-footnote-number {
-    @apply coarse:px-1.5 coarse:py-2;
+    @apply coarse:-mx-0.5 coarse:px-1 coarse:py-2;
   }
   .wiki-content section[data-footnotes] {
     @apply mt-8 border-t pt-2 text-sm leading-normal text-muted-foreground;

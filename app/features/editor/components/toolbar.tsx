@@ -5,6 +5,9 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
   Bold,
   CircleHelp,
   Code,
@@ -32,8 +35,14 @@ import {
 import type { ReactNode } from "react";
 
 import type { EditorRequest } from "./editor-ui";
-import { CellStyleButton, TextColorButton } from "./style-controls";
 import {
+  activeCellAttrs,
+  CellStyleButton,
+  setCellAttr,
+  TextColorButton,
+} from "./style-controls";
+import {
+  isCellVAlign,
   isTextAlign,
   isTextSize,
   MARK,
@@ -41,6 +50,7 @@ import {
   pageHref,
   TEXT_SIZE_LABEL,
   TEXT_SIZES,
+  type CellVAlign,
   type TextAlign,
 } from "~/features/markup";
 import { cn } from "~/shared/lib/utils";
@@ -98,6 +108,9 @@ export function Toolbar({
       orderedList: current.isActive(NODE.orderedList),
       blockquote: current.isActive(NODE.blockquote),
       inTable: current.isActive(NODE.table),
+      cellVAlign: ((value: unknown) => (isCellVAlign(value) ? value : null))(
+        activeCellAttrs(current).verticalAlign,
+      ),
       textSize: ((value: unknown) => (isTextSize(value) ? value : null))(
         current.getAttributes(MARK.textSize).size,
       ),
@@ -123,6 +136,14 @@ export function Toolbar({
       : state.textAlign === "right"
         ? AlignRight
         : AlignLeft;
+  const setVAlign = (verticalAlign: CellVAlign | null) =>
+    setCellAttr(editor, "verticalAlign", verticalAlign);
+  const VAlignIcon =
+    state.cellVAlign === "middle"
+      ? AlignVerticalJustifyCenter
+      : state.cellVAlign === "bottom"
+        ? AlignVerticalJustifyEnd
+        : AlignVerticalJustifyStart;
 
   return (
     <div
@@ -299,6 +320,25 @@ export function Toolbar({
       </ToolButton>
 
       {state.inTable ? <CellStyleButton editor={editor} /> : null}
+      {state.inTable ? (
+        <Menu
+          label="칸 세로 정렬"
+          active={state.cellVAlign !== null}
+          icon={<VAlignIcon />}
+        >
+          <DropdownMenuItem onClick={() => setVAlign(null)}>
+            <AlignVerticalJustifyStart />위
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setVAlign("middle")}>
+            <AlignVerticalJustifyCenter />
+            가운데
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setVAlign("bottom")}>
+            <AlignVerticalJustifyEnd />
+            아래
+          </DropdownMenuItem>
+        </Menu>
+      ) : null}
       {state.inTable ? (
         <Menu label="표" active icon={<Table />}>
           <DropdownMenuItem onClick={() => chain().addRowAfter().run()}>
