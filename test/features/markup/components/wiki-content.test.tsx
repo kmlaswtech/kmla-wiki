@@ -297,6 +297,7 @@ describe("WikiContent styling", () => {
                     colspan: 2,
                     align: "center",
                     background: "blue-strong",
+                    verticalAlign: "middle",
                   },
                   content: [para(text("이름"))],
                 },
@@ -315,6 +316,7 @@ describe("WikiContent styling", () => {
     expect(th).toHaveAttribute("data-bg", "blue-strong");
     expect(th).toHaveAttribute("data-bg-strong", "");
     expect(th?.style.getPropertyValue("--wiki-bg")).toBe("#0060c1");
+    expect(th).toHaveStyle({ verticalAlign: "middle" });
     // 칸 정렬은 없다(칸 안의 글은 문단 정렬로 맞춘다). 예전 값이 남아 있어도 그리지 않는다.
     expect(th?.getAttribute("style")).not.toContain("text-align");
   });

@@ -19,6 +19,7 @@ import {
   DEFAULT_VIDEO_SIZE,
   HEADING_LEVELS,
   IMAGE_ID,
+  isCellVAlign,
   isMediaAlign,
   isMediaSize,
   isTextAlign,
@@ -514,12 +515,33 @@ const cellBackground = {
 };
 
 /**
- * 셀 속성: Tiptap 셀 속성에서 정렬(`align`)을 빼고 배경을 더한다. 칸 안의 글도 문단이라 문단 정렬로
- * 맞춘다. 정렬을 두 곳에 두면 둘이 어긋날 때 어느 것이 이기는지 알기 어렵다.
+ * 셀 세로 정렬. 위(기본)는 저장하지 않는다. 다른 사이트에서 붙여넣은 표의 `vertical-align`도 받는다.
+ * 값이 위·가운데·아래뿐이라 색과 달리 화면 모드별 대비 문제가 없다.
+ */
+const cellVerticalAlign = {
+  verticalAlign: {
+    default: null,
+    // 문서 보기도 같은 스타일을 쓴다. 옛 HTML 속성(`valign`)은 Word·Excel 표가 쓴다. `data-bg`와 달리
+    // 스타일에서 값을 그대로 되읽을 수 있으므로 `data-*`를 따로 두지 않는다.
+    parseHTML: (element: HTMLElement) =>
+      [element.style.verticalAlign, element.getAttribute("valign")].find(
+        isCellVAlign,
+      ) ?? null,
+    renderHTML: (attributes: Record<string, unknown>) =>
+      isCellVAlign(attributes.verticalAlign)
+        ? { style: `vertical-align: ${attributes.verticalAlign}` }
+        : {},
+  },
+};
+
+/**
+ * 셀 속성: Tiptap 셀 속성에서 가로 정렬(`align`)을 빼고 배경과 세로 정렬을 더한다. 칸 안의 글도
+ * 문단이라 가로는 문단 정렬로 맞춘다. 정렬을 두 곳에 두면 둘이 어긋날 때 어느 것이 이기는지 알기
+ * 어렵다. 세로 정렬은 문단에 없으므로 칸에 둔다.
  */
 function cellAttributes(parent: Record<string, unknown> | undefined) {
   const { align: _align, ...rest } = parent ?? {};
-  return { ...rest, ...cellBackground };
+  return { ...rest, ...cellBackground, ...cellVerticalAlign };
 }
 
 export const WikiTableCell = TableCell.extend({

@@ -358,6 +358,25 @@ describe("docToText", () => {
     ).not.toBe(docToText(doc(image("bbbbbbbb-0000-4000-8000-000000000000"))));
   });
 
+  it("shows cell vertical alignment so the diff sees it", () => {
+    const table = (attrs?: Record<string, unknown>) =>
+      doc({
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", attrs, content: [para(text("칸"))] },
+            ],
+          },
+        ],
+      });
+    expect(docToText(table({ verticalAlign: "bottom" }))).toContain(
+      "(세로 아래) 칸",
+    );
+    expect(docToText(table())).not.toContain("세로");
+  });
+
   it("does not break on a heading level out of range", () => {
     expect(docToText(doc({ ...heading(2, "가"), attrs: { level: -3 } }))).toBe(
       "## 가",

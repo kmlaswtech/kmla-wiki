@@ -18,7 +18,14 @@ import {
 } from "./media";
 import { profileOf } from "./profile";
 import { templateTitle } from "./refs";
-import { HUE_LABEL, parseBackground, textAlignOf, textSizeOf } from "./style";
+import {
+  cellVAlignOf,
+  HUE_LABEL,
+  parseBackground,
+  textAlignOf,
+  textSizeOf,
+  type CellVAlign,
+} from "./style";
 import { headingDepth } from "./sections";
 
 /**
@@ -166,7 +173,12 @@ function alignPrefix(node: WikiNode): string {
   return align ? `(${MEDIA_ALIGN_LABEL[align]} 정렬) ` : "";
 }
 
-/** 표 칸 하나. 제목 칸, 합친 칸, 배경도 비교에 보이게 표시한다. */
+const CELL_VALIGN_LABEL: Record<CellVAlign, string> = {
+  middle: "세로 가운데",
+  bottom: "세로 아래",
+};
+
+/** 표 칸 하나. 제목 칸, 합친 칸, 배경, 세로 정렬도 비교에 보이게 표시한다. */
 function cellToText(cell: WikiNode): string {
   const marks: string[] = [];
   if (cell.type === NODE.tableHeader) marks.push("제목 칸");
@@ -176,6 +188,8 @@ function cellToText(cell: WikiNode): string {
   if (rowspan > 1) marks.push(`세로 ${rowspan}칸`);
   const background = stringAttr(cell, "background");
   if (background) marks.push(`배경 ${colorText(background)}`);
+  const verticalAlign = cellVAlignOf(cell);
+  if (verticalAlign) marks.push(CELL_VALIGN_LABEL[verticalAlign]);
   const text = blocksToText(cell.content ?? []).replace(/\n+/g, " / ");
   return marks.length > 0 ? `(${marks.join(", ")}) ${text}` : text;
 }

@@ -5,6 +5,9 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
   Bold,
   CircleHelp,
   Code,
@@ -32,8 +35,14 @@ import {
 import type { ReactNode } from "react";
 
 import type { EditorRequest } from "./editor-ui";
-import { CellStyleButton, TextColorButton } from "./style-controls";
 import {
+  activeCellAttrs,
+  CellStyleButton,
+  setCellAttr,
+  TextColorButton,
+} from "./style-controls";
+import {
+  isCellVAlign,
   isTextAlign,
   isTextSize,
   MARK,
@@ -41,6 +50,7 @@ import {
   pageHref,
   TEXT_SIZE_LABEL,
   TEXT_SIZES,
+  type CellVAlign,
   type TextAlign,
 } from "~/features/markup";
 import { cn } from "~/shared/lib/utils";
@@ -53,6 +63,33 @@ import {
   DropdownMenuTrigger,
 } from "~/shared/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/tooltip";
+
+/** 정렬 메뉴의 항목. 첫 항목이 기본값(`null`)이다. 단추 아이콘과 메뉴 항목이 이 목록을 함께 쓴다. */
+interface Choice<T extends string> {
+  value: T | null;
+  icon: ReactNode;
+  label: string;
+}
+
+const TEXT_ALIGN_CHOICES: readonly Choice<TextAlign>[] = [
+  { value: null, icon: <AlignLeft />, label: "왼쪽" },
+  { value: "center", icon: <AlignCenter />, label: "가운데" },
+  { value: "right", icon: <AlignRight />, label: "오른쪽" },
+];
+
+const CELL_VALIGN_CHOICES: readonly Choice<CellVAlign>[] = [
+  { value: null, icon: <AlignVerticalJustifyStart />, label: "위" },
+  { value: "middle", icon: <AlignVerticalJustifyCenter />, label: "가운데" },
+  { value: "bottom", icon: <AlignVerticalJustifyEnd />, label: "아래" },
+];
+
+/** 지금 값의 아이콘. 맞는 항목이 없으면 기본값(첫 항목)의 아이콘이다. */
+function choiceIcon<T extends string>(
+  choices: readonly Choice<T>[],
+  value: T | null,
+): ReactNode {
+  return (choices.find((choice) => choice.value === value) ?? choices[0]!).icon;
+}
 
 interface ToolbarProps {
   editor: Editor;
@@ -98,6 +135,9 @@ export function Toolbar({
       orderedList: current.isActive(NODE.orderedList),
       blockquote: current.isActive(NODE.blockquote),
       inTable: current.isActive(NODE.table),
+      cellVAlign: ((value: unknown) => (isCellVAlign(value) ? value : null))(
+        activeCellAttrs(current).verticalAlign,
+      ),
       textSize: ((value: unknown) => (isTextSize(value) ? value : null))(
         current.getAttributes(MARK.textSize).size,
       ),
@@ -117,12 +157,10 @@ export function Toolbar({
       .updateAttributes(NODE.paragraph, { textAlign })
       .updateAttributes(NODE.heading, { textAlign })
       .run();
-  const AlignIcon =
-    state.textAlign === "center"
-      ? AlignCenter
-      : state.textAlign === "right"
-        ? AlignRight
-        : AlignLeft;
+  const alignIcon = choiceIcon(TEXT_ALIGN_CHOICES, state.textAlign);
+  const setVAlign = (verticalAlign: CellVAlign | null) =>
+    setCellAttr(editor, "verticalAlign", verticalAlign);
+  const vAlignIcon = choiceIcon(CELL_VALIGN_CHOICES, state.cellVAlign);
 
   return (
     <div
@@ -259,20 +297,14 @@ export function Toolbar({
       <Menu
         label="문단 정렬"
         active={state.textAlign !== null}
-        icon={<AlignIcon />}
+        icon={alignIcon}
       >
-        <DropdownMenuItem onClick={() => setAlign(null)}>
-          <AlignLeft />
-          왼쪽
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setAlign("center")}>
-          <AlignCenter />
-          가운데
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setAlign("right")}>
-          <AlignRight />
-          오른쪽
-        </DropdownMenuItem>
+        {TEXT_ALIGN_CHOICES.map(({ value, icon, label }) => (
+          <DropdownMenuItem key={label} onClick={() => setAlign(value)}>
+            {icon}
+            {label}
+          </DropdownMenuItem>
+        ))}
       </Menu>
       <Divider />
 
@@ -299,6 +331,20 @@ export function Toolbar({
       </ToolButton>
 
       {state.inTable ? <CellStyleButton editor={editor} /> : null}
+      {state.inTable ? (
+        <Menu
+          label="칸 세로 정렬"
+          active={state.cellVAlign !== null}
+          icon={vAlignIcon}
+        >
+          {CELL_VALIGN_CHOICES.map(({ value, icon, label }) => (
+            <DropdownMenuItem key={label} onClick={() => setVAlign(value)}>
+              {icon}
+              {label}
+            </DropdownMenuItem>
+          ))}
+        </Menu>
+      ) : null}
       {state.inTable ? (
         <Menu label="표" active icon={<Table />}>
           <DropdownMenuItem onClick={() => chain().addRowAfter().run()}>

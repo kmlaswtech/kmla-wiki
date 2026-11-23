@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   backgroundVars,
+  cellVAlignOf,
   contrastRatio,
   formatCustomColor,
   normalizeHex,
@@ -90,5 +91,20 @@ describe("colors", () => {
     expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21);
     expect(contrastRatio("#777777", "#777777")).toBeCloseTo(1);
     expect(readableOn("#0060c1")).toBe("#ffffff");
+  });
+});
+
+describe("cell vertical alignment", () => {
+  it("reads middle and bottom; anything else is the default top", () => {
+    const cell = (verticalAlign: unknown) => ({
+      type: "tableCell",
+      attrs: { verticalAlign },
+    });
+    expect(cellVAlignOf(cell("middle"))).toBe("middle");
+    expect(cellVAlignOf(cell("bottom"))).toBe("bottom");
+    for (const other of ["top", "baseline", "middle; color: red", null, 1]) {
+      expect(cellVAlignOf(cell(other))).toBeNull();
+    }
+    expect(cellVAlignOf({ type: "tableCell" })).toBeNull();
   });
 });
