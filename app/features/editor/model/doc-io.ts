@@ -1,6 +1,6 @@
 import { Node as PMNode } from "@tiptap/pm/model";
 
-import { wikiSchema } from "./schema";
+import { STYLE_ATTRS, wikiSchema } from "./schema";
 import {
   emptyDoc,
   isEmptyParagraph,
@@ -71,14 +71,8 @@ function trimTrailingEmpty(blocks: WikiNode[]): WikiNode[] {
  * 고르지 않은(`null`) 꾸밈 속성. 편집기는 모든 문단·셀에 기본값을 적어 내놓는다. 그대로 저장하면
  * 문단마다 `"textAlign": null`이 붙어 본문이 커지고, 이 기능 전에 저장한 문서와 값이 달라진다.
  */
-const UNSET_STYLE_ATTRS: ReadonlySet<string> = new Set([
-  "textAlign",
-  "background",
-  "verticalAlign",
-]);
-
 function isUnsetStyle([name, value]: [string, unknown]): boolean {
-  return value === null && UNSET_STYLE_ATTRS.has(name);
+  return value === null && STYLE_ATTRS.includes(name);
 }
 
 /** 고칠 것이 없는 노드는 그대로 돌려준다. 입력할 때마다 부르므로 모든 노드를 복사하지 않는다. */

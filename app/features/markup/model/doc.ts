@@ -5,7 +5,7 @@
  * 노드나 마크로 따로 있어, 서버(`private.extract_refs`)와 화면이 같은 자리를 그대로 읽는다.
  *
  * 노드와 마크의 이름·속성은 DB 함수와 편집기 스키마(`features/editor/model/schema.ts`)가 함께 쓴다.
- * 이름을 바꾸면 세 곳을 같이 고친다.
+ * 이름을 바꾸면 세 곳을 같이 고친다(노드·마크 이름은 `schema-names.test.ts`가 검사).
  */
 
 export interface WikiMark {
