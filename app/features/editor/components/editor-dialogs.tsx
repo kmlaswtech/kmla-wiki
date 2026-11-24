@@ -1,12 +1,13 @@
 import { Extension, type Editor } from "@tiptap/core";
-import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
-import { EditorContent, useEditor } from "@tiptap/react";
+import type { Node as PMNode } from "@tiptap/pm/model";
+import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { Link2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { footnoteExtensions } from "../model/schema";
 import type { EditorRequest } from "./editor-ui";
 import { Divider, MarkTools, ToolButton } from "./mark-tools";
+import { createBox } from "./wiki-editor";
 import { TitleInput } from "./title-input";
 import {
   baseName,
@@ -469,27 +470,17 @@ function FootnoteForm({
 }) {
   const current = nodeTargetAt(editor, pos, NODE.footnote);
   const [view, setView] = useState<"note" | "link">("note");
-  const [blank, setBlank] = useState(
-    () => !current || isBlankNote(current.node),
-  );
 
   // 편집기의 키가 부를 함수. 편집기는 한 번만 만들므로 상자에 최신 함수를 두고, 키를 누를 때(렌더
   // 밖에서) 읽는다.
-  const [keys] = useState(() => {
-    const box = {
-      submit: () => {},
-      link: () => {},
-      update(next: { submit: () => void; link: () => void }) {
-        Object.assign(box, next);
-      },
-    };
-    return box;
-  });
+  const [keys] = useState(() =>
+    createBox({ submit: () => {}, link: () => {} }),
+  );
   const [extensions] = useState(() => [
     ...footnoteExtensions(),
     FootnoteKeys.configure({
-      submit: () => keys.submit(),
-      link: () => keys.link(),
+      submit: () => keys.current.submit(),
+      link: () => keys.current.link(),
     }),
   ]);
   const note = useEditor({
@@ -512,32 +503,27 @@ function FootnoteForm({
         class: "wiki-content wiki-footnote min-h-16 px-3 py-2 outline-none",
       },
     },
-    onUpdate: ({ editor: inner }) => setBlank(isBlankNote(inner.state.doc)),
+  });
+  const blank = useEditorState({
+    editor: note,
+    selector: ({ editor: inner }) => !inner || isBlankNote(inner.state.doc),
   });
 
   const submit = () => {
     if (!note || isBlankNote(note.state.doc)) return;
     // 두 편집기는 꾸밈 정의가 같으므로 JSON 그대로 옮긴다.
     const content = note.state.doc.firstChild?.content.toJSON() ?? [];
-    const chain = editor.chain().focus();
-    if (current) {
-      chain
-        .command(({ tr, state }) => {
-          const node = state.schema.nodes[NODE.footnote]!.createChecked(
-            current.node.attrs,
-            Fragment.fromJSON(state.schema, content),
-          );
-          tr.replaceWith(
-            current.pos,
-            current.pos + current.node.nodeSize,
-            node,
-          );
-          return true;
-        })
-        .run();
-    } else {
-      chain.insertContent({ type: NODE.footnote, content }).run();
-    }
+    // 고치던 각주가 있으면 그 자리를 바꾸고, 없으면 커서 자리에 넣는다.
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(
+        current
+          ? { from: current.pos, to: current.pos + current.node.nodeSize }
+          : editor.state.selection,
+        { type: NODE.footnote, attrs: current?.node.attrs, content },
+      )
+      .run();
     onDone();
   };
   const openLink = () => setView("link");
@@ -547,12 +533,8 @@ function FootnoteForm({
 
   return (
     <>
-      {/* 링크 화면에서는 숨긴 각주 폼의 제목이 대화상자 이름으로 읽히지 않게 한다. */}
-      <div
-        className={view === "note" ? "contents" : "hidden"}
-        inert={view !== "note"}
-        aria-hidden={view !== "note"}
-      >
+      {/* `hidden`은 화면에서도, 화면 읽기 프로그램에서도 숨긴다(제목이 둘로 읽히지 않는다). */}
+      <div className="contents" hidden={view !== "note"}>
         <DialogForm
           title={current ? "각주 편집" : "각주 삽입"}
           onSubmit={submit}

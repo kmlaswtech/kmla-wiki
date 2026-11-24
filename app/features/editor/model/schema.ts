@@ -12,7 +12,12 @@ import {
   TableHeader,
   TableRow,
 } from "@tiptap/extension-table";
-import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
+import {
+  DOMParser,
+  DOMSerializer,
+  Fragment,
+  type Node as PMNode,
+} from "@tiptap/pm/model";
 import { StarterKit } from "@tiptap/starter-kit";
 
 import {
@@ -100,52 +105,6 @@ export const WikiLink = Mark.create({
  */
 export const FOOTNOTE_CONTENT = `(${NODE.text} | ${NODE.hardBreak} | ${NODE.templateParam})*`;
 
-/**
- * 붙여넣은 각주 내용(JSON)을 거른다. 이 값은 HTML 규칙(`parseHTML`)을 거치지 않으므로, 붙여넣기의
- * 다른 꾸밈과 같은 검사(주소, 팔레트, 글자 크기)를 여기서 한다. 각주에 넣을 수 없는 노드는 뺀다.
- */
-function sanitizeFootnoteContent(value: unknown): unknown[] {
-  if (!Array.isArray(value)) return [];
-  const isObject = (item: unknown): item is Record<string, unknown> =>
-    typeof item === "object" && item !== null;
-  const allowedMark = (mark: unknown) => {
-    if (!isObject(mark)) return false;
-    const attrs = isObject(mark.attrs) ? mark.attrs : {};
-    switch (mark.type) {
-      case MARK.link:
-        return typeof attrs.href === "string" && SAFE_HREF.test(attrs.href);
-      case MARK.textColor:
-        return parseTextColor(attrs.color) !== null;
-      case MARK.textSize:
-        return isTextSize(attrs.size);
-      case MARK.wikiLink:
-        return typeof attrs.target === "string";
-      default:
-        return true;
-    }
-  };
-  return value.filter(isObject).flatMap((node): unknown[] => {
-    if (node.type === NODE.text) {
-      if (typeof node.text !== "string" || node.text === "") return [];
-      const marks = Array.isArray(node.marks)
-        ? node.marks.filter(allowedMark)
-        : [];
-      return [
-        {
-          type: NODE.text,
-          text: node.text,
-          ...(marks.length ? { marks } : {}),
-        },
-      ];
-    }
-    if (node.type === NODE.hardBreak) return [{ type: NODE.hardBreak }];
-    if (node.type === NODE.templateParam) {
-      return [{ type: NODE.templateParam, attrs: node.attrs }];
-    }
-    return [];
-  });
-}
-
 /** 각주 내용의 글자. 줄바꿈은 띄어쓰기로, 값 자리는 `{{{n}}}`로 적는다(툴팁, 복사한 글자). */
 export function footnoteText(node: PMNode): string {
   return node.textBetween(0, node.content.size, " ", (leaf) =>
@@ -172,18 +131,23 @@ export const Footnote = Node.create({
     return [
       {
         tag: "sup[data-footnote]",
-        // 내용은 `data-footnote-content`의 JSON에서 되살린다. 꾸밈 속성(위키 링크 대상 등)까지 그대로다.
+        // 내용은 `data-footnote-content`의 JSON에서 되살린다. 이 값은 HTML 규칙을 거치지 않으므로,
+        // 한 번 HTML로 그렸다가 다시 읽어 다른 붙여넣기와 같은 검사(주소, 팔레트, 글자 크기)를 받게
+        // 한다. 각주에 넣을 수 없는 블록은 이때 풀린다.
         getContent: (element, schema) => {
-          const raw =
-            element instanceof HTMLElement
-              ? element.getAttribute("data-footnote-content")
-              : null;
+          if (!(element instanceof HTMLElement)) return Fragment.empty;
+          const raw = element.getAttribute("data-footnote-content");
           if (!raw) return Fragment.empty;
           try {
-            return Fragment.fromJSON(
-              schema,
-              sanitizeFootnoteContent(JSON.parse(raw)),
+            const html = DOMSerializer.fromSchema(schema).serializeFragment(
+              Fragment.fromJSON(schema, JSON.parse(raw)),
+              { document: element.ownerDocument },
             );
+            const holder = element.ownerDocument.createElement("div");
+            holder.append(html);
+            return DOMParser.fromSchema(schema).parse(holder, {
+              topNode: schema.nodes[NODE.footnote]!.create(),
+            }).content;
           } catch {
             return Fragment.empty;
           }

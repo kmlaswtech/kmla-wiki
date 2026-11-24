@@ -149,22 +149,13 @@ function prepare(
   values?: readonly string[],
 ): WikiNode {
   if (node.type === NODE.footnote) {
-    // 번호는 바깥 순서대로 먼저 받는다. 각주 안에는 각주가 없으므로 안을 채워도 번호가 밀리지 않는다.
+    // 각주 안에는 각주가 없으므로 안을 채운 뒤에 번호를 받아도 순서가 같다.
+    const content = prepareContent(node.content ?? [], context, stack, values);
     const number = context.footnotes.length + 1;
-    const footnote: Footnote = { number, content: [] };
-    context.footnotes.push(footnote);
-    footnote.content = prepareContent(
-      node.content ?? [],
-      context,
-      stack,
-      values,
-    );
-    return {
-      ...node,
-      attrs: { ...node.attrs, number },
-      content: footnote.content,
-    };
+    context.footnotes.push({ number, content });
+    return { ...node, attrs: { ...node.attrs, number }, content };
   }
+
   if (node.type === NODE.templateParam && values) {
     const index = numberAttr(node, "index") ?? 1;
     // 틀 작성자가 그 자리에 건 꾸밈(굵게, 링크 등)은 값에도 그대로 건다.

@@ -64,8 +64,10 @@ describe("Footnote", () => {
     holder.append(sup);
 
     const pasted = DOMParser.fromSchema(wikiSchema()).parse(holder);
+    // 꾸밈은 안전한 것만 남고, 블록은 풀려 글자만 남는다.
     expect(pasted.firstChild!.firstChild!.content.toJSON()).toEqual([
       { type: "text", text: "x", marks: [{ type: "bold" }] },
+      { type: "text", text: "블록" },
     ]);
   });
 
