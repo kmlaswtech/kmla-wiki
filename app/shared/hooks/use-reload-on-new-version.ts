@@ -4,8 +4,6 @@ import { useLocation } from "react-router";
 import { useVisibleInterval } from "./use-visible-interval";
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
-const PRELOAD_RELOAD_KEY = "app:preload-reload";
-const PRELOAD_RELOAD_GAP_MS = 10_000;
 
 /**
  * 새 배포가 나오면 열어 둔 탭도 새 코드로 바꾼다. 알림은 보이지 않는다.
@@ -15,7 +13,7 @@ const PRELOAD_RELOAD_GAP_MS = 10_000;
  *   새 화면이 떠나기를 막으면(편집기가 임시 저장을 불러온 경우 등) 그다음 이동까지 미룬다.
  * - 화면 이동이 끝난 뒤에 하므로 나가기 확인(`useBlocker`)은 이미 끝난 상태다.
  * - 라우트 모듈을 못 받으면 React Router가 스스로 새로 고친다. 함수 안의 동적 import(이미지
- *   변환 등)는 Vite의 `vite:preloadError`로 받아 한 번 새로 고친다.
+ *   변환 등)를 못 받으면(`vite:preloadError`) 바로 새 버전을 확인한다.
  */
 export function useReloadOnNewVersion(): void {
   const stale = useRef(false);
@@ -47,16 +45,12 @@ export function useReloadOnNewVersion(): void {
     if (stale.current && !leaveBlocked()) window.location.reload();
   }, [page]);
 
+  // 파일을 못 받으면 오류는 그대로 둔다(업로드 실패 등으로 보인다). 새 배포 때문이면 다음 화면
+  // 이동 때 새로 고쳐진다. 연결이 잠깐 끊긴 때 쓰던 화면을 버리지 않으려고 바로 새로 고치지 않는다.
   useEffect(() => {
-    function onPreloadError(event: Event) {
-      if (reloadedRecently()) return;
-      event.preventDefault();
-      window.location.reload();
-    }
-    window.addEventListener("vite:preloadError", onPreloadError);
-    return () =>
-      window.removeEventListener("vite:preloadError", onPreloadError);
-  }, []);
+    window.addEventListener("vite:preloadError", check);
+    return () => window.removeEventListener("vite:preloadError", check);
+  }, [check]);
 }
 
 async function isNewVersionOut(): Promise<boolean> {
@@ -78,17 +72,4 @@ function leaveBlocked(): boolean {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
-}
-
-/** 새 배포 뒤에도 파일을 계속 못 받는 경우, 새로 고침을 되풀이하지 않게 한다. */
-function reloadedRecently(): boolean {
-  try {
-    const last = Number(sessionStorage.getItem(PRELOAD_RELOAD_KEY));
-    const now = Date.now();
-    if (now - last < PRELOAD_RELOAD_GAP_MS) return true;
-    sessionStorage.setItem(PRELOAD_RELOAD_KEY, String(now));
-    return false;
-  } catch {
-    return true;
-  }
 }
