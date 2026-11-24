@@ -11,11 +11,13 @@ import { createBox } from "./wiki-editor";
 import { TitleInput } from "./title-input";
 import {
   baseName,
+  EMPTY_CAPTION,
   MARK,
   NODE,
   parseYoutubeUrl,
   SAFE_HREF,
   templateTitle,
+  type WikiNode,
   youtubeWatchUrl,
 } from "~/features/markup";
 import { resolveRedirect } from "~/features/pages";
@@ -279,12 +281,16 @@ function nodeTargetAt(
   return node?.type.name === type ? { node, pos } : null;
 }
 
-/** 고치던 노드의 속성을 바꾸거나, 새 노드를 커서 자리에 넣는다. */
+/**
+ * 고치던 노드의 속성을 바꾸거나, 새 노드를 커서 자리에 넣는다. 고칠 때는 내용(`content`)을 그대로
+ * 두고, 새로 넣을 때만 쓴다.
+ */
 function upsertNode(
   editor: Editor,
   target: NodeTarget | null,
   type: string,
   attrs: Record<string, unknown>,
+  content?: WikiNode[],
 ) {
   const chain = editor.chain().focus();
   if (target) {
@@ -295,7 +301,7 @@ function upsertNode(
       })
       .run();
   } else {
-    chain.insertContent({ type, attrs }).run();
+    chain.leaveCaption().insertContent({ type, attrs, content }).run();
   }
 }
 
@@ -604,12 +610,18 @@ function YoutubeForm({
   const submit = () => {
     if (!video) return;
     // 고칠 때는 고른 크기·정렬을 그대로 둔다.
-    upsertNode(editor, current, NODE.youtube, {
-      size: "small",
-      ...current?.node.attrs,
-      videoId: video.videoId,
-      start: video.start,
-    });
+    upsertNode(
+      editor,
+      current,
+      NODE.youtube,
+      {
+        size: "small",
+        ...current?.node.attrs,
+        videoId: video.videoId,
+        start: video.start,
+      },
+      [...EMPTY_CAPTION],
+    );
     onDone();
   };
 
@@ -674,6 +686,7 @@ function TableForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
         editor
           .chain()
           .focus()
+          .leaveCaption()
           .insertTable({
             rows: clamp(rows, 1, 30),
             cols: clamp(columns, 1, 10),

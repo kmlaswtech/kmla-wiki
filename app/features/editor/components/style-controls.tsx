@@ -323,28 +323,62 @@ export function TextColorButton({ editor }: { editor: Editor }) {
  * 팝오버를 연 채로 여러 칸을 바꿔 볼 수 있게 고를 때 닫지 않는다.
  */
 export function CellStyleButton({ editor }: { editor: Editor }) {
+  return (
+    <BackgroundButton
+      editor={editor}
+      label="셀 배경"
+      read={(current) => activeCellAttrs(current).background}
+      write={(next) => setCellAttr(editor, "background", next)}
+    />
+  );
+}
+
+/**
+ * 이미지·영상 캡션의 띠 배경 단추(커서가 캡션 안에 있을 때만 보인다). 표 칸 배경과 같은 팔레트다.
+ */
+export function CaptionStyleButton({ editor }: { editor: Editor }) {
+  return (
+    <BackgroundButton
+      editor={editor}
+      label="캡션 배경"
+      read={(current) => current.getAttributes(NODE.caption).background}
+      write={(next) =>
+        editor.commands.updateAttributes(NODE.caption, { background: next })
+      }
+    />
+  );
+}
+
+/** 배경 고르기 단추(셀·캡션). `read`는 지금 값을 읽고, `write`는 고른 값(지우면 `null`)을 건다. */
+function BackgroundButton({
+  editor,
+  label,
+  read,
+  write,
+}: {
+  editor: Editor;
+  label: string;
+  read: (editor: Editor) => unknown;
+  write: (value: string | null) => void;
+}) {
   const [open, setOpen] = useState(false);
   const background = useEditorState({
     editor,
     selector: ({ editor: current }): string | null => {
-      const value = activeCellAttrs(current).background;
+      const value = read(current);
       return typeof value === "string" ? value : null;
     },
   });
 
   return (
     <PopoverToolButton
-      label="셀 배경"
+      label={label}
       icon={<PaintBucket />}
       active={background !== null}
       open={open}
       onOpenChange={setOpen}
     >
-      <ColorPicker
-        kind="background"
-        value={background}
-        onChange={(next) => setCellAttr(editor, "background", next)}
-      />
+      <ColorPicker kind="background" value={background} onChange={write} />
     </PopoverToolButton>
   );
 }

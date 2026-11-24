@@ -23,7 +23,9 @@ export {
   type WikiProfile,
 } from "./model/profile";
 export {
+  captionText,
   DEFAULT_VIDEO_SIZE,
+  EMPTY_CAPTION,
   MEDIA_ALIGN_LABEL,
   MEDIA_ALIGNS,
   MEDIA_SIZE_LABEL,
@@ -31,6 +33,7 @@ export {
   isMediaAlign,
   isMediaSize,
   mediaAlign,
+  mediaCaption,
   mediaSize,
   type MediaAlign,
   type MediaSize,

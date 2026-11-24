@@ -22,6 +22,7 @@ import {
 } from "./node-views";
 import {
   MARK,
+  NODE,
   pageHref,
   parseTitle,
   sectionAnchor,
@@ -138,6 +139,49 @@ const MissingLinks = Extension.create<Pick<WikiEditorOptions, "isMissing">>({
 });
 
 /**
+ * 빈 캡션에 `is-empty`를 붙인다. CSS가 그 자리에 "캡션 (선택)"을 보여 적을 자리를 알린다. 기본
+ * placeholder 확장은 맨 바깥 블록만 보므로 캡션에 닿지 않는다.
+ */
+const emptyCaptionKey = new PluginKey<DecorationSet>("wikiEmptyCaption");
+
+const EmptyCaption = Extension.create({
+  name: "wikiEmptyCaption",
+
+  addProseMirrorPlugins() {
+    // 문서를 한 번 훑는다. 캡션은 문단 같은 글자 블록 안에 없으므로 그 안으로는 내려가지 않는다.
+    const build = (state: EditorState) => {
+      const decorations: Decoration[] = [];
+      state.doc.descendants((node, pos) => {
+        if (node.type.name === NODE.caption) {
+          if (node.content.size === 0) {
+            decorations.push(
+              Decoration.node(pos, pos + node.nodeSize, { class: "is-empty" }),
+            );
+          }
+          return false;
+        }
+        return !node.isTextblock;
+      });
+      return DecorationSet.create(state.doc, decorations);
+    };
+
+    return [
+      new Plugin({
+        key: emptyCaptionKey,
+        // 문서가 바뀔 때만 다시 센다. 커서만 움직이는 입력에서는 그대로 쓴다.
+        state: {
+          init: (_, state) => build(state),
+          apply: (tr, old, _, state) => (tr.docChanged ? build(state) : old),
+        },
+        props: {
+          decorations: (state) => emptyCaptionKey.getState(state),
+        },
+      }),
+    ];
+  },
+});
+
+/**
  * Ctrl+클릭(맥은 Cmd+클릭)으로 링크를 새 탭에서 연다. 그냥 클릭은 지금처럼 커서만 옮긴다.
  * 새 탭으로 여는 것은 저장하지 않은 편집 내용을 잃지 않기 위해서다.
  */
@@ -238,5 +282,6 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
     WikiShortcuts.configure({ request: options.request }),
     MissingLinks.configure({ isMissing: options.isMissing }),
     OpenLinkOnModClick,
+    EmptyCaption,
   ];
 }

@@ -576,11 +576,11 @@
     font-size: 2em;
     line-height: 1.4;
   }
-  .wiki-content :is(td, th)[data-bg] {
+  .wiki-content :is(td, th, .wiki-media-caption)[data-bg] {
     background-color: var(--wiki-bg);
     color: var(--wiki-on);
   }
-  .dark .wiki-content :is(td, th)[data-bg] {
+  .dark .wiki-content :is(td, th, .wiki-media-caption)[data-bg] {
     background-color: var(--wiki-bg-dark);
     color: var(--wiki-on-dark);
   }
@@ -680,6 +680,28 @@
   }
   .wiki-editor .wiki-image-edit {
     @apply my-3 rounded-md;
+  }
+  /* 편집기의 캡션은 노드 내용이라 그림이 한 겹(끌어 옮기는 자리) 안에 있다. 고칠 수 있는 편집기는
+   * 빈 캡션도 띠로 보여 적을 자리를 알리고, 읽기 전용 편집기(판 보기)는 문서 보기처럼 숨긴다. */
+  .wiki-editor[contenteditable="true"]
+    .wiki-media-item:has(.wiki-media-caption)
+    > .wiki-media-grip
+    > :is(.wiki-image-frame, .wiki-youtube),
+  .wiki-editor
+    .wiki-media-item:has(.wiki-media-caption:not(.is-empty))
+    > .wiki-media-grip
+    > :is(.wiki-image-frame, .wiki-youtube) {
+    @apply rounded-b-none;
+  }
+  .wiki-editor .wiki-media-caption {
+    @apply relative;
+  }
+  .wiki-editor .wiki-media-caption.is-empty::before {
+    content: "캡션 (선택)";
+    @apply pointer-events-none absolute inset-x-3 text-muted-foreground/70;
+  }
+  .wiki-editor[contenteditable="false"] .wiki-media-caption.is-empty {
+    @apply hidden;
   }
   /* 칸 안의 노드 상자(이미지·틀·접기)도 문서 보기처럼 칸의 처음과 끝에서 바깥 여백을 뺀다. 노드
    * 상자는 노드 뷰 감싸개 안에 있어 `:is(td, th) > :first-child` 규칙이 닿지 않는다. */

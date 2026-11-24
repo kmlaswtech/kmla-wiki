@@ -26,6 +26,7 @@ import { useEditorUi } from "./editor-ui";
 import { WikiImage } from "~/features/images";
 import {
   baseName,
+  captionText,
   formatStart,
   MEDIA_ALIGN_LABEL,
   MEDIA_ALIGNS,
@@ -147,7 +148,7 @@ export function TemplateView({
 }
 
 /**
- * 노드 속성을 고치는 한 줄 입력칸(접기 제목, 이미지 대체 텍스트, 캡션).
+ * 노드 속성을 고치는 한 줄 입력칸(접기 제목, 이미지 대체 텍스트).
  *
  * 한글을 조합하는 동안에는 노드에 쓰지 않는다. 글자마다 편집기 트랜잭션을 보내면 노드 뷰가 다시
  * 그려지면서 조합 중인 글자가 씹힌다. 입력칸이 제 값을 들고 있다가 조합이 끝날 때 쓴다. 실행 취소처럼
@@ -203,7 +204,8 @@ export function ImageView(props: ReactNodeViewProps) {
   const { images } = useEditorUi();
   const id = String(node.attrs.id ?? "");
   const alt = String(node.attrs.alt ?? "");
-  const caption = String(node.attrs.caption ?? "");
+  // 문서 보기와 같이 각주 내용을 뺀 캡션 글자다.
+  const caption = captionText(node.toJSON() as WikiNode);
 
   return (
     <MediaNodeView
@@ -276,14 +278,18 @@ export function YoutubeView(props: ReactNodeViewProps) {
 }
 
 /**
- * 이미지·영상 노드의 공통 틀: 문서 보기와 같은 상자(`wiki-media`)에 그림과 캡션 칸, 그 아래에
+ * 이미지·영상 노드의 공통 틀: 문서 보기와 같은 상자(`wiki-media`)에 그림과 캡션, 그 아래에
  * `children`(노드마다 다른 줄)과 크기·정렬 고르기를 둔다.
+ *
+ * 캡션은 노드 내용이라 본문처럼 바로 고친다(`NodeViewContent`). 그림 부분만 끌어 옮기는 자리다.
+ * 노드에 내용이 있으면 ProseMirror가 누른 노드를 저절로 고르지 않으므로, 그림을 누르면 직접 고른다.
  */
 function MediaNodeView({
   node,
   selected,
   updateAttributes,
   editor,
+  getPos,
   media,
   youtube = false,
   allowOriginal = false,
@@ -297,49 +303,51 @@ function MediaNodeView({
   const wikiNode = asWikiNode(node);
   const size = mediaSize(wikiNode);
   const align = mediaAlign(wikiNode);
-  const caption = String(node.attrs.caption ?? "");
 
   return (
     <NodeViewWrapper
       className={cn("wiki-image-edit", selected && "ring-1 ring-ring/60")}
-      data-drag-handle=""
     >
-      <div contentEditable={false}>
-        <div
-          className="wiki-media"
-          data-size={size ?? undefined}
-          data-align={align}
-          data-youtube={youtube ? "" : undefined}
-        >
-          <div className="wiki-media-item">
+      <div
+        className="wiki-media"
+        data-size={size ?? undefined}
+        data-align={align}
+        data-youtube={youtube ? "" : undefined}
+      >
+        <div className="wiki-media-item">
+          {/* 누르기는 마우스·손가락으로 그림을 고르는 지름길일 뿐이다. 키보드는 편집기 안에서 선택을
+              옮겨 고른다(Shift+화살표). */}
+          {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            contentEditable={false}
+            draggable={editor.isEditable}
+            data-drag-handle=""
+            className="wiki-media-grip"
+            onClick={() => {
+              const pos = getPos();
+              if (editor.isEditable && typeof pos === "number") {
+                editor.commands.setNodeSelection(pos);
+              }
+            }}
+          >
             {media}
-            {/* 문서 보기의 캡션과 같은 자리·모양(배경 띠)이다. 편집기에서는 비어 있어도 띠를 보여
-                적을 자리를 알린다. `size={1}`: 입력칸의 기본 폭이 그림 칸을 넓히지 않게 한다. */}
-            {editor.isEditable || caption !== "" ? (
-              <AttrInput
-                size={1}
-                value={caption}
-                placeholder="캡션 (선택)"
-                aria-label="캡션"
-                readOnly={!editor.isEditable}
-                onCommit={(value) => updateAttributes({ caption: value })}
-                className="wiki-media-caption w-full min-w-0 outline-none placeholder:text-muted-foreground/70"
-              />
-            ) : null}
           </div>
+          {/* 문서 보기의 캡션과 같은 자리·모양(배경 띠)이다. 편집기에서는 비어 있어도 띠를 보여 적을
+              자리를 알린다(`is-empty`, `extensions.ts`). */}
+          <NodeViewContent />
         </div>
-        {/* 그림 아래의 고치기 도구. 표 칸에서는 칸 너비를 정하지 않는다(app.css의 `wiki-media-tools`). */}
-        <div className="wiki-media-tools">
-          {children}
-          {editor.isEditable ? (
-            <MediaControls
-              size={size}
-              align={align}
-              allowOriginal={allowOriginal}
-              onChange={updateAttributes}
-            />
-          ) : null}
-        </div>
+      </div>
+      {/* 그림 아래의 고치기 도구. 표 칸에서는 칸 너비를 정하지 않는다(app.css의 `wiki-media-tools`). */}
+      <div contentEditable={false} className="wiki-media-tools">
+        {children}
+        {editor.isEditable ? (
+          <MediaControls
+            size={size}
+            align={align}
+            allowOriginal={allowOriginal}
+            onChange={updateAttributes}
+          />
+        ) : null}
       </div>
     </NodeViewWrapper>
   );

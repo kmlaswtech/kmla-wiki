@@ -33,6 +33,7 @@ import type { EditorRequest } from "./editor-ui";
 import { Divider, MarkTools, Menu, ToolButton } from "./mark-tools";
 import {
   activeCellAttrs,
+  CaptionStyleButton,
   CellStyleButton,
   setCellAttr,
 } from "./style-controls";
@@ -120,6 +121,7 @@ export function Toolbar({
       orderedList: current.isActive(NODE.orderedList),
       blockquote: current.isActive(NODE.blockquote),
       inTable: current.isActive(NODE.table),
+      inCaption: current.isActive(NODE.caption),
       cellVAlign: ((value: unknown) => (isCellVAlign(value) ? value : null))(
         activeCellAttrs(current).verticalAlign,
       ),
@@ -173,9 +175,11 @@ export function Toolbar({
 
       <MarkTools editor={editor} />
 
+      {/* 캡션은 그림 아래 한 줄이라 문단 모양(제목, 목록, 인용, 정렬)을 바꿀 수 없다. */}
       <Menu
         label="제목"
         active={state.heading !== undefined}
+        disabled={state.inCaption}
         icon={<Heading />}
       >
         <DropdownMenuItem onClick={() => chain().setParagraph().run()}>
@@ -202,6 +206,7 @@ export function Toolbar({
       <ToolButton
         label="글머리 기호 목록"
         active={state.bulletList}
+        disabled={state.inCaption}
         onClick={() => chain().toggleBulletList().run()}
       >
         <List />
@@ -209,6 +214,7 @@ export function Toolbar({
       <ToolButton
         label="번호 목록"
         active={state.orderedList}
+        disabled={state.inCaption}
         onClick={() => chain().toggleOrderedList().run()}
       >
         <ListOrdered />
@@ -216,6 +222,7 @@ export function Toolbar({
       <ToolButton
         label="인용"
         active={state.blockquote}
+        disabled={state.inCaption}
         onClick={() => chain().toggleBlockquote().run()}
       >
         <Quote />
@@ -223,6 +230,7 @@ export function Toolbar({
       <Menu
         label="문단 정렬"
         active={state.textAlign !== null}
+        disabled={state.inCaption}
         icon={alignIcon}
       >
         {TEXT_ALIGN_CHOICES.map(({ value, icon, label }) => (
@@ -257,6 +265,7 @@ export function Toolbar({
       </ToolButton>
 
       {state.inTable ? <CellStyleButton editor={editor} /> : null}
+      {state.inCaption ? <CaptionStyleButton editor={editor} /> : null}
       {state.inTable ? (
         <Menu
           label="칸 세로 정렬"
@@ -309,6 +318,7 @@ export function Toolbar({
         <DropdownMenuItem
           onClick={() =>
             chain()
+              .leaveCaption()
               .insertContent({
                 type: NODE.fold,
                 attrs: { title: "" },
@@ -323,11 +333,15 @@ export function Toolbar({
         <DropdownMenuItem onClick={() => request({ kind: "template" })}>
           <Puzzle />틀 삽입
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => chain().toggleCodeBlock().run()}>
+        <DropdownMenuItem
+          onClick={() => chain().leaveCaption().toggleCodeBlock().run()}
+        >
           <Code />
           코드 블록
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => chain().setHorizontalRule().run()}>
+        <DropdownMenuItem
+          onClick={() => chain().leaveCaption().setHorizontalRule().run()}
+        >
           <Minus />
           구분선
         </DropdownMenuItem>

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { doc } from "./doc-builders";
-import { mediaAlign, mediaSize } from "~/features/markup/model/media";
+import { caption, doc, footnote, link, text } from "./doc-builders";
+import {
+  captionText,
+  mediaAlign,
+  mediaSize,
+} from "~/features/markup/model/media";
 import { docToText, visibleTextLength } from "~/features/markup/model/text";
 import {
   formatStart,
@@ -136,9 +140,49 @@ describe("docToText for media", () => {
   it("writes the caption after the layout and counts it as visible text", () => {
     const body = doc({
       type: "image",
-      attrs: { id: IMAGE_ID, alt: "지도", size: "small", caption: "본관 앞" },
+      attrs: { id: IMAGE_ID, alt: "지도", size: "small" },
+      content: caption("본관 앞"),
     });
     expect(docToText(body)).toBe("[이미지 0b9f4c1e: 지도 (작게) — 본관 앞]");
     expect(visibleTextLength(body)).toBe(4);
+  });
+
+  it("writes caption styling, links and footnotes like the body", () => {
+    const body = doc({
+      type: "youtube",
+      attrs: { videoId: ID },
+      content: caption(
+        { type: "text", text: "본관", marks: [{ type: "bold" }] },
+        " ",
+        link("학교"),
+        footnote("출처"),
+      ),
+    });
+    expect(docToText(body)).toBe(`[유튜브 ${ID} — **본관** [[학교]][* 출처]]`);
+  });
+
+  it("writes the caption band background before the caption", () => {
+    const body = doc({
+      type: "image",
+      attrs: { id: IMAGE_ID },
+      content: [
+        {
+          type: "caption",
+          attrs: { background: "red" },
+          content: [text("본관")],
+        },
+      ],
+    });
+    expect(docToText(body)).toBe("[이미지 0b9f4c1e — (배경 빨강) 본관]");
+  });
+
+  it("reads the caption text without footnotes", () => {
+    const node = {
+      type: "image",
+      attrs: { id: IMAGE_ID },
+      content: caption("본관", footnote("출처"), " 앞 "),
+    };
+    expect(captionText(node)).toBe("본관 앞");
+    expect(captionText({ type: "image", attrs: { id: IMAGE_ID } })).toBe("");
   });
 });

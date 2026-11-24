@@ -14,6 +14,7 @@ import {
   MEDIA_ALIGN_LABEL,
   MEDIA_SIZE_LABEL,
   mediaAlign,
+  mediaCaption,
   mediaSize,
 } from "./media";
 import { profileOf } from "./profile";
@@ -63,9 +64,8 @@ function profileToText(profile: readonly WikiNode[]): string {
 export function visibleTextLength(doc: WikiDoc): number {
   let length = 0;
   const count = (node: WikiNode) => {
+    // 이미지·영상의 캡션도 글자 노드라 함께 센다.
     if (node.type === NODE.text) length += (node.text ?? "").trim().length;
-    if (node.type === NODE.image || node.type === NODE.youtube)
-      length += stringAttr(node, "caption").trim().length;
   };
   walk(profileOf(doc) ?? [], count);
   walk(doc.content, count);
@@ -159,7 +159,12 @@ function mediaLayoutText(node: WikiNode): string {
     size ? MEDIA_SIZE_LABEL[size] : null,
     align === "left" ? null : `${MEDIA_ALIGN_LABEL[align]} 정렬`,
   ].filter(Boolean);
-  const caption = stringAttr(node, "caption").trim();
+  // 캡션의 꾸밈·링크·각주도 본문과 같은 표기로 적는다. 띠 배경은 표 칸처럼 앞에 적는다.
+  const captionNode = mediaCaption(node);
+  const text = inlineToText(captionNode?.content ?? []).trim();
+  const background = captionNode ? stringAttr(captionNode, "background") : "";
+  const caption =
+    text && background ? `(배경 ${colorText(background)}) ${text}` : text;
   return (
     (parts.length > 0 ? ` (${parts.join(", ")})` : "") +
     (caption ? ` — ${caption}` : "")

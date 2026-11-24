@@ -60,13 +60,18 @@ export const NODE = {
   template: "template",
   /** 틀 본문 안의 값 자리. `attrs.index`(1부터). */
   templateParam: "templateParam",
-  /** 올린 이미지. `attrs.id`(uuid), `attrs.alt`, `attrs.size`, `attrs.align`(`model/media.ts`). */
+  /**
+   * 올린 이미지. `attrs.id`(uuid), `attrs.alt`, `attrs.size`, `attrs.align`(`model/media.ts`). 내용은
+   * 캡션 노드 하나다.
+   */
   image: "image",
   /**
    * 유튜브 영상. `attrs.videoId`, `attrs.start`(초), `attrs.size`, `attrs.align`
-   * (`model/youtube.ts`, `model/media.ts`).
+   * (`model/youtube.ts`, `model/media.ts`). 내용은 캡션 노드 하나다.
    */
   youtube: "youtube",
+  /** 이미지·영상 아래의 글. 이미지·영상 안에만 있다. 내용은 글자(꾸밈 포함), 줄바꿈, 각주, 값 자리. */
+  caption: "caption",
   /** 각주. 내용은 `content`(글자·줄바꿈·값 자리, 꾸밈 포함). 그릴 때 `attrs.number`가 붙는다. */
   footnote: "footnote",
 } as const;

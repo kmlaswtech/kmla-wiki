@@ -16,8 +16,21 @@ import {
   DOMParser,
   DOMSerializer,
   Fragment,
+  Slice,
   type Node as PMNode,
+  type ResolvedPos,
 } from "@tiptap/pm/model";
+import {
+  Plugin,
+  TextSelection,
+  type EditorState,
+  type Transaction,
+} from "@tiptap/pm/state";
+import {
+  ReplaceAroundStep,
+  ReplaceStep,
+  type Step,
+} from "@tiptap/pm/transform";
 import { StarterKit } from "@tiptap/starter-kit";
 
 import {
@@ -300,8 +313,8 @@ export const TemplateParam = Node.create({
 });
 
 /**
- * 이미지·영상의 크기·정렬·캡션 속성. 문서 보기(`WikiContent`)가 `data-size`·`data-align`과
- * `<figcaption>`으로 남기므로 복사해 붙여넣어도 살아난다. 모르는 값은 버린다.
+ * 이미지·영상의 크기·정렬 속성. 문서 보기(`WikiContent`)가 `data-size`·`data-align`으로 남기므로
+ * 복사해 붙여넣어도 살아난다. 모르는 값은 버린다.
  */
 function mediaAttributes(defaultSize: MediaSize | null) {
   return {
@@ -321,35 +334,228 @@ function mediaAttributes(defaultSize: MediaSize | null) {
       },
       rendered: false,
     },
-    // 그림 아래에 보이는 글. 비어 있으면 보이지 않는다.
-    caption: {
-      default: "",
-      parseHTML: (element: HTMLElement) =>
-        element.getAttribute("data-caption") ??
-        element.querySelector(":scope figcaption")?.textContent?.trim() ??
-        "",
-      rendered: false,
-    },
   };
 }
 
 /**
- * 크기·정렬·캡션을 HTML로 남긴다. 편집기 안에서 잘라내 붙여넣을 때(클립보드 HTML은 `renderHTML`로
+ * 크기·정렬을 HTML로 남긴다. 편집기 안에서 잘라내 붙여넣을 때(클립보드 HTML은 `renderHTML`로
  * 만든다) 고른 값이 사라지지 않게 한다.
  */
 function mediaDataAttributes(attrs: Record<string, unknown>) {
-  return {
-    "data-size": attrs.size,
-    "data-align": attrs.align,
-    "data-caption": attrs.caption || null,
-  };
+  return { "data-size": attrs.size, "data-align": attrs.align };
 }
+
+/**
+ * 붙여넣은 `<figure>`에서 캡션만 내용으로 읽는다. 문서 보기의 상자에는 그림과 다른 글자(불러오는 중
+ * 표시 등)도 있는데, 그것이 캡션에 섞이지 않게 한다. 캡션이 없으면 빈 캡션이 채워진다.
+ */
+function captionElement(element: HTMLElement): HTMLElement {
+  const box = element.ownerDocument.createElement("div");
+  const caption = element.querySelector("figcaption");
+  if (caption) box.append(caption.cloneNode(true));
+  return box;
+}
+
+/**
+ * 캡션 안에 들어갈 수 있는 것: 각주 내용에 각주를 더한 것. 표·이미지 같은 블록은 넣지 않는다.
+ * 각주 내용에는 이미지가 들어가지 않으므로 각주 안에 각주가 생기지 않는다.
+ */
+const CAPTION_CONTENT = `(${NODE.text} | ${NODE.hardBreak} | ${NODE.footnote} | ${NODE.templateParam})*`;
+
+const MEDIA_TYPES: readonly string[] = [NODE.image, NODE.youtube];
+
+/** 위치가 캡션 글자 안인가. */
+function inCaption($pos: ResolvedPos): boolean {
+  return $pos.parent.type.name === NODE.caption;
+}
+
+/** 이 위치를 감싼 이미지·영상의 깊이. 없으면 `null`. */
+function mediaDepth($pos: ResolvedPos): number | null {
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    if (MEDIA_TYPES.includes($pos.node(depth).type.name)) return depth;
+  }
+  return null;
+}
+
+/**
+ * 이미지·영상 안을 고치는 단계가 캡션 글자만 바꾸는가. 캡션 안에서 블록을 넣으면(툴바의 표·이미지
+ * 단추 등) ProseMirror가 이미지를 둘로 갈라 같은 그림이 두 번 생긴다. 그런 단계를 막는다. 그림
+ * 상자 밖에서 시작하거나 끝나는 단계(그림째로 지우기 등)는 막지 않는다.
+ */
+function keepsMediaShape(tr: Transaction): boolean {
+  return tr.steps.every((step, index) =>
+    stepKeepsMediaShape(step, tr.docs[index]!),
+  );
+}
+
+function stepKeepsMediaShape(step: Step, doc: PMNode): boolean {
+  if (!(step instanceof ReplaceStep || step instanceof ReplaceAroundStep)) {
+    return true;
+  }
+  const $from = doc.resolve(step.from);
+  const depth = mediaDepth($from);
+  if (depth === null) return true;
+  const $to = doc.resolve(step.to);
+  if ($to.depth < depth || $to.start(depth) !== $from.start(depth)) {
+    return true;
+  }
+  // 캡션 속성(띠 배경)만 바꾸는 단계(`setNodeMarkup`)는 내용을 그대로 두고 캡션 노드만 바꾼다.
+  if (step instanceof ReplaceAroundStep) return isCaptionMarkup(step);
+  const { slice } = step;
+  return (
+    slice.openStart === 0 &&
+    slice.openEnd === 0 &&
+    slice.content.content.every(
+      (node) => node.isInline || node.type.name === NODE.caption,
+    )
+  );
+}
+
+/** 캡션 노드 하나를 같은 내용의 캡션 노드로 바꾸는 단계인가(속성만 바뀐다). */
+function isCaptionMarkup(step: ReplaceAroundStep): boolean {
+  const { slice } = step;
+  return (
+    step.insert === 1 &&
+    step.gapFrom === step.from + 1 &&
+    step.gapTo === step.to - 1 &&
+    slice.openStart === 0 &&
+    slice.openEnd === 0 &&
+    slice.content.childCount === 1 &&
+    slice.content.firstChild!.type.name === NODE.caption
+  );
+}
+
+/** 캡션에 붙여넣은 여러 문단을 줄바꿈으로 잇고, 캡션에 넣을 수 있는 것만 남긴다. */
+function flattenForCaption(slice: Slice, state: EditorState): Slice | null {
+  const caption = state.schema.nodes[NODE.caption]!;
+  const hardBreak = state.schema.nodes[NODE.hardBreak]!;
+  const allowed = (node: PMNode) =>
+    caption.contentMatch.matchType(node.type) !== null;
+  const pieces: PMNode[] = [];
+  slice.content.descendants((node) => {
+    if (node.isTextblock) {
+      if (pieces.length > 0) pieces.push(hardBreak.create());
+      node.forEach((child) => {
+        if (allowed(child)) pieces.push(child);
+      });
+      return false;
+    }
+    if (node.isInline) {
+      if (allowed(node)) pieces.push(node);
+      return false;
+    }
+    return true;
+  });
+  return pieces.length > 0 ? new Slice(Fragment.from(pieces), 0, 0) : null;
+}
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    mediaCaption: {
+      /**
+       * 커서가 캡션 안에 있으면 그림 바로 아래에 빈 문단을 만들어 옮겨 간다. 캡션 밖이면 아무것도
+       * 하지 않는다. 블록(표, 접기 등)을 넣는 명령 앞에 둔다. 캡션 안에는 블록이 들어가지 않는다.
+       */
+      leaveCaption: () => ReturnType;
+    };
+  }
+}
+
+/**
+ * 이미지·영상 아래의 글. 본문처럼 그 자리에서 고치고, 툴바의 꾸밈·링크·각주가 듣는다. 블록
+ * 무리(`block`)에 넣지 않아 이미지·영상 안에만 있다.
+ */
+export const MediaCaption = Node.create({
+  name: NODE.caption,
+  content: CAPTION_CONTENT,
+  // Enter를 기본 동작(문단 나누기)보다 먼저 받는다.
+  priority: 1000,
+
+  addAttributes() {
+    // 띠 배경. 표 칸 배경과 같은 값·팔레트다. 고르지 않으면 기본 띠 색이다.
+    return { ...cellBackground };
+  },
+
+  parseHTML() {
+    // 이미지·영상 밖의 `<figcaption>`(다른 사이트)은 이 규칙이 맞지 않아 그냥 글자로 읽는다.
+    return [{ tag: "figcaption", context: `${NODE.image}/|${NODE.youtube}/` }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "figcaption",
+      mergeAttributes(HTMLAttributes, { class: "wiki-media-caption" }),
+      0,
+    ];
+  },
+
+  addCommands() {
+    return {
+      leaveCaption:
+        () =>
+        ({ tr, dispatch }) => {
+          const { $from } = tr.selection;
+          if (!inCaption($from)) return true;
+          if (dispatch) {
+            const after = $from.after($from.depth - 1);
+            tr.insert(
+              after,
+              tr.doc.type.schema.nodes[NODE.paragraph]!.create(),
+            );
+            tr.setSelection(TextSelection.create(tr.doc, after + 1));
+            tr.scrollIntoView();
+          }
+          return true;
+        },
+    };
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      // 캡션은 문단 하나다. Enter는 그림 바로 아래에 새 문단을 만들어 옮겨 간다. 캡션 안의
+      // 줄바꿈은 Shift+Enter다.
+      Enter: ({ editor }) =>
+        inCaption(editor.state.selection.$from) &&
+        editor.commands.leaveCaption(),
+      // 캡션 맨 앞의 Backspace는 그림을 고른다. 한 번 더 누르면 그림이 지워진다. 그림은 내용이 있는
+      // 노드라, 이것이 없으면 키보드만으로는 그림을 고를 길이 없다.
+      Backspace: ({ editor }) => {
+        const { selection } = editor.state;
+        const { $from } = selection;
+        if (!selection.empty || !inCaption($from) || $from.parentOffset !== 0) {
+          return false;
+        }
+        return editor.commands.setNodeSelection($from.before($from.depth - 1));
+      },
+    };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        filterTransaction: (tr) => !tr.docChanged || keepsMediaShape(tr),
+        props: {
+          handlePaste: (view, _event, slice) => {
+            const { $from, $to } = view.state.selection;
+            if (!inCaption($from)) return false;
+            if (!$to.sameParent($from)) return false;
+            const flat = flattenForCaption(slice, view.state);
+            if (flat) view.dispatch(view.state.tr.replaceSelection(flat));
+            return true;
+          },
+        },
+      }),
+    ];
+  },
+});
 
 /** 위키에 올린 이미지. 바깥 주소의 이미지는 받지 않는다(붙여넣어도 버린다). */
 export const WikiImage = Node.create({
   name: NODE.image,
   group: "block",
-  atom: true,
+  content: NODE.caption,
+  // 캡션 안의 지우기·합치기가 그림 밖으로 넘어가지 않게 한다.
+  isolating: true,
   selectable: true,
   draggable: true,
 
@@ -372,6 +578,7 @@ export const WikiImage = Node.create({
             ? { id, alt: element.getAttribute("data-alt") ?? "" }
             : false;
         },
+        contentElement: captionElement,
       },
     ];
   },
@@ -384,7 +591,7 @@ export const WikiImage = Node.create({
         "data-alt": node.attrs.alt,
         ...mediaDataAttributes(node.attrs),
       },
-      `[이미지: ${String(node.attrs.alt || node.attrs.id)}]`,
+      0,
     ];
   },
 });
@@ -393,7 +600,8 @@ export const WikiImage = Node.create({
 export const Youtube = Node.create({
   name: NODE.youtube,
   group: "block",
-  atom: true,
+  content: NODE.caption,
+  isolating: true,
   selectable: true,
   draggable: true,
 
@@ -417,6 +625,7 @@ export const Youtube = Node.create({
           );
           return YOUTUBE_ID.test(videoId) ? { videoId, start } : false;
         },
+        contentElement: captionElement,
       },
     ];
   },
@@ -429,7 +638,7 @@ export const Youtube = Node.create({
         "data-start": String(node.attrs.start ?? 0),
         ...mediaDataAttributes(node.attrs),
       },
-      `[유튜브: ${String(node.attrs.videoId)}]`,
+      0,
     ];
   },
 });
@@ -534,7 +743,7 @@ export const TextAlign = Extension.create({
   },
 });
 
-/** 셀 배경. */
+/** 셀 배경. 이미지·영상 캡션의 띠 배경도 같은 정의를 쓴다. */
 const cellBackground = {
   background: {
     default: null,
@@ -586,7 +795,7 @@ function cellAttributes(parent: Record<string, unknown> | undefined) {
 }
 
 /**
- * 문단·셀 꾸밈 속성의 이름. 기본값 `null`은 "고르지 않음"이라 저장할 때 뺀다(`doc-io.ts`).
+ * 문단·셀·캡션 꾸밈 속성의 이름. 기본값 `null`은 "고르지 않음"이라 저장할 때 뺀다(`doc-io.ts`).
  * 꾸밈 속성을 더하면 그 정의를 여기에도 넣는다.
  */
 export const STYLE_ATTRS: readonly string[] = Object.keys({
@@ -674,6 +883,7 @@ export function schemaExtensions(): AnyExtension[] {
     TemplateParam,
     WikiImage,
     Youtube,
+    MediaCaption,
   ];
 }
 

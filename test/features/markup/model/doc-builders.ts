@@ -31,6 +31,18 @@ export const footnote = (note: string | WikiNode[]): WikiNode => ({
   content: typeof note === "string" ? [text(note)] : note,
 });
 
+/** 이미지·영상의 캡션 노드(`content`에 넣는다). 내용이 없으면 빈 캡션. */
+export const caption = (...content: (string | WikiNode)[]): WikiNode[] => [
+  content.length > 0
+    ? {
+        type: "caption",
+        content: content.map((item) =>
+          typeof item === "string" ? text(item) : item,
+        ),
+      }
+    : { type: "caption" },
+];
+
 export const template = (name: string, args: string[] = []): WikiNode => ({
   type: "template",
   attrs: { name, args },
