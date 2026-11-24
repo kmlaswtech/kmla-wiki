@@ -147,6 +147,7 @@ CI·배포 워크플로와 브랜치 ruleset은 `docs/architecture/delivery.md`�
   GitHub Actions에서만 한다.
 - PR 제목은 영어로 짧게 쓴다. squash 커밋 제목이 된다(예: `Fold sections on tap`). PR 본문은
   한국어로 쓴다.
+- 열린 PR에 커밋을 더 push하면 PR 본문이 아직 맞는지 확인하고, 틀리면 고친다.
 - 원격 Auth 설정과 Edge Function 비밀 값은 배포되지 않는다. 각 프로젝트 대시보드에서 손으로
   맞춘다.
 - 공개 리포다. 워크플로에 비밀 값을 쓰는 job을 더할 때는 fork PR에서 실행되지 않게 한다

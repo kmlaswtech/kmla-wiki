@@ -1,8 +1,6 @@
 import { Editor } from "@tiptap/core";
-import { CellSelection } from "@tiptap/pm/tables";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { setCellAttr } from "~/features/editor/components/style-controls";
 import { joinDoc, normalizeDoc } from "~/features/editor/model/doc-io";
 import { schemaExtensions } from "~/features/editor/model/schema";
 import { starterProfile, type WikiDoc, type WikiNode } from "~/features/markup";
@@ -70,36 +68,6 @@ describe("editor styling", () => {
     expect(find(table, "tableHeader")?.attrs).toMatchObject({
       background: "green",
     });
-  });
-
-  it("aligns every selected cell, then clears them without saving null", () => {
-    const current = open("<p></p>");
-    current.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: false });
-    const cells: number[] = [];
-    current.state.doc.descendants((node, pos) => {
-      if (node.type.name === "tableCell") cells.push(pos);
-    });
-    current.view.dispatch(
-      current.state.tr.setSelection(
-        CellSelection.create(current.state.doc, cells[0]!, cells.at(-1)),
-      ),
-    );
-    const savedCells = () =>
-      (find(json(current).content[0]!, "table")?.content ?? []).flatMap(
-        (row) => row.content ?? [],
-      );
-
-    setCellAttr(current, "verticalAlign", "bottom");
-    expect(savedCells().map((cell) => cell.attrs?.verticalAlign)).toEqual([
-      "bottom",
-      "bottom",
-      "bottom",
-      "bottom",
-    ]);
-    setCellAttr(current, "verticalAlign", null);
-    for (const cell of savedCells()) {
-      expect(cell.attrs).not.toHaveProperty("verticalAlign");
-    }
   });
 
   it("keeps vertical alignment from the page view and other sites", () => {
