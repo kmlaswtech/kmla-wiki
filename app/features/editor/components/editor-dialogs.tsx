@@ -1,8 +1,13 @@
-import type { Editor } from "@tiptap/core";
+import { Extension, type Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { Link2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { footnoteExtensions } from "../model/schema";
 import type { EditorRequest } from "./editor-ui";
+import { Divider, MarkTools, ToolButton } from "./mark-tools";
+import { createBox } from "./wiki-editor";
 import { TitleInput } from "./title-input";
 import {
   baseName,
@@ -408,7 +413,43 @@ function TemplateForm({
   );
 }
 
-/** 각주 삽입·편집. 출처 주소를 적으면 문서에서 누를 수 있는 링크가 된다. */
+/** 각주 편집기의 키. Enter는 줄바꿈이다(각주는 문단 하나다). */
+const FootnoteKeys = Extension.create<{ link: () => void }>({
+  name: "footnoteKeys",
+
+  addOptions() {
+    return { link: () => undefined };
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      Enter: ({ editor }) => editor.commands.setHardBreak(),
+      "Mod-k": () => {
+        this.options.link();
+        return true;
+      },
+    };
+  },
+});
+
+/** 보이는 내용이 없는가(글자가 비었거나 공백뿐이고, 값 자리도 없다). */
+function isBlankNote(doc: PMNode): boolean {
+  let blank = true;
+  doc.descendants((node) => {
+    if (node.type.name === NODE.templateParam || node.text?.trim()) {
+      blank = false;
+    }
+    return blank;
+  });
+  return blank;
+}
+
+/**
+ * 각주 삽입·편집. 내용은 작은 편집기에서 꾸밈과 링크까지 넣을 수 있다.
+ *
+ * 링크 넣기는 대화상자를 바꾸지 않고 이 안에서 화면만 바꾼다. 대화상자는 하나만 열리므로
+ * `request({ kind: "link" })`로 열면 쓰던 각주가 사라진다. 각주 편집기는 숨기기만 하고 내리지 않는다.
+ */
 function FootnoteForm({
   editor,
   pos,
@@ -419,54 +460,119 @@ function FootnoteForm({
   onDone: () => void;
 }) {
   const current = nodeTargetAt(editor, pos, NODE.footnote);
-  const [note, setNote] = useState(
-    current ? String(current.node.attrs.note ?? "") : "",
-  );
+  const [view, setView] = useState<"note" | "link">("note");
+
+  // 편집기의 키가 부를 함수. 편집기는 한 번만 만들므로 상자에 최신 함수를 두고, 키를 누를 때(렌더
+  // 밖에서) 읽는다.
+  const [keys] = useState(() => createBox({ link: () => {} }));
+  const [extensions] = useState(() => [
+    ...footnoteExtensions(),
+    FootnoteKeys.configure({
+      link: () => keys.current.link(),
+    }),
+  ]);
+  const note = useEditor({
+    extensions,
+    content: {
+      type: "doc",
+      content: [
+        {
+          type: NODE.paragraph,
+          content: current?.node.content.toJSON() ?? [],
+        },
+      ],
+    },
+    immediatelyRender: true,
+    shouldRerenderOnTransaction: false,
+    autofocus: "end",
+    editorProps: {
+      attributes: {
+        "aria-label": "각주 내용",
+        class: "wiki-content wiki-footnote min-h-16 px-3 py-2 outline-none",
+      },
+    },
+  });
+  const blank = useEditorState({
+    editor: note,
+    selector: ({ editor: inner }) => !inner || isBlankNote(inner.state.doc),
+  });
 
   const submit = () => {
-    const text = note.trim();
-    if (!text) return;
-    upsertNode(editor, current, NODE.footnote, { note: text });
+    if (!note || isBlankNote(note.state.doc)) return;
+    // 두 편집기는 꾸밈 정의가 같으므로 JSON 그대로 옮긴다.
+    const content = note.state.doc.firstChild?.content.toJSON() ?? [];
+    // 고치던 각주가 있으면 그 자리를 바꾸고, 없으면 커서 자리에 넣는다.
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(
+        current
+          ? { from: current.pos, to: current.pos + current.node.nodeSize }
+          : editor.state.selection,
+        { type: NODE.footnote, attrs: current?.node.attrs, content },
+      )
+      .run();
     onDone();
   };
+  const openLink = () => setView("link");
+  useEffect(() => {
+    keys.update({ link: openLink });
+  });
 
   return (
-    <DialogForm
-      title={current ? "각주 편집" : "각주 삽입"}
-      onSubmit={submit}
-      footer={
-        <>
-          {current ? (
-            <RemoveNodeButton editor={editor} target={current} onDone={onDone}>
-              각주 삭제
-            </RemoveNodeButton>
+    <>
+      {/* `hidden`은 화면에서도, 화면 읽기 프로그램에서도 숨긴다(제목이 둘로 읽히지 않는다). */}
+      <div className="contents" hidden={view !== "note"}>
+        <DialogForm
+          title={current ? "각주 편집" : "각주 삽입"}
+          onSubmit={submit}
+          footer={
+            <>
+              {current ? (
+                <RemoveNodeButton
+                  editor={editor}
+                  target={current}
+                  onDone={onDone}
+                >
+                  각주 삭제
+                </RemoveNodeButton>
+              ) : null}
+              <Button type="submit" disabled={blank}>
+                {current ? "저장" : "삽입"}
+              </Button>
+            </>
+          }
+        >
+          {note ? (
+            <div className="grid gap-1.5">
+              <div className="overflow-hidden rounded-md border focus-within:ring-2 focus-within:ring-ring/50">
+                <div
+                  role="toolbar"
+                  aria-label="각주 꾸밈"
+                  className="flex flex-wrap items-center gap-0.5 border-b bg-muted/90 p-1"
+                >
+                  <MarkTools editor={note} />
+                  <Divider />
+                  <ToolButton label="링크" onClick={openLink}>
+                    <Link2 />
+                  </ToolButton>
+                </div>
+                <EditorContent editor={note} />
+              </div>
+            </div>
           ) : null}
-          <Button type="submit" disabled={note.trim() === ""}>
-            {current ? "저장" : "삽입"}
-          </Button>
-        </>
-      }
-    >
-      <div className="grid gap-1.5">
-        <Label htmlFor="footnote-note">각주 내용</Label>
-        <Textarea
-          id="footnote-note"
-          value={note}
-          rows={3}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- 대화상자를 열자마자 칠 수 있게 한다.
-          autoFocus
-          placeholder="예: 2026년 기준. https://…"
-          onChange={(event) => setNote(event.target.value)}
-          onKeyDown={(event) => {
-            // 여러 줄은 받지 않는다. Enter는 넣기다.
-            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              submit();
-            }
+        </DialogForm>
+      </div>
+      {view === "link" && note ? (
+        <LinkForm
+          editor={note}
+          onDone={() => {
+            setView("note");
+            requestAnimationFrame(() => note.commands.focus());
           }}
         />
-      </div>
-    </DialogForm>
+      ) : null}
+    </>
   );
 }
 

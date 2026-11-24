@@ -283,6 +283,11 @@
   .wiki-content.wiki-footnote p {
     @apply my-0;
   }
+  /* 각주에는 출처 주소가 자주 들어간다. 긴 주소는 아무 곳에서나 줄을 바꾼다. */
+  .wiki-content.wiki-footnote a,
+  .wiki-content section[data-footnotes] a {
+    overflow-wrap: anywhere;
+  }
   .wiki-content p,
   .wiki-content ul,
   .wiki-content ol,

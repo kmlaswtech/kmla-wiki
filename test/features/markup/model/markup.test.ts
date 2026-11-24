@@ -113,10 +113,36 @@ describe("parseWiki", () => {
       }),
     );
     expect(footnotes).toEqual([
-      { number: 1, note: "첫째" },
-      { number: 2, note: "둘째" },
+      { number: 1, content: [text("첫째")] },
+      { number: 2, content: [text("둘째")] },
     ]);
     expect(blocks[0]!.node.content![1]!.attrs).toMatchObject({ number: 1 });
+  });
+
+  it("fills template values inside a footnote and keeps its marks", () => {
+    const templates = new Map([
+      [
+        "틀:출처",
+        doc(para(text("본문"), footnote([text("출처: "), param(1)]))),
+      ],
+    ]);
+    const { footnotes } = parseWiki(doc(template("출처", ["학사 규정"])), {
+      templates,
+    });
+    expect(footnotes).toEqual([
+      { number: 1, content: [text("출처: "), text("학사 규정")] },
+    ]);
+  });
+
+  it("leaves footnote content out of the heading text", () => {
+    const { headings } = parseWiki(
+      doc({
+        type: "heading",
+        attrs: { level: 2 },
+        content: [text("가"), footnote([link("나")])],
+      }),
+    );
+    expect(headings[0]!.text).toBe("가");
   });
 
   it("reads categories and a redirect from the document attributes", () => {

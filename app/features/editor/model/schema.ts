@@ -12,6 +12,12 @@ import {
   TableHeader,
   TableRow,
 } from "@tiptap/extension-table";
+import {
+  DOMParser,
+  DOMSerializer,
+  Fragment,
+  type Node as PMNode,
+} from "@tiptap/pm/model";
 import { StarterKit } from "@tiptap/starter-kit";
 
 import {
@@ -93,40 +99,77 @@ export const WikiLink = Mark.create({
   },
 });
 
-/** 각주. 내용은 글자 하나(`note`)이고 본문에는 번호만 보인다. */
+/**
+ * 각주 안에 들어갈 수 있는 것. 글자(모든 꾸밈), 줄바꿈, 틀 문서의 값 자리다. 블록과 각주 안의 각주는
+ * 넣지 않는다. 각주는 본문의 `[n]` 팝오버와 문서 아래 목록 한 줄로 보이기 때문이다.
+ */
+export const FOOTNOTE_CONTENT = `(${NODE.text} | ${NODE.hardBreak} | ${NODE.templateParam})*`;
+
+/** 각주 내용의 글자. 줄바꿈은 띄어쓰기로, 값 자리는 `{{{n}}}`로 적는다(툴팁, 복사한 글자). */
+export function footnoteText(node: PMNode): string {
+  return node.textBetween(0, node.content.size, " ", (leaf) =>
+    leaf.type.name === NODE.templateParam
+      ? `{{{${String(leaf.attrs.index ?? 1)}}}}`
+      : " ",
+  );
+}
+
+/**
+ * 각주. 내용은 노드 내용(`content`)이고 본문에는 번호만 보인다.
+ *
+ * `atom`이라 본문 안에서 커서가 들어가지 않는다. 내용은 대화상자의 작은 편집기에서 고친다.
+ */
 export const Footnote = Node.create({
   name: NODE.footnote,
   group: "inline",
   inline: true,
   atom: true,
   selectable: true,
-
-  addAttributes() {
-    return {
-      note: {
-        default: "",
-        parseHTML: (element) => element.getAttribute("data-note") ?? "",
-        renderHTML: (attributes) => ({ "data-note": attributes.note }),
-      },
-    };
-  },
+  content: FOOTNOTE_CONTENT,
 
   parseHTML() {
-    return [{ tag: "sup[data-footnote]" }];
+    return [
+      {
+        tag: "sup[data-footnote]",
+        // 내용은 `data-footnote-content`의 JSON에서 되살린다. 이 값은 HTML 규칙을 거치지 않으므로,
+        // 한 번 HTML로 그렸다가 다시 읽어 다른 붙여넣기와 같은 검사(주소, 팔레트, 글자 크기)를 받게
+        // 한다. 각주에 넣을 수 없는 블록은 이때 풀린다.
+        getContent: (element, schema) => {
+          if (!(element instanceof HTMLElement)) return Fragment.empty;
+          const raw = element.getAttribute("data-footnote-content");
+          if (!raw) return Fragment.empty;
+          try {
+            const html = DOMSerializer.fromSchema(schema).serializeFragment(
+              Fragment.fromJSON(schema, JSON.parse(raw)),
+              { document: element.ownerDocument },
+            );
+            const holder = element.ownerDocument.createElement("div");
+            holder.append(html);
+            return DOMParser.fromSchema(schema).parse(holder, {
+              topNode: schema.nodes[NODE.footnote]!.create(),
+            }).content;
+          } catch {
+            return Fragment.empty;
+          }
+        },
+      },
+    ];
   },
 
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ node, HTMLAttributes }) {
+    // 내용 자리(0)를 두지 않는다. 복사할 때 내용은 속성에 실려 간다.
     return [
       "sup",
       mergeAttributes(HTMLAttributes, {
         "data-footnote": "",
+        "data-footnote-content": JSON.stringify(node.content.toJSON() ?? []),
         class: "wiki-footnote-ref",
       }),
     ];
   },
 
   renderText({ node }) {
-    return `[* ${String(node.attrs.note ?? "")}]`;
+    return `[* ${footnoteText(node)}]`;
   },
 });
 
@@ -564,6 +607,49 @@ export const WikiTableHeader = TableHeader.extend({
   },
 });
 
+/** 바깥 링크. 본문 편집기와 각주 편집기가 같이 쓴다. */
+const LINK_OPTIONS = {
+  openOnClick: false,
+  autolink: true,
+  linkOnPaste: true,
+  defaultProtocol: "https",
+  isAllowedUri: (url: string) => SAFE_HREF.test(url),
+  HTMLAttributes: {
+    target: "_blank",
+    rel: "noopener noreferrer nofollow",
+    class: null,
+  },
+};
+
+/**
+ * 각주 편집기의 스키마. 문서는 문단 하나이고, 그 문단의 내용이 각주 내용이 된다.
+ *
+ * 꾸밈(mark)은 본문 편집기와 같은 정의를 쓴다. 그래서 두 편집기 사이에서 내용을 옮길 때 바꿀 것이
+ * 없다. 본문의 꾸밈을 더하면 여기에도 더한다.
+ */
+export function footnoteExtensions(): AnyExtension[] {
+  return [
+    StarterKit.configure({
+      document: false,
+      heading: false,
+      blockquote: false,
+      bulletList: false,
+      orderedList: false,
+      listItem: false,
+      listKeymap: false,
+      codeBlock: false,
+      horizontalRule: false,
+      trailingNode: false,
+      link: LINK_OPTIONS,
+    }),
+    Node.create({ name: "doc", topNode: true, content: NODE.paragraph }),
+    TextColor,
+    TextSize,
+    WikiLink,
+    TemplateParam,
+  ];
+}
+
 /**
  * 스키마를 이루는 확장 전부. 꾸밈 단추로 고를 수 있는 것만 넣는다. 여기에 없는 꾸밈(글꼴, 줄 간격
  * 등)과 팔레트·검사를 거치지 않은 값은 붙여넣어도 사라진다.
@@ -572,18 +658,7 @@ export function schemaExtensions(): AnyExtension[] {
   return [
     StarterKit.configure({
       heading: { levels: [...HEADING_LEVELS] },
-      link: {
-        openOnClick: false,
-        autolink: true,
-        linkOnPaste: true,
-        defaultProtocol: "https",
-        isAllowedUri: (url) => SAFE_HREF.test(url),
-        HTMLAttributes: {
-          target: "_blank",
-          rel: "noopener noreferrer nofollow",
-          class: null,
-        },
-      },
+      link: LINK_OPTIONS,
     }),
     Table.configure({ resizable: false }),
     TableRow,

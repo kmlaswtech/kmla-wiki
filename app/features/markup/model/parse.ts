@@ -34,7 +34,8 @@ export interface HeadingInfo {
 export interface Footnote {
   /** 본문에 붙는 번호(1부터). */
   number: number;
-  note: string;
+  /** 각주 내용(인라인 노드). 틀 값 자리는 이미 채웠다. */
+  content: WikiNode[];
 }
 
 /** 화면에 그릴 문단 하나. 맨 바깥 블록마다 하나다. */
@@ -148,10 +149,13 @@ function prepare(
   values?: readonly string[],
 ): WikiNode {
   if (node.type === NODE.footnote) {
+    // 각주 안에는 각주가 없으므로 안을 채운 뒤에 번호를 받아도 순서가 같다.
+    const content = prepareContent(node.content ?? [], context, stack, values);
     const number = context.footnotes.length + 1;
-    context.footnotes.push({ number, note: stringAttr(node, "note") });
-    return { ...node, attrs: { ...node.attrs, number } };
+    context.footnotes.push({ number, content });
+    return { ...node, attrs: { ...node.attrs, number }, content };
   }
+
   if (node.type === NODE.templateParam && values) {
     const index = numberAttr(node, "index") ?? 1;
     // 틀 작성자가 그 자리에 건 꾸밈(굵게, 링크 등)은 값에도 그대로 건다.
@@ -162,9 +166,20 @@ function prepare(
     };
   }
   if (!node.content) return node;
+  return {
+    ...node,
+    content: prepareContent(node.content, context, stack, values),
+  };
+}
 
+function prepareContent(
+  nodes: readonly WikiNode[],
+  context: Context,
+  stack: readonly string[],
+  values?: readonly string[],
+): WikiNode[] {
   const content: WikiNode[] = [];
-  for (const child of node.content) {
+  for (const child of nodes) {
     if (child.type === NODE.template) {
       content.push(...expandTemplate(child, context, stack, values));
     } else {
@@ -174,7 +189,7 @@ function prepare(
       content.push(prepared);
     }
   }
-  return { ...node, content };
+  return content;
 }
 
 /**

@@ -1,0 +1,83 @@
+import { DOMParser } from "@tiptap/pm/model";
+import { render } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { describe, expect, it } from "vitest";
+
+import {
+  doc,
+  footnote,
+  link,
+  para,
+  text,
+} from "../../markup/model/doc-builders";
+import { footnoteText, wikiSchema } from "~/features/editor/model/schema";
+import { WikiContent } from "~/features/markup";
+import { parseWiki } from "~/features/markup/model/parse";
+
+describe("Footnote", () => {
+  it("restores the content when a footnote is copied from the page view", () => {
+    const content = [
+      text("출처: "),
+      {
+        type: "text",
+        text: "규정",
+        marks: [{ type: "bold" }],
+      },
+      text(" "),
+      link("학사 규정"),
+    ];
+    const { container } = render(
+      <MemoryRouter>
+        <WikiContent
+          document={parseWiki(doc(para(text("본문"), footnote(content))))}
+          existing={new Set()}
+        />
+      </MemoryRouter>,
+    );
+    const paragraph = container.querySelector("p")!;
+
+    const pasted = DOMParser.fromSchema(wikiSchema()).parse(paragraph);
+    const note = pasted.firstChild!.child(1);
+    expect(note.type.name).toBe("footnote");
+    expect(note.content.toJSON()).toEqual(content);
+  });
+
+  it("drops unsafe marks and block nodes from pasted footnote content", () => {
+    const sup = document.createElement("sup");
+    sup.setAttribute("data-footnote", "");
+    sup.setAttribute(
+      "data-footnote-content",
+      JSON.stringify([
+        {
+          type: "text",
+          text: "x",
+          marks: [
+            { type: "link", attrs: { href: "javascript:alert(1)" } },
+            { type: "textSize", attrs: { size: 99 } },
+            { type: "bold" },
+          ],
+        },
+        { type: "paragraph", content: [{ type: "text", text: "블록" }] },
+      ]),
+    );
+    const holder = document.createElement("p");
+    holder.append(sup);
+
+    const pasted = DOMParser.fromSchema(wikiSchema()).parse(holder);
+    // 꾸밈은 안전한 것만 남고, 블록은 풀려 글자만 남는다.
+    expect(pasted.firstChild!.firstChild!.content.toJSON()).toEqual([
+      { type: "text", text: "x", marks: [{ type: "bold" }] },
+      { type: "text", text: "블록" },
+    ]);
+  });
+
+  it("joins lines with a space in the footnote text", () => {
+    const schema = wikiSchema();
+    const note = schema.nodes.footnote!.create(null, [
+      schema.text("A"),
+      schema.nodes.hardBreak!.create(),
+      schema.text("B"),
+    ]);
+    expect(footnoteText(note)).toBe("A B");
+  });
+});

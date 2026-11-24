@@ -67,7 +67,7 @@ export const NODE = {
    * (`model/youtube.ts`, `model/media.ts`).
    */
   youtube: "youtube",
-  /** 각주. `attrs.note`(내용, 글자). */
+  /** 각주. 내용은 `content`(글자·줄바꿈·값 자리, 꾸밈 포함). 그릴 때 `attrs.number`가 붙는다. */
   footnote: "footnote",
 } as const;
 
@@ -148,6 +148,8 @@ export function stringListAttr(node: WikiNode, name: string): string[] {
 export function nodeText(node: WikiNode): string {
   if (node.type === NODE.text) return node.text ?? "";
   if (node.type === NODE.hardBreak) return " ";
+  // 각주 내용은 본문에 보이지 않는다(제목 글자, 문단 제목에 섞이지 않게 한다).
+  if (node.type === NODE.footnote) return "";
   return (node.content ?? []).map(nodeText).join("");
 }
 

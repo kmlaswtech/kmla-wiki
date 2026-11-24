@@ -116,7 +116,19 @@ describe("WikiContent", () => {
     const { container } = show(
       doc(
         heading(2, "가"),
-        para(text("본문"), footnote("출처 https://kmla.online")),
+        para(
+          text("본문"),
+          footnote([
+            text("출처 "),
+            {
+              type: "text",
+              text: "학교",
+              marks: [{ type: "link", attrs: { href: "https://kmla.online" } }],
+            },
+            text(", "),
+            link("학사 규정"),
+          ]),
+        ),
       ),
       new Set(),
       true,
@@ -125,10 +137,14 @@ describe("WikiContent", () => {
       "가",
     );
     const notes = container.querySelector("section[data-footnotes]");
-    expect(notes).toHaveTextContent("출처");
+    expect(notes).toHaveTextContent("출처 학교, 학사 규정");
     expect(
       notes?.querySelector('a[href="https://kmla.online"]'),
     ).not.toBeNull();
+    // 각주 안의 위키 링크도 문서 링크로 그린다.
+    expect(
+      [...(notes?.querySelectorAll("a") ?? [])].map((a) => a.textContent),
+    ).toContain("학사 규정");
   });
 
   it("leaves out the footnote list and ids when embedded in another view", () => {

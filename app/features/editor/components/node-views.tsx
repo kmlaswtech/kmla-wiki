@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { footnoteText } from "../model/schema";
 import { useEditorUi } from "./editor-ui";
 import { WikiImage } from "~/features/images";
 import {
@@ -455,7 +456,7 @@ export function FootnoteView({
   editor,
 }: ReactNodeViewProps) {
   const { request } = useEditorUi();
-  const note = String(node.attrs.note ?? "");
+  const note = footnoteText(node);
   return (
     <NodeViewWrapper
       as="sup"

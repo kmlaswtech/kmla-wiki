@@ -25,9 +25,10 @@ export const heading = (level: number, value: string): WikiNode => ({
   content: [text(value)],
 });
 
-export const footnote = (note: string): WikiNode => ({
+/** 각주. 글자를 주면 글자 노드 하나가 내용이 된다. */
+export const footnote = (note: string | WikiNode[]): WikiNode => ({
   type: "footnote",
-  attrs: { note },
+  content: typeof note === "string" ? [text(note)] : note,
 });
 
 export const template = (name: string, args: string[] = []): WikiNode => ({

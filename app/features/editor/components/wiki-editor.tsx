@@ -20,7 +20,10 @@ function imageFilesOf(data: DataTransfer | null): File[] {
 }
 
 /** 바뀌는 값을 담아 두는 상자. 편집기가 렌더 밖에서(이벤트 때) 최신 값을 읽는다. */
-function createBox<T>(initial: T): { current: T; update: (next: T) => void } {
+export function createBox<T>(initial: T): {
+  current: T;
+  update: (next: T) => void;
+} {
   const box = {
     current: initial,
     update(next: T) {
