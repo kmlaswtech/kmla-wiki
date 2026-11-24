@@ -463,32 +463,30 @@ export const TextSize = Mark.create({
 });
 
 /** 문단·제목 정렬(가운데, 오른쪽). 왼쪽은 값을 두지 않는다(`null`). */
+const paragraphAlign = {
+  textAlign: {
+    default: null,
+    parseHTML: (element: HTMLElement) => {
+      const value =
+        element.getAttribute("data-text-align") ?? element.style.textAlign;
+      return isTextAlign(value) ? value : null;
+    },
+    renderHTML: (attributes: Record<string, unknown>) =>
+      isTextAlign(attributes.textAlign)
+        ? {
+            "data-text-align": attributes.textAlign,
+            style: `text-align: ${attributes.textAlign}`,
+          }
+        : {},
+  },
+};
+
 export const TextAlign = Extension.create({
   name: "wikiTextAlign",
 
   addGlobalAttributes() {
     return [
-      {
-        types: [NODE.paragraph, NODE.heading],
-        attributes: {
-          textAlign: {
-            default: null,
-            parseHTML: (element) => {
-              const value =
-                element.getAttribute("data-text-align") ??
-                element.style.textAlign;
-              return isTextAlign(value) ? value : null;
-            },
-            renderHTML: (attributes) =>
-              isTextAlign(attributes.textAlign)
-                ? {
-                    "data-text-align": attributes.textAlign,
-                    style: `text-align: ${attributes.textAlign}`,
-                  }
-                : {},
-          },
-        },
-      },
+      { types: [NODE.paragraph, NODE.heading], attributes: paragraphAlign },
     ];
   },
 });
@@ -543,6 +541,16 @@ function cellAttributes(parent: Record<string, unknown> | undefined) {
   const { align: _align, ...rest } = parent ?? {};
   return { ...rest, ...cellBackground, ...cellVerticalAlign };
 }
+
+/**
+ * 문단·셀 꾸밈 속성의 이름. 기본값 `null`은 "고르지 않음"이라 저장할 때 뺀다(`doc-io.ts`).
+ * 꾸밈 속성을 더하면 그 정의를 여기에도 넣는다.
+ */
+export const STYLE_ATTRS: readonly string[] = Object.keys({
+  ...paragraphAlign,
+  ...cellBackground,
+  ...cellVerticalAlign,
+});
 
 export const WikiTableCell = TableCell.extend({
   addAttributes() {
