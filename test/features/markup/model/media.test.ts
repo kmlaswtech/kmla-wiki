@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { caption, doc, footnote, link } from "./doc-builders";
+import { caption, doc, footnote, link, text } from "./doc-builders";
 import {
   captionText,
   mediaAlign,
@@ -159,6 +159,21 @@ describe("docToText for media", () => {
       ),
     });
     expect(docToText(body)).toBe(`[유튜브 ${ID} — **본관** [[학교]][* 출처]]`);
+  });
+
+  it("writes the caption band background before the caption", () => {
+    const body = doc({
+      type: "image",
+      attrs: { id: IMAGE_ID },
+      content: [
+        {
+          type: "caption",
+          attrs: { background: "red" },
+          content: [text("본관")],
+        },
+      ],
+    });
+    expect(docToText(body)).toBe("[이미지 0b9f4c1e — (배경 빨강) 본관]");
   });
 
   it("reads the caption text without footnotes", () => {

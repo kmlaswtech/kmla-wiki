@@ -33,6 +33,7 @@ import type { EditorRequest } from "./editor-ui";
 import { Divider, MarkTools, Menu, ToolButton } from "./mark-tools";
 import {
   activeCellAttrs,
+  CaptionStyleButton,
   CellStyleButton,
   setCellAttr,
 } from "./style-controls";
@@ -120,6 +121,7 @@ export function Toolbar({
       orderedList: current.isActive(NODE.orderedList),
       blockquote: current.isActive(NODE.blockquote),
       inTable: current.isActive(NODE.table),
+      inCaption: current.isActive(NODE.caption),
       cellVAlign: ((value: unknown) => (isCellVAlign(value) ? value : null))(
         activeCellAttrs(current).verticalAlign,
       ),
@@ -257,6 +259,7 @@ export function Toolbar({
       </ToolButton>
 
       {state.inTable ? <CellStyleButton editor={editor} /> : null}
+      {state.inCaption ? <CaptionStyleButton editor={editor} /> : null}
       {state.inTable ? (
         <Menu
           label="칸 세로 정렬"

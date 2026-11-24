@@ -576,11 +576,11 @@
     font-size: 2em;
     line-height: 1.4;
   }
-  .wiki-content :is(td, th)[data-bg] {
+  .wiki-content :is(td, th, .wiki-media-caption)[data-bg] {
     background-color: var(--wiki-bg);
     color: var(--wiki-on);
   }
-  .dark .wiki-content :is(td, th)[data-bg] {
+  .dark .wiki-content :is(td, th, .wiki-media-caption)[data-bg] {
     background-color: var(--wiki-bg-dark);
     color: var(--wiki-on-dark);
   }

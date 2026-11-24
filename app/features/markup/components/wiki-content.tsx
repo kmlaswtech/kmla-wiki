@@ -506,7 +506,13 @@ function MediaFigure({
   children: ReactNode;
   [dataAttribute: `data-${string}`]: string | number;
 }) {
-  const caption = mediaCaption(node)?.content ?? [];
+  const captionNode = mediaCaption(node);
+  const caption = captionNode?.content ?? [];
+  // 띠 배경. 표 칸과 같은 값·팔레트다(`data-bg`는 붙여넣을 때 되살리는 데 쓴다).
+  const background = captionNode
+    ? parseBackground(captionNode.attrs?.background)
+    : null;
+  const fill = background ? backgroundVars(background) : null;
   return (
     <figure
       className="wiki-media"
@@ -517,7 +523,12 @@ function MediaFigure({
       <div className="wiki-media-item">
         {children}
         {caption.some(isVisibleInline) ? (
-          <figcaption className="wiki-media-caption">
+          <figcaption
+            className="wiki-media-caption"
+            data-bg={fill ? stringAttr(captionNode!, "background") : undefined}
+            data-bg-strong={fill?.strong ? "" : undefined}
+            style={fill?.vars}
+          >
             {renderInline(caption, context)}
           </figcaption>
         ) : null}

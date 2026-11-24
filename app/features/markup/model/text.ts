@@ -159,8 +159,12 @@ function mediaLayoutText(node: WikiNode): string {
     size ? MEDIA_SIZE_LABEL[size] : null,
     align === "left" ? null : `${MEDIA_ALIGN_LABEL[align]} 정렬`,
   ].filter(Boolean);
-  // 캡션의 꾸밈·링크·각주도 본문과 같은 표기로 적는다.
-  const caption = inlineToText(mediaCaption(node)?.content ?? []).trim();
+  // 캡션의 꾸밈·링크·각주도 본문과 같은 표기로 적는다. 띠 배경은 표 칸처럼 앞에 적는다.
+  const captionNode = mediaCaption(node);
+  const text = inlineToText(captionNode?.content ?? []).trim();
+  const background = captionNode ? stringAttr(captionNode, "background") : "";
+  const caption =
+    text && background ? `(배경 ${colorText(background)}) ${text}` : text;
   return (
     (parts.length > 0 ? ` (${parts.join(", ")})` : "") +
     (caption ? ` — ${caption}` : "")

@@ -386,7 +386,8 @@ export function keepsMediaShape(tr: Transaction): boolean {
     if ($to.depth < depth || $to.start(depth) !== $from.start(depth)) {
       return true;
     }
-    if (step instanceof ReplaceAroundStep) return false;
+    // 캡션 속성(띠 배경)만 바꾸는 단계(`setNodeMarkup`)는 내용을 그대로 두고 캡션 노드만 바꾼다.
+    if (step instanceof ReplaceAroundStep) return isCaptionMarkup(step);
     const { slice } = step;
     if (slice.openStart > 0 || slice.openEnd > 0) return false;
     let ok = true;
@@ -395,6 +396,20 @@ export function keepsMediaShape(tr: Transaction): boolean {
     });
     return ok;
   });
+}
+
+/** 캡션 노드 하나를 같은 내용의 캡션 노드로 바꾸는 단계인가(속성만 바뀐다). */
+function isCaptionMarkup(step: ReplaceAroundStep): boolean {
+  const { slice } = step;
+  return (
+    step.insert === 1 &&
+    step.gapFrom === step.from + 1 &&
+    step.gapTo === step.to - 1 &&
+    slice.openStart === 0 &&
+    slice.openEnd === 0 &&
+    slice.content.childCount === 1 &&
+    slice.content.firstChild!.type.name === NODE.caption
+  );
 }
 
 /** 캡션에 붙여넣은 여러 문단을 줄바꿈으로 잇고, 캡션에 넣을 수 있는 것만 남긴다. */
@@ -443,13 +458,22 @@ export const MediaCaption = Node.create({
   // Enter를 기본 동작(문단 나누기)보다 먼저 받는다.
   priority: 1000,
 
+  addAttributes() {
+    // 띠 배경. 표 칸 배경과 같은 값·팔레트다. 고르지 않으면 기본 띠 색이다.
+    return { ...cellBackground };
+  },
+
   parseHTML() {
     // 이미지·영상 밖의 `<figcaption>`(다른 사이트)은 이 규칙이 맞지 않아 그냥 글자로 읽는다.
     return [{ tag: "figcaption", context: `${NODE.image}/|${NODE.youtube}/` }];
   },
 
-  renderHTML() {
-    return ["figcaption", { class: "wiki-media-caption" }, 0];
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "figcaption",
+      mergeAttributes(HTMLAttributes, { class: "wiki-media-caption" }),
+      0,
+    ];
   },
 
   addCommands() {
@@ -696,7 +720,7 @@ export const TextAlign = Extension.create({
   },
 });
 
-/** 셀 배경. */
+/** 셀 배경. 이미지·영상 캡션의 띠 배경도 같은 정의를 쓴다. */
 const cellBackground = {
   background: {
     default: null,
@@ -748,7 +772,7 @@ function cellAttributes(parent: Record<string, unknown> | undefined) {
 }
 
 /**
- * 문단·셀 꾸밈 속성의 이름. 기본값 `null`은 "고르지 않음"이라 저장할 때 뺀다(`doc-io.ts`).
+ * 문단·셀·캡션 꾸밈 속성의 이름. 기본값 `null`은 "고르지 않음"이라 저장할 때 뺀다(`doc-io.ts`).
  * 꾸밈 속성을 더하면 그 정의를 여기에도 넣는다.
  */
 export const STYLE_ATTRS: readonly string[] = Object.keys({

@@ -12,6 +12,7 @@ import {
   para,
   text,
 } from "../../markup/model/doc-builders";
+import { joinDoc } from "~/features/editor/model/doc-io";
 import {
   footnoteText,
   schemaExtensions,
@@ -110,6 +111,11 @@ describe("MediaCaption", () => {
     expect(current.state.selection.$from.parent.type.name).toBe("caption");
   }
 
+  /** 저장할 값(`joinDoc`)에서 맨 앞 그림의 캡션. 고르지 않은 배경(`null`)은 빠진다. */
+  const savedCaption = (current: Editor) =>
+    joinDoc(current.getJSON() as WikiDoc, { categories: [], profile: null })
+      .content[0]!.content;
+
   const types = (current: Editor) =>
     (current.getJSON().content ?? []).map((node) => node.type);
 
@@ -165,6 +171,20 @@ describe("MediaCaption", () => {
     expect(types(current)).toEqual(["image", "table", "paragraph"]);
   });
 
+  it("keeps a chosen caption background and leaves out an unset one", () => {
+    const current = open(doc(imageWith("본관"), para()));
+    cursorInCaption(current, 1);
+    expect(savedCaption(current)).toEqual(caption("본관"));
+    current.commands.updateAttributes("caption", { background: "red" });
+    expect(savedCaption(current)).toEqual([
+      {
+        type: "caption",
+        attrs: { background: "red" },
+        content: [text("본관")],
+      },
+    ]);
+  });
+
   it("does not turn the caption into a heading or a list", () => {
     const current = open(doc(imageWith("본관"), para()));
     cursorInCaption(current, 1);
@@ -183,7 +203,7 @@ describe("MediaCaption", () => {
     ]);
     current.commands.setTextSelection({ from: 2, to: 4 });
     current.commands.toggleBold();
-    expect(current.getJSON().content?.[0]?.content).toEqual(
+    expect(savedCaption(current)).toEqual(
       caption(
         { type: "text", text: "본관", marks: [{ type: "bold" }] },
         " 앞",
@@ -216,7 +236,7 @@ describe("MediaCaption", () => {
       handle(current.view, new Event("paste") as ClipboardEvent, slice),
     );
     expect(types(current)).toEqual(["image", "paragraph"]);
-    expect(current.getJSON().content?.[0]?.content).toEqual(
+    expect(savedCaption(current)).toEqual(
       caption(
         "첫 줄",
         { type: "hardBreak" },

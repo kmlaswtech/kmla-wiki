@@ -258,6 +258,26 @@ describe("WikiContent", () => {
     ).not.toBeNull();
   });
 
+  it("paints the caption band with the chosen background", () => {
+    const { container } = show(
+      doc({
+        type: "image",
+        attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a" },
+        content: [
+          {
+            type: "caption",
+            attrs: { background: "blue-strong" },
+            content: [text("본관")],
+          },
+        ],
+      }),
+    );
+    const figcaption = container.querySelector("figcaption")!;
+    expect(figcaption).toHaveAttribute("data-bg", "blue-strong");
+    expect(figcaption).toHaveAttribute("data-bg-strong", "");
+    expect(figcaption.getAttribute("style")).toContain("--wiki-bg");
+  });
+
   it("renders styled captions with links and numbers their footnotes in order", () => {
     const { container } = show(
       doc(
@@ -284,6 +304,7 @@ describe("WikiContent", () => {
       expect.stringContaining("둘"),
       expect.stringContaining("셋"),
     ]);
+    expect(figcaption).not.toHaveAttribute("data-bg");
     // 영상 제목은 각주 내용을 뺀 캡션 글자다.
     expect(container.querySelector("iframe")).toHaveAttribute(
       "title",

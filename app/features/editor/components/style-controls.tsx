@@ -349,6 +349,38 @@ export function CellStyleButton({ editor }: { editor: Editor }) {
   );
 }
 
+/**
+ * 이미지·영상 캡션의 띠 배경 단추(커서가 캡션 안에 있을 때만 보인다). 표 칸 배경과 같은 팔레트다.
+ */
+export function CaptionStyleButton({ editor }: { editor: Editor }) {
+  const [open, setOpen] = useState(false);
+  const background = useEditorState({
+    editor,
+    selector: ({ editor: current }): string | null => {
+      const value: unknown = current.getAttributes(NODE.caption).background;
+      return typeof value === "string" ? value : null;
+    },
+  });
+
+  return (
+    <PopoverToolButton
+      label="캡션 배경"
+      icon={<PaintBucket />}
+      active={background !== null}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <ColorPicker
+        kind="background"
+        value={background}
+        onChange={(next) =>
+          editor.commands.updateAttributes(NODE.caption, { background: next })
+        }
+      />
+    </PopoverToolButton>
+  );
+}
+
 /** 커서가 있는 칸(제목 칸이나 보통 칸)의 속성. */
 export function activeCellAttrs(editor: Editor): Record<string, unknown> {
   return editor.getAttributes(
