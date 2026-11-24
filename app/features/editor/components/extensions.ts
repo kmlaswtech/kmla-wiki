@@ -214,7 +214,16 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
     [
       Footnote.name,
       Footnote.extend({
-        addNodeView: () => ReactNodeViewRenderer(FootnoteView, { as: "span" }),
+        addNodeView: () => (props) => {
+          const view = ReactNodeViewRenderer(FootnoteView, { as: "span" })(
+            props,
+          );
+          // 각주 내용은 대화상자에서 고친다. 본문에는 번호만 그리고, 내용 자리(contentDOM)는 두지
+          // 않는다. React 노드 뷰는 내용이 있는 노드에 내용 자리를 저절로 붙이므로 여기서 뗀다.
+          (view as { contentDOM?: HTMLElement | null }).contentDOM?.remove();
+          Object.defineProperty(view, "contentDOM", { value: null });
+          return view;
+        },
       }),
     ],
   ]);

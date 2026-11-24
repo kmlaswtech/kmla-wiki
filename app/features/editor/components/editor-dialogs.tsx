@@ -414,25 +414,16 @@ function TemplateForm({
 }
 
 /** 각주 편집기의 키. Enter는 줄바꿈이다(각주는 문단 하나다). */
-const FootnoteKeys = Extension.create<{
-  submit: () => void;
-  link: () => void;
-}>({
+const FootnoteKeys = Extension.create<{ link: () => void }>({
   name: "footnoteKeys",
-  // 줄바꿈 확장의 `Mod-Enter`보다 먼저 받는다.
-  priority: 1000,
 
   addOptions() {
-    return { submit: () => undefined, link: () => undefined };
+    return { link: () => undefined };
   },
 
   addKeyboardShortcuts() {
     return {
       Enter: ({ editor }) => editor.commands.setHardBreak(),
-      "Mod-Enter": () => {
-        this.options.submit();
-        return true;
-      },
       "Mod-k": () => {
         this.options.link();
         return true;
@@ -473,13 +464,10 @@ function FootnoteForm({
 
   // 편집기의 키가 부를 함수. 편집기는 한 번만 만들므로 상자에 최신 함수를 두고, 키를 누를 때(렌더
   // 밖에서) 읽는다.
-  const [keys] = useState(() =>
-    createBox({ submit: () => {}, link: () => {} }),
-  );
+  const [keys] = useState(() => createBox({ link: () => {} }));
   const [extensions] = useState(() => [
     ...footnoteExtensions(),
     FootnoteKeys.configure({
-      submit: () => keys.current.submit(),
       link: () => keys.current.link(),
     }),
   ]);
@@ -528,7 +516,7 @@ function FootnoteForm({
   };
   const openLink = () => setView("link");
   useEffect(() => {
-    keys.update({ submit, link: openLink });
+    keys.update({ link: openLink });
   });
 
   return (
@@ -571,9 +559,6 @@ function FootnoteForm({
                 </div>
                 <EditorContent editor={note} />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Enter는 줄바꿈, Ctrl+Enter는 {current ? "저장" : "삽입"}입니다.
-              </p>
             </div>
           ) : null}
         </DialogForm>
