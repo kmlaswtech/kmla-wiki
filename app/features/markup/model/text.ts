@@ -64,7 +64,6 @@ export function visibleTextLength(doc: WikiDoc): number {
   let length = 0;
   const count = (node: WikiNode) => {
     if (node.type === NODE.text) length += (node.text ?? "").trim().length;
-    if (node.type === NODE.footnote) length += stringAttr(node, "note").length;
     if (node.type === NODE.image || node.type === NODE.youtube)
       length += stringAttr(node, "caption").trim().length;
   };
@@ -260,7 +259,7 @@ function inlineToText(nodes: readonly WikiNode[]): string {
         case NODE.hardBreak:
           return "\n";
         case NODE.footnote:
-          return `[* ${stringAttr(node, "note")}]`;
+          return `[* ${inlineToText(node.content ?? [])}]`;
         case NODE.templateParam:
           return `{{{${numberAttr(node, "index") ?? 1}}}}`;
         default:

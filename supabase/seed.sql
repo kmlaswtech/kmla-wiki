@@ -58,7 +58,7 @@ declare
     jsonb_build_array('귀가', private.doc_of(
       private.doc_para(
         private.doc_text_node('집에 가는 방법을 모은 문서입니다.'),
-        jsonb_build_object('type', 'footnote', 'attrs', jsonb_build_object('note', '2026년 기준.'))
+        jsonb_build_object('type', 'footnote', 'content', jsonb_build_array(jsonb_build_object('type', 'text', 'text', '2026년 기준.')))
       ),
       private.doc_heading(2, '종류'),
       private.doc_list(

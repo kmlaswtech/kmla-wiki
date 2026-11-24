@@ -455,7 +455,7 @@ export function FootnoteView({
   editor,
 }: ReactNodeViewProps) {
   const { request } = useEditorUi();
-  const note = String(node.attrs.note ?? "");
+  const note = node.textContent;
   return (
     <NodeViewWrapper
       as="sup"

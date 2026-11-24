@@ -80,7 +80,6 @@ interface WikiContentProps {
 interface RenderContext {
   existing: ReadonlySet<string>;
   renderImage?: (imageId: string, alt: string) => ReactNode;
-  notes: ReadonlyMap<number, string>;
   embedded: boolean;
 }
 
@@ -104,9 +103,6 @@ export function WikiContent({
     const context: RenderContext = {
       existing,
       renderImage,
-      notes: new Map(
-        document.footnotes.map((footnote) => [footnote.number, footnote.note]),
-      ),
       embedded,
     };
     // 목차와 같은 번호. 목차를 그리지 않을 만큼 제목이 적으면 번호도 붙이지 않는다.
@@ -165,7 +161,7 @@ export function WikiContent({
                   >
                     [{footnote.number}]
                   </a>
-                  <NoteText note={footnote.note} />
+                  {renderInline(footnote.content, context)}
                 </li>
               ))}
             </ol>
@@ -539,9 +535,11 @@ function renderInline(
           <FootnoteRef
             key={index}
             number={number}
-            note={context.notes.get(number) ?? ""}
+            content={node.content ?? []}
             embedded={context.embedded}
-          />
+          >
+            {renderInline(node.content ?? [], context)}
+          </FootnoteRef>
         );
       }
       case NODE.templateParam:
@@ -693,12 +691,16 @@ function WikiLink({
  */
 function FootnoteRef({
   number,
-  note,
+  content,
   embedded,
+  children,
 }: {
   number: number;
-  note: string;
+  /** 각주 내용(노드). 복사해 붙여넣을 때 되살리도록 속성에 싣는다. */
+  content: readonly WikiNode[];
   embedded: boolean;
+  /** 그린 각주 내용. */
+  children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   /** 지금 누르는 것이 손가락(또는 펜)인지. 누르기는 `pointerdown`이 먼저 오므로 거기서 정한다. */
@@ -707,7 +709,11 @@ function FootnoteRef({
   const pressOpens = () => embedded || touchPress.current;
   return (
     // `data-*`는 이 글을 복사해 편집기에 붙여넣을 때 각주로 되살리는 데 쓴다.
-    <sup className="wiki-footnote-ref" data-footnote="" data-note={note}>
+    <sup
+      className="wiki-footnote-ref"
+      data-footnote=""
+      data-footnote-content={JSON.stringify(content)}
+    >
       <Popover
         open={open}
         onOpenChange={(next, details) => {
@@ -749,36 +755,11 @@ function FootnoteRef({
         >
           <p>
             <span className="mr-2 text-primary tabular-nums">[{number}]</span>
-            <NoteText note={note} />
+            {children}
           </p>
         </PopoverContent>
       </Popover>
     </sup>
-  );
-}
-
-const URL_IN_TEXT = /(https?:\/\/[^\s<>"]+)/g;
-
-/** 각주 내용. 글자만 담기지만 출처 주소는 누를 수 있게 링크로 바꾼다. */
-function NoteText({ note }: { note: string }) {
-  return (
-    <>
-      {note.split(URL_IN_TEXT).map((part, index) =>
-        index % 2 === 1 ? (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            className="break-all"
-          >
-            {part}
-          </a>
-        ) : (
-          <Fragment key={index}>{part}</Fragment>
-        ),
-      )}
-    </>
   );
 }
 
