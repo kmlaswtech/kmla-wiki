@@ -9,6 +9,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { useReloadOnNewVersion } from "~/shared/hooks/use-reload-on-new-version";
 import { isNetworkError } from "~/shared/lib/network-error";
 import { Button } from "~/shared/ui/button";
 import { Toaster } from "~/shared/ui/sonner";
@@ -58,6 +59,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  useReloadOnNewVersion();
   return <Outlet />;
 }
 

@@ -58,3 +58,5 @@ KMLA Online 저장소와 같은 구조다. 배포는 GitHub Actions에서만 한
 - 배포되는 것은 migration과 함수 코드뿐이다. 원격 Auth 설정(Site URL, 로그인 수단, `custom:kmla`
   제공자)과 Edge Function 비밀 값은 각 프로젝트 대시보드에서 손으로 맞춘다.
 - `VITE_*` 값은 Vercel 프로젝트 환경 변수(Production, Preview)에 둔다.
+- 빌드마다 `version.json`이 나간다. 열어 둔 탭은 이 값으로 새 배포를 알아채고, 다음 화면 이동 때
+  새로 고친다(`app/shared/hooks/use-reload-on-new-version.ts`).

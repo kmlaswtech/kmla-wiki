@@ -701,6 +701,8 @@ export function EditorForm({
               type="button"
               onClick={() => {
                 flushDraft(current, summary, dirty);
+                // 이동이 문서 전체 로드가 되어도(새 배포 반영) 브라우저 경고가 다시 뜨지 않게 한다.
+                allowLeave.current = true;
                 blocker.proceed?.();
               }}
             >
