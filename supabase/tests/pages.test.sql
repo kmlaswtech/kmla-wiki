@@ -144,6 +144,11 @@ select lives_ok(
     ]}]}'::jsonb)$$,
   'a safe external link is kept');
 select throws_ok(
+  $$select * from public.save_revision('형식', null, '{"type":"doc","content":[
+      {"type":"youtube","attrs":{"videoId":"dQw4w9WgXcQ","caption":"학교 소개"}}
+    ]}'::jsonb)$$,
+  'WK012', null, 'a caption in the old attribute form is rejected (an editor tab from before the change)');
+select throws_ok(
   $$select * from public.save_revision('형식 고장', null,
       (select ('{"type":"doc","content":[' || repeat('{"type":"blockquote","content":[', 150)
                || '{"type":"paragraph"}' || repeat(']}', 150) || ']}')::jsonb))$$,

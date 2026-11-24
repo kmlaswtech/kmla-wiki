@@ -175,9 +175,11 @@ export function Toolbar({
 
       <MarkTools editor={editor} />
 
+      {/* 캡션은 그림 아래 한 줄이라 문단 모양(제목, 목록, 인용, 정렬)을 바꿀 수 없다. */}
       <Menu
         label="제목"
         active={state.heading !== undefined}
+        disabled={state.inCaption}
         icon={<Heading />}
       >
         <DropdownMenuItem onClick={() => chain().setParagraph().run()}>
@@ -204,6 +206,7 @@ export function Toolbar({
       <ToolButton
         label="글머리 기호 목록"
         active={state.bulletList}
+        disabled={state.inCaption}
         onClick={() => chain().toggleBulletList().run()}
       >
         <List />
@@ -211,6 +214,7 @@ export function Toolbar({
       <ToolButton
         label="번호 목록"
         active={state.orderedList}
+        disabled={state.inCaption}
         onClick={() => chain().toggleOrderedList().run()}
       >
         <ListOrdered />
@@ -218,6 +222,7 @@ export function Toolbar({
       <ToolButton
         label="인용"
         active={state.blockquote}
+        disabled={state.inCaption}
         onClick={() => chain().toggleBlockquote().run()}
       >
         <Quote />
@@ -225,6 +230,7 @@ export function Toolbar({
       <Menu
         label="문단 정렬"
         active={state.textAlign !== null}
+        disabled={state.inCaption}
         icon={alignIcon}
       >
         {TEXT_ALIGN_CHOICES.map(({ value, icon, label }) => (

@@ -62,6 +62,74 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION private.check_body (
+  p_body jsonb
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+declare
+  v_profile jsonb;
+begin
+  -- 노드 한 겹이 JSON 두 겹(`content` 배열과 노드)이다. 편집기에서 만드는 문서는 이보다 훨씬 얕다.
+  if jsonb_path_exists(p_body, 'strict $.**{200}') then
+    raise exception 'invalid body' using errcode = 'WK012';
+  end if;
+
+  if jsonb_typeof(p_body) is distinct from 'object'
+     or p_body ->> 'type' is distinct from 'doc'
+     or jsonb_typeof(p_body -> 'content') is distinct from 'array'
+     or (p_body ? 'attrs' and jsonb_typeof(p_body -> 'attrs') <> 'object')
+     or (coalesce(p_body -> 'attrs', '{}'::jsonb) ? 'categories'
+         and jsonb_typeof(p_body -> 'attrs' -> 'categories') <> 'array')
+     or (coalesce(p_body -> 'attrs', '{}'::jsonb) ? 'redirect'
+         and jsonb_typeof(p_body -> 'attrs' -> 'redirect') <> 'string') then
+    raise exception 'invalid body' using errcode = 'WK012';
+  end if;
+
+  if jsonb_path_exists(
+    p_body,
+    'strict $.** ? (@.type == "link").attrs.href ? (!(@ like_regex "^(https?:|mailto:)" flag "i"))'
+  ) then
+    raise exception 'unsafe link' using errcode = 'WK012', detail = 'link';
+  end if;
+
+  -- 제목 단계는 편집기가 쓰는 2~4만. 화면은 범위 밖 값을 맞춰 그리지만 저장부터 막는다.
+  if jsonb_path_exists(
+    p_body,
+    'strict $.** ? (@.type == "heading").attrs.level ? (!(@ == 2 || @ == 3 || @ == 4))'
+  ) then
+    raise exception 'invalid body' using errcode = 'WK012';
+  end if;
+
+  -- 이미지·영상 캡션은 캡션 노드(`content`)에 둔다. 배포 전에 연 탭의 편집기는 `attrs.caption`(글자)을
+  -- 보낸다. 받으면 캡션이 오류 없이 사라지므로 저장을 막는다. 새로 고치면 새 편집기로 저장할 수 있다.
+  if jsonb_path_exists(
+    p_body,
+    'strict $.** ? (@.type == "image" || @.type == "youtube").attrs.caption'
+  ) then
+    raise exception 'outdated body' using errcode = 'WK012', detail = 'caption';
+  end if;
+
+  -- 프로필(`features/markup/model/profile.ts`). 본문과 같은 블록 노드 목록이다. 링크 주소와 제목 단계는
+  -- 위의 `$.**` 검사가 프로필 안까지 본다.
+  v_profile := p_body -> 'attrs' -> 'profile';
+  if v_profile is not null and (
+    jsonb_typeof(v_profile) <> 'array'
+    or exists (
+      select
+      from jsonb_array_elements(v_profile) as block (value)
+      where jsonb_typeof(block.value) is distinct from 'object'
+         or jsonb_typeof(block.value -> 'type') is distinct from 'string'
+    )
+  ) then
+    raise exception 'invalid body' using errcode = 'WK012', detail = 'profile';
+  end if;
+end;
+$function$;
+
 -- 이미지·영상의 캡션을 `attrs.caption`(글자)에서 캡션 노드(`content`)로 옮긴다.
 -- 모든 이미지·영상은 캡션 노드 하나를 가진다(편집기가 그렇게 저장한다). 빈 캡션은 내용 없는 캡션 노드다.
 -- 캡션 앞뒤 빈칸은 화면에 보이지 않았으므로 뗀다. `body_text`는 생성 컬럼이라 함께 다시 계산된다.

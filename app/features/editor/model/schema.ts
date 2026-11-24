@@ -504,6 +504,20 @@ export const MediaCaption = Node.create({
       Enter: ({ editor }) =>
         editor.state.selection.$from.parent.type.name === NODE.caption &&
         editor.commands.leaveCaption(),
+      // 캡션 맨 앞의 Backspace는 그림을 고른다. 한 번 더 누르면 그림이 지워진다. 그림은 내용이 있는
+      // 노드라, 이것이 없으면 키보드만으로는 그림을 고를 길이 없다.
+      Backspace: ({ editor }) => {
+        const { selection } = editor.state;
+        const { $from } = selection;
+        if (
+          !selection.empty ||
+          $from.parent.type.name !== NODE.caption ||
+          $from.parentOffset !== 0
+        ) {
+          return false;
+        }
+        return editor.commands.setNodeSelection($from.before($from.depth - 1));
+      },
     };
   },
 

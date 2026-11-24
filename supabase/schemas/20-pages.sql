@@ -46,6 +46,15 @@ begin
     raise exception 'invalid body' using errcode = 'WK012';
   end if;
 
+  -- 이미지·영상 캡션은 캡션 노드(`content`)에 둔다. 배포 전에 연 탭의 편집기는 `attrs.caption`(글자)을
+  -- 보낸다. 받으면 캡션이 오류 없이 사라지므로 저장을 막는다. 새로 고치면 새 편집기로 저장할 수 있다.
+  if jsonb_path_exists(
+    p_body,
+    'strict $.** ? (@.type == "image" || @.type == "youtube").attrs.caption'
+  ) then
+    raise exception 'outdated body' using errcode = 'WK012', detail = 'caption';
+  end if;
+
   -- 프로필(`features/markup/model/profile.ts`). 본문과 같은 블록 노드 목록이다. 링크 주소와 제목 단계는
   -- 위의 `$.**` 검사가 프로필 안까지 본다.
   v_profile := p_body -> 'attrs' -> 'profile';

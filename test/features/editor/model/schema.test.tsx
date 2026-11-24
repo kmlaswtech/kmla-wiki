@@ -185,6 +185,37 @@ describe("MediaCaption", () => {
     ]);
   });
 
+  it("selects the picture on Backspace at the start of the caption, then deletes it", () => {
+    const current = open(doc(imageWith("본관"), para(text("뒤"))));
+    cursorInCaption(current, 0);
+    const backspace = () =>
+      current.view.someProp("handleKeyDown", (handle) =>
+        handle(
+          current.view,
+          new KeyboardEvent("keydown", { key: "Backspace" }),
+        ),
+      );
+    backspace();
+    expect(current.state.selection.toJSON()).toEqual({
+      type: "node",
+      anchor: 0,
+    });
+    backspace();
+    expect(types(current)).toEqual(["paragraph"]);
+  });
+
+  it("removes the picture when a selection from above into the caption is replaced", () => {
+    const current = open(
+      doc(para(text("앞 글")), imageWith("본관 앞"), para()),
+    );
+    // 앞 문단의 "글" 앞(3)부터 캡션의 "본관 " 뒤(10)까지. 그림의 시작을 고른 것이라 그림째 지워지고, 캡션의
+    // 남은 글자는 앞 문단에 붙는다(블록을 걸쳐 고를 때와 같다). 그림이 둘로 갈리지 않는다.
+    current.commands.setTextSelection({ from: 3, to: 10 });
+    current.commands.insertContent("X");
+    expect(types(current)).toEqual(["paragraph", "paragraph"]);
+    expect(current.state.doc.firstChild!.textContent).toBe("앞 X앞");
+  });
+
   it("does not turn the caption into a heading or a list", () => {
     const current = open(doc(imageWith("본관"), para()));
     cursorInCaption(current, 1);

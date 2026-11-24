@@ -153,11 +153,13 @@ export function Menu({
   label,
   icon,
   active = false,
+  disabled = false,
   children,
 }: {
   label: string;
   icon: ReactNode;
   active?: boolean;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -172,6 +174,7 @@ export function Menu({
                   variant={active ? "secondary" : "ghost"}
                   size="icon-sm"
                   aria-label={label}
+                  disabled={disabled}
                 />
               }
             />
