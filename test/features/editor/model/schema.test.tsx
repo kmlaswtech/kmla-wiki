@@ -10,7 +10,7 @@ import {
   para,
   text,
 } from "../../markup/model/doc-builders";
-import { wikiSchema } from "~/features/editor/model/schema";
+import { footnoteText, wikiSchema } from "~/features/editor/model/schema";
 import { WikiContent } from "~/features/markup";
 import { parseWiki } from "~/features/markup/model/parse";
 
@@ -40,5 +40,42 @@ describe("Footnote", () => {
     const note = pasted.firstChild!.child(1);
     expect(note.type.name).toBe("footnote");
     expect(note.content.toJSON()).toEqual(content);
+  });
+
+  it("drops unsafe marks and block nodes from pasted footnote content", () => {
+    const sup = document.createElement("sup");
+    sup.setAttribute("data-footnote", "");
+    sup.setAttribute(
+      "data-footnote-content",
+      JSON.stringify([
+        {
+          type: "text",
+          text: "x",
+          marks: [
+            { type: "link", attrs: { href: "javascript:alert(1)" } },
+            { type: "textSize", attrs: { size: 99 } },
+            { type: "bold" },
+          ],
+        },
+        { type: "paragraph", content: [{ type: "text", text: "블록" }] },
+      ]),
+    );
+    const holder = document.createElement("p");
+    holder.append(sup);
+
+    const pasted = DOMParser.fromSchema(wikiSchema()).parse(holder);
+    expect(pasted.firstChild!.firstChild!.content.toJSON()).toEqual([
+      { type: "text", text: "x", marks: [{ type: "bold" }] },
+    ]);
+  });
+
+  it("joins lines with a space in the footnote text", () => {
+    const schema = wikiSchema();
+    const note = schema.nodes.footnote!.create(null, [
+      schema.text("A"),
+      schema.nodes.hardBreak!.create(),
+      schema.text("B"),
+    ]);
+    expect(footnoteText(note)).toBe("A B");
   });
 });

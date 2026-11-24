@@ -547,7 +547,12 @@ function FootnoteForm({
 
   return (
     <>
-      <div className={view === "note" ? "contents" : "hidden"}>
+      {/* 링크 화면에서는 숨긴 각주 폼의 제목이 대화상자 이름으로 읽히지 않게 한다. */}
+      <div
+        className={view === "note" ? "contents" : "hidden"}
+        inert={view !== "note"}
+        aria-hidden={view !== "note"}
+      >
         <DialogForm
           title={current ? "각주 편집" : "각주 삽입"}
           onSubmit={submit}
