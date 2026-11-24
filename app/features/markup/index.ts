@@ -25,6 +25,7 @@ export {
 export {
   captionText,
   DEFAULT_VIDEO_SIZE,
+  EMPTY_CAPTION,
   MEDIA_ALIGN_LABEL,
   MEDIA_ALIGNS,
   MEDIA_SIZE_LABEL,

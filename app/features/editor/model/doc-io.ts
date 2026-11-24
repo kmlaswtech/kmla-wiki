@@ -2,6 +2,7 @@ import { Node as PMNode } from "@tiptap/pm/model";
 
 import { STYLE_ATTRS, wikiSchema } from "./schema";
 import {
+  EMPTY_CAPTION,
   emptyDoc,
   isEmptyParagraph,
   isEmptyProfile,
@@ -132,7 +133,7 @@ function pruneUnknown(node: WikiNode): WikiNode {
     (node.type === NODE.image || node.type === NODE.youtube) &&
     !content?.some((child) => child.type === NODE.caption)
   ) {
-    content = [{ type: NODE.caption }];
+    content = [...EMPTY_CAPTION];
   }
   return {
     ...node,

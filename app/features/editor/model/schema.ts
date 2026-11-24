@@ -26,7 +26,11 @@ import {
   type EditorState,
   type Transaction,
 } from "@tiptap/pm/state";
-import { ReplaceAroundStep, ReplaceStep } from "@tiptap/pm/transform";
+import {
+  ReplaceAroundStep,
+  ReplaceStep,
+  type Step,
+} from "@tiptap/pm/transform";
 import { StarterKit } from "@tiptap/starter-kit";
 
 import {
@@ -356,9 +360,14 @@ function captionElement(element: HTMLElement): HTMLElement {
  * 캡션 안에 들어갈 수 있는 것: 각주 내용에 각주를 더한 것. 표·이미지 같은 블록은 넣지 않는다.
  * 각주 내용에는 이미지가 들어가지 않으므로 각주 안에 각주가 생기지 않는다.
  */
-export const CAPTION_CONTENT = `(${NODE.text} | ${NODE.hardBreak} | ${NODE.footnote} | ${NODE.templateParam})*`;
+const CAPTION_CONTENT = `(${NODE.text} | ${NODE.hardBreak} | ${NODE.footnote} | ${NODE.templateParam})*`;
 
 const MEDIA_TYPES: readonly string[] = [NODE.image, NODE.youtube];
+
+/** 위치가 캡션 글자 안인가. */
+function inCaption($pos: ResolvedPos): boolean {
+  return $pos.parent.type.name === NODE.caption;
+}
 
 /** 이 위치를 감싼 이미지·영상의 깊이. 없으면 `null`. */
 function mediaDepth($pos: ResolvedPos): number | null {
@@ -373,29 +382,33 @@ function mediaDepth($pos: ResolvedPos): number | null {
  * 단추 등) ProseMirror가 이미지를 둘로 갈라 같은 그림이 두 번 생긴다. 그런 단계를 막는다. 그림
  * 상자 밖에서 시작하거나 끝나는 단계(그림째로 지우기 등)는 막지 않는다.
  */
-export function keepsMediaShape(tr: Transaction): boolean {
-  return tr.steps.every((step, index) => {
-    if (!(step instanceof ReplaceStep || step instanceof ReplaceAroundStep)) {
-      return true;
-    }
-    const doc = tr.docs[index]!;
-    const $from = doc.resolve(step.from);
-    const depth = mediaDepth($from);
-    if (depth === null) return true;
-    const $to = doc.resolve(step.to);
-    if ($to.depth < depth || $to.start(depth) !== $from.start(depth)) {
-      return true;
-    }
-    // 캡션 속성(띠 배경)만 바꾸는 단계(`setNodeMarkup`)는 내용을 그대로 두고 캡션 노드만 바꾼다.
-    if (step instanceof ReplaceAroundStep) return isCaptionMarkup(step);
-    const { slice } = step;
-    if (slice.openStart > 0 || slice.openEnd > 0) return false;
-    let ok = true;
-    slice.content.forEach((node) => {
-      if (!node.isInline && node.type.name !== NODE.caption) ok = false;
-    });
-    return ok;
-  });
+function keepsMediaShape(tr: Transaction): boolean {
+  return tr.steps.every((step, index) =>
+    stepKeepsMediaShape(step, tr.docs[index]!),
+  );
+}
+
+function stepKeepsMediaShape(step: Step, doc: PMNode): boolean {
+  if (!(step instanceof ReplaceStep || step instanceof ReplaceAroundStep)) {
+    return true;
+  }
+  const $from = doc.resolve(step.from);
+  const depth = mediaDepth($from);
+  if (depth === null) return true;
+  const $to = doc.resolve(step.to);
+  if ($to.depth < depth || $to.start(depth) !== $from.start(depth)) {
+    return true;
+  }
+  // 캡션 속성(띠 배경)만 바꾸는 단계(`setNodeMarkup`)는 내용을 그대로 두고 캡션 노드만 바꾼다.
+  if (step instanceof ReplaceAroundStep) return isCaptionMarkup(step);
+  const { slice } = step;
+  return (
+    slice.openStart === 0 &&
+    slice.openEnd === 0 &&
+    slice.content.content.every(
+      (node) => node.isInline || node.type.name === NODE.caption,
+    )
+  );
 }
 
 /** 캡션 노드 하나를 같은 내용의 캡션 노드로 바꾸는 단계인가(속성만 바뀐다). */
@@ -482,7 +495,7 @@ export const MediaCaption = Node.create({
         () =>
         ({ tr, dispatch }) => {
           const { $from } = tr.selection;
-          if ($from.parent.type.name !== NODE.caption) return true;
+          if (!inCaption($from)) return true;
           if (dispatch) {
             const after = $from.after($from.depth - 1);
             tr.insert(
@@ -502,18 +515,14 @@ export const MediaCaption = Node.create({
       // 캡션은 문단 하나다. Enter는 그림 바로 아래에 새 문단을 만들어 옮겨 간다. 캡션 안의
       // 줄바꿈은 Shift+Enter다.
       Enter: ({ editor }) =>
-        editor.state.selection.$from.parent.type.name === NODE.caption &&
+        inCaption(editor.state.selection.$from) &&
         editor.commands.leaveCaption(),
       // 캡션 맨 앞의 Backspace는 그림을 고른다. 한 번 더 누르면 그림이 지워진다. 그림은 내용이 있는
       // 노드라, 이것이 없으면 키보드만으로는 그림을 고를 길이 없다.
       Backspace: ({ editor }) => {
         const { selection } = editor.state;
         const { $from } = selection;
-        if (
-          !selection.empty ||
-          $from.parent.type.name !== NODE.caption ||
-          $from.parentOffset !== 0
-        ) {
+        if (!selection.empty || !inCaption($from) || $from.parentOffset !== 0) {
           return false;
         }
         return editor.commands.setNodeSelection($from.before($from.depth - 1));
@@ -528,7 +537,7 @@ export const MediaCaption = Node.create({
         props: {
           handlePaste: (view, _event, slice) => {
             const { $from, $to } = view.state.selection;
-            if ($from.parent.type.name !== NODE.caption) return false;
+            if (!inCaption($from)) return false;
             if (!$to.sameParent($from)) return false;
             const flat = flattenForCaption(slice, view.state);
             if (flat) view.dispatch(view.state.tr.replaceSelection(flat));

@@ -26,6 +26,7 @@ import { useEditorUi } from "./editor-ui";
 import { WikiImage } from "~/features/images";
 import {
   baseName,
+  captionText,
   formatStart,
   MEDIA_ALIGN_LABEL,
   MEDIA_ALIGNS,
@@ -203,7 +204,8 @@ export function ImageView(props: ReactNodeViewProps) {
   const { images } = useEditorUi();
   const id = String(node.attrs.id ?? "");
   const alt = String(node.attrs.alt ?? "");
-  const caption = node.firstChild?.textContent.trim() ?? "";
+  // 문서 보기와 같이 각주 내용을 뺀 캡션 글자다.
+  const caption = captionText(node.toJSON() as WikiNode);
 
   return (
     <MediaNodeView

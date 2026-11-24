@@ -476,19 +476,36 @@ function TableCell({
   const Cell = cell.type === NODE.tableHeader ? "th" : "td";
   const colSpan = numberAttr(cell, "colspan");
   const rowSpan = numberAttr(cell, "rowspan");
-  const background = parseBackground(cell.attrs?.background);
-  const fill = background ? backgroundVars(background) : null;
+  const { style, ...fill } = backgroundProps(cell);
   return (
     <Cell
       colSpan={colSpan && colSpan > 1 ? colSpan : undefined}
       rowSpan={rowSpan && rowSpan > 1 ? rowSpan : undefined}
-      data-bg={fill ? stringAttr(cell, "background") : undefined}
-      data-bg-strong={fill?.strong ? "" : undefined}
-      style={{ ...fill?.vars, verticalAlign: cellVAlignOf(cell) ?? undefined }}
+      {...fill}
+      style={{ ...style, verticalAlign: cellVAlignOf(cell) ?? undefined }}
     >
       {children}
     </Cell>
   );
+}
+
+/**
+ * 표 칸·캡션 띠의 배경(`background` 속성). 값이 없거나 모르는 값이면 아무것도 없다. `data-bg`는 이 글을
+ * 복사해 편집기에 붙여넣을 때 배경을 되살리는 데 쓴다.
+ */
+function backgroundProps(node: WikiNode | null): {
+  "data-bg"?: string;
+  "data-bg-strong"?: "";
+  style?: CSSProperties;
+} {
+  const background = node ? parseBackground(node.attrs?.background) : null;
+  if (!background) return {};
+  const { vars, strong } = backgroundVars(background);
+  return {
+    "data-bg": stringAttr(node!, "background"),
+    "data-bg-strong": strong ? "" : undefined,
+    style: vars,
+  };
 }
 
 /**
@@ -508,11 +525,6 @@ function MediaFigure({
 }) {
   const captionNode = mediaCaption(node);
   const caption = captionNode?.content ?? [];
-  // 띠 배경. 표 칸과 같은 값·팔레트다(`data-bg`는 붙여넣을 때 되살리는 데 쓴다).
-  const background = captionNode
-    ? parseBackground(captionNode.attrs?.background)
-    : null;
-  const fill = background ? backgroundVars(background) : null;
   return (
     <figure
       className="wiki-media"
@@ -523,11 +535,10 @@ function MediaFigure({
       <div className="wiki-media-item">
         {children}
         {caption.some(isVisibleInline) ? (
+          // 띠 배경은 표 칸과 같은 값·팔레트다.
           <figcaption
             className="wiki-media-caption"
-            data-bg={fill ? stringAttr(captionNode!, "background") : undefined}
-            data-bg-strong={fill?.strong ? "" : undefined}
-            style={fill?.vars}
+            {...backgroundProps(captionNode)}
           >
             {renderInline(caption, context)}
           </figcaption>

@@ -11,13 +11,14 @@ import { createBox } from "./wiki-editor";
 import { TitleInput } from "./title-input";
 import {
   baseName,
+  EMPTY_CAPTION,
   MARK,
   NODE,
   parseYoutubeUrl,
   SAFE_HREF,
   templateTitle,
-  youtubeWatchUrl,
   type WikiNode,
+  youtubeWatchUrl,
 } from "~/features/markup";
 import { resolveRedirect } from "~/features/pages";
 import { Button } from "~/shared/ui/button";
@@ -300,10 +301,7 @@ function upsertNode(
       })
       .run();
   } else {
-    chain
-      .leaveCaption()
-      .insertContent({ type, attrs, ...(content ? { content } : {}) })
-      .run();
+    chain.leaveCaption().insertContent({ type, attrs, content }).run();
   }
 }
 
@@ -622,7 +620,7 @@ function YoutubeForm({
         videoId: video.videoId,
         start: video.start,
       },
-      [{ type: NODE.caption }],
+      [...EMPTY_CAPTION],
     );
     onDone();
   };

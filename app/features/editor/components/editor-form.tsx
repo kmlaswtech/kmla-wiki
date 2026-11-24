@@ -29,11 +29,12 @@ import {
 } from "~/features/images";
 import {
   docToText,
+  EMPTY_CAPTION,
   emptyDoc,
   extractRefs,
   getSection,
-  NODE,
   namespaceOf,
+  NODE,
   pageHref,
   sectionScrollState,
   starterProfile,
@@ -341,7 +342,7 @@ export function EditorForm({
         .insertContent({
           type: NODE.image,
           attrs: { id: uploaded.id, alt: uploaded.alt, size: "small" },
-          content: [{ type: NODE.caption }],
+          content: [...EMPTY_CAPTION],
         })
         .run();
     }

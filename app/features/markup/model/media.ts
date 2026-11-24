@@ -53,6 +53,9 @@ export function mediaAlign(node: WikiNode): MediaAlign {
   return isMediaAlign(value) ? value : "left";
 }
 
+/** 빈 캡션만 있는 이미지·영상 내용. 새 이미지·영상을 넣을 때 쓴다(캡션 노드는 늘 하나 있다). */
+export const EMPTY_CAPTION: readonly WikiNode[] = [{ type: NODE.caption }];
+
 /** 이미지·영상의 캡션 노드. 없으면 `null`. */
 export function mediaCaption(node: WikiNode): WikiNode | null {
   return node.content?.find((child) => child.type === NODE.caption) ?? null;
