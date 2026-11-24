@@ -1,5 +1,4 @@
 import type { Editor } from "@tiptap/core";
-import { CellSelection } from "@tiptap/pm/tables";
 import { useEditorState } from "@tiptap/react";
 import { Baseline, PaintBucket } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
@@ -27,6 +26,8 @@ import { Label } from "~/shared/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "~/shared/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/tooltip";
 
+import { activeCellAttr, MIXED, setCellAttr } from "../model/cell-attrs";
+
 type ColorKind = "text" | "background";
 
 /**
@@ -41,7 +42,8 @@ export function ColorPicker({
   onChange,
 }: {
   kind: ColorKind;
-  value: string | null;
+  /** 지금 색. 없으면 `null`, 고른 칸들의 색이 섞였으면 `MIXED`(아무것도 눌려 보이지 않는다). */
+  value: string | null | typeof MIXED;
   onChange: (value: string | null) => void;
 }) {
   const rows: { label?: string; strong: boolean }[] =
@@ -91,7 +93,11 @@ export function ColorPicker({
       >
         {kind === "text" ? "기본 색" : "배경 없음"}
       </Button>
-      <CustomColorInput kind={kind} value={value} onApply={onChange} />
+      <CustomColorInput
+        kind={kind}
+        value={value === MIXED ? null : value}
+        onApply={onChange}
+      />
     </div>
   );
 }
@@ -327,7 +333,7 @@ export function CellStyleButton({ editor }: { editor: Editor }) {
     <BackgroundButton
       editor={editor}
       label="셀 배경"
-      read={(current) => activeCellAttrs(current).background}
+      read={(current) => activeCellAttr(current, "background")}
       write={(next) => setCellAttr(editor, "background", next)}
     />
   );
@@ -349,7 +355,10 @@ export function CaptionStyleButton({ editor }: { editor: Editor }) {
   );
 }
 
-/** 배경 고르기 단추(셀·캡션). `read`는 지금 값을 읽고, `write`는 고른 값(지우면 `null`)을 건다. */
+/**
+ * 배경 고르기 단추(셀·캡션). `read`는 지금 값을 읽고(섞였으면 `MIXED`), `write`는 고른 값(지우면
+ * `null`)을 건다.
+ */
 function BackgroundButton({
   editor,
   label,
@@ -364,9 +373,9 @@ function BackgroundButton({
   const [open, setOpen] = useState(false);
   const background = useEditorState({
     editor,
-    selector: ({ editor: current }): string | null => {
+    selector: ({ editor: current }): string | null | typeof MIXED => {
       const value = read(current);
-      return typeof value === "string" ? value : null;
+      return typeof value === "string" || value === MIXED ? value : null;
     },
   });
 
@@ -374,41 +383,11 @@ function BackgroundButton({
     <PopoverToolButton
       label={label}
       icon={<PaintBucket />}
-      active={background !== null}
+      active={typeof background === "string"}
       open={open}
       onOpenChange={setOpen}
     >
       <ColorPicker kind="background" value={background} onChange={write} />
     </PopoverToolButton>
   );
-}
-
-/** 커서가 있는 칸(제목 칸이나 보통 칸)의 속성. */
-export function activeCellAttrs(editor: Editor): Record<string, unknown> {
-  return editor.getAttributes(
-    editor.isActive(NODE.tableHeader) ? NODE.tableHeader : NODE.tableCell,
-  );
-}
-
-/**
- * 셀 속성을 고른 칸 전부에 건다. 칸을 여러 개 고르지 않았으면 커서가 있는 칸에 건다. 팝오버나 메뉴가
- * 초점을 가져가도 편집기의 선택(고른 칸)은 남으므로 초점을 편집기로 되돌리지 않는다.
- */
-export function setCellAttr(
-  editor: Editor,
-  name: string,
-  value: string | null,
-): boolean {
-  return editor.commands.command(({ commands, tr }) => {
-    const { selection } = tr;
-    if (!(selection instanceof CellSelection)) {
-      return commands.setCellAttribute(name, value);
-    }
-    selection.forEachCell((cell, pos) => {
-      if (cell.attrs[name] !== value) {
-        tr.setNodeMarkup(pos, undefined, { ...cell.attrs, [name]: value });
-      }
-    });
-    return true;
-  });
 }

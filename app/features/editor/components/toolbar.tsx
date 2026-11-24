@@ -29,14 +29,10 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { activeCellAttr, setCellAttr } from "../model/cell-attrs";
 import type { EditorRequest } from "./editor-ui";
 import { Divider, MarkTools, Menu, ToolButton } from "./mark-tools";
-import {
-  activeCellAttrs,
-  CaptionStyleButton,
-  CellStyleButton,
-  setCellAttr,
-} from "./style-controls";
+import { CaptionStyleButton, CellStyleButton } from "./style-controls";
 import {
   isCellVAlign,
   isTextAlign,
@@ -123,7 +119,7 @@ export function Toolbar({
       inTable: current.isActive(NODE.table),
       inCaption: current.isActive(NODE.caption),
       cellVAlign: ((value: unknown) => (isCellVAlign(value) ? value : null))(
-        activeCellAttrs(current).verticalAlign,
+        activeCellAttr(current, "verticalAlign"),
       ),
       textAlign: ((value: unknown) => (isTextAlign(value) ? value : null))(
         current.isActive(NODE.heading)
