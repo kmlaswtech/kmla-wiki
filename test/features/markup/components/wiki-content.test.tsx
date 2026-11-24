@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import {
+  caption,
   doc,
   footnote,
   heading,
@@ -239,11 +240,13 @@ describe("WikiContent", () => {
       doc(
         {
           type: "image",
-          attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a", caption: "" },
+          attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a" },
+          content: caption(" "),
         },
         {
           type: "youtube",
-          attrs: { videoId: "dQw4w9WgXcQ", caption: "학교 소개" },
+          attrs: { videoId: "dQw4w9WgXcQ" },
+          content: caption("학교 소개"),
         },
       ),
     );
@@ -253,6 +256,39 @@ describe("WikiContent", () => {
     expect(
       container.querySelector("figure[data-youtube] figcaption"),
     ).not.toBeNull();
+  });
+
+  it("renders styled captions with links and numbers their footnotes in order", () => {
+    const { container } = show(
+      doc(
+        para(text("앞"), footnote("하나")),
+        {
+          type: "youtube",
+          attrs: { videoId: "dQw4w9WgXcQ" },
+          content: caption(
+            { type: "text", text: "본관", marks: [{ type: "bold" }] },
+            link("학교"),
+            footnote("둘"),
+          ),
+        },
+        para(text("뒤"), footnote("셋")),
+      ),
+    );
+    const figcaption = container.querySelector("figcaption")!;
+    expect(figcaption.querySelector("strong")).toHaveTextContent("본관");
+    expect(figcaption.querySelector("a")).toHaveTextContent("학교");
+    expect(figcaption).toHaveTextContent("[2]");
+    const notes = container.querySelectorAll("section[data-footnotes] li");
+    expect([...notes].map((note) => note.textContent)).toEqual([
+      expect.stringContaining("하나"),
+      expect.stringContaining("둘"),
+      expect.stringContaining("셋"),
+    ]);
+    // 영상 제목은 각주 내용을 뺀 캡션 글자다.
+    expect(container.querySelector("iframe")).toHaveAttribute(
+      "title",
+      "본관학교",
+    );
   });
 });
 

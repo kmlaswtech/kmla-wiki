@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  caption,
   doc,
   footnote,
   heading,
@@ -77,8 +78,8 @@ describe("normalizeDoc", () => {
           alt: "지도",
           size: "medium",
           align: "center",
-          caption: "본관 앞",
         },
+        content: caption("본관", footnote("출처"), " 앞"),
       },
       {
         type: "youtube",
@@ -87,15 +88,15 @@ describe("normalizeDoc", () => {
           start: 90,
           size: "small",
           align: "right",
-          caption: "",
         },
+        content: caption(),
       },
       { type: "fold", attrs: { title: "더" }, content: [para(text("숨김"))] },
     );
     expect(sameDoc(normalizeDoc(body), body)).toBe(true);
   });
 
-  it("fills the default size and alignment of images and videos", () => {
+  it("fills the default size, alignment and empty caption of images and videos", () => {
     const normalized = normalizeDoc(
       doc(
         {
@@ -111,15 +112,17 @@ describe("normalizeDoc", () => {
         alt: "",
         size: null,
         align: "left",
-        caption: "",
       },
       {
         videoId: "dQw4w9WgXcQ",
         start: 0,
         size: "large",
         align: "left",
-        caption: "",
       },
+    ]);
+    expect(normalized.content.map((node) => node.content)).toEqual([
+      caption(),
+      caption(),
     ]);
   });
 

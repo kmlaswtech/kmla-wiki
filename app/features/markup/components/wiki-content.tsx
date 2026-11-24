@@ -21,7 +21,12 @@ import {
   type WikiNode,
 } from "../model/doc";
 import { sectionAnchor } from "../model/heading-id";
-import { mediaAlign, mediaSize } from "../model/media";
+import {
+  captionText,
+  mediaAlign,
+  mediaCaption,
+  mediaSize,
+} from "../model/media";
 import {
   backgroundVars,
   cellVAlignOf,
@@ -386,11 +391,12 @@ function renderBlock(
       const id = stringAttr(node, "id");
       const rawAlt = stringAttr(node, "alt");
       // 설명(화면 낭독기용)을 비워 두었으면 캡션을 대신 읽게 한다.
-      const alt = rawAlt || stringAttr(node, "caption");
+      const alt = rawAlt || captionText(node);
       return (
         <MediaFigure
           key={key}
           node={node}
+          context={context}
           data-wiki-image={id}
           data-alt={rawAlt}
         >
@@ -410,13 +416,14 @@ function renderBlock(
         <MediaFigure
           key={key}
           node={node}
+          context={context}
           data-youtube={videoId}
           data-start={start}
         >
           <span className="wiki-youtube">
             <iframe
               src={youtubeEmbedUrl({ videoId, start })}
-              title={stringAttr(node, "caption") || "유튜브 영상"}
+              title={captionText(node) || "유튜브 영상"}
               loading="lazy"
               // 유튜브는 어느 사이트에 끼웠는지 알아야 재생한다(리퍼러가 없으면 오류 153).
               referrerPolicy="strict-origin-when-cross-origin"
@@ -490,14 +497,16 @@ function TableCell({
  */
 function MediaFigure({
   node,
+  context,
   children,
   ...data
 }: {
   node: WikiNode;
+  context: RenderContext;
   children: ReactNode;
   [dataAttribute: `data-${string}`]: string | number;
 }) {
-  const caption = stringAttr(node, "caption");
+  const caption = mediaCaption(node)?.content ?? [];
   return (
     <figure
       className="wiki-media"
@@ -507,12 +516,20 @@ function MediaFigure({
     >
       <div className="wiki-media-item">
         {children}
-        {caption.trim() ? (
-          <figcaption className="wiki-media-caption">{caption}</figcaption>
+        {caption.some(isVisibleInline) ? (
+          <figcaption className="wiki-media-caption">
+            {renderInline(caption, context)}
+          </figcaption>
         ) : null}
       </div>
     </figure>
   );
+}
+
+/** 빈칸과 줄바꿈만 있는 캡션은 그리지 않는다. 각주 번호는 보이는 것이다. */
+function isVisibleInline(node: WikiNode): boolean {
+  if (node.type === NODE.text) return (node.text ?? "").trim() !== "";
+  return node.type !== NODE.hardBreak;
 }
 
 function renderInline(

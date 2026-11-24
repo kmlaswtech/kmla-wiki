@@ -5,6 +5,7 @@ import {
   emptyDoc,
   isEmptyParagraph,
   isEmptyProfile,
+  NODE,
   normalizeCategories,
   profileOf,
   type WikiDoc,
@@ -116,17 +117,27 @@ function normalizeBlocks(blocks: readonly WikiNode[]): WikiDoc {
   }
 }
 
-/** 스키마에 없는 노드와 마크를 뺀다. 예전 형식이나 조작된 본문이 편집기를 깨뜨리지 않게. */
+/**
+ * 스키마에 없는 노드와 마크를 뺀다. 예전 형식이나 조작된 본문이 편집기를 깨뜨리지 않게. 캡션이 없는
+ * 이미지·영상에는 빈 캡션을 채운다. 편집기가 내놓는 값에는 늘 캡션이 있으므로, 채우지 않으면 열기만
+ * 해도 바뀐 문서가 된다.
+ */
 function pruneUnknown(node: WikiNode): WikiNode {
   const schema = wikiSchema();
   const marks = node.marks?.filter((mark) => mark.type in schema.marks);
-  const content = node.content
+  let content = node.content
     ?.filter((child) => child.type in schema.nodes)
     .map(pruneUnknown);
+  if (
+    (node.type === NODE.image || node.type === NODE.youtube) &&
+    !content?.some((child) => child.type === NODE.caption)
+  ) {
+    content = [{ type: NODE.caption }];
+  }
   return {
     ...node,
     ...(node.marks ? { marks } : {}),
-    ...(node.content ? { content } : {}),
+    ...(content ? { content } : {}),
   };
 }
 

@@ -337,9 +337,11 @@ export function EditorForm({
       into
         ?.chain()
         .focus()
+        .leaveCaption()
         .insertContent({
           type: NODE.image,
           attrs: { id: uploaded.id, alt: uploaded.alt, size: "small" },
+          content: [{ type: NODE.caption }],
         })
         .run();
     }

@@ -1,4 +1,4 @@
-import { NODE, stringAttr, type WikiNode } from "./doc";
+import { NODE, nodeText, stringAttr, type WikiNode } from "./doc";
 
 /**
  * 이미지·영상의 크기와 정렬. 이미지 노드와 유튜브 노드가 같은 값을 쓴다.
@@ -51,4 +51,17 @@ export function mediaSize(node: WikiNode): MediaSize | null {
 export function mediaAlign(node: WikiNode): MediaAlign {
   const value = stringAttr(node, "align");
   return isMediaAlign(value) ? value : "left";
+}
+
+/** 이미지·영상의 캡션 노드. 없으면 `null`. */
+export function mediaCaption(node: WikiNode): WikiNode | null {
+  return node.content?.find((child) => child.type === NODE.caption) ?? null;
+}
+
+/**
+ * 캡션의 글자. 각주 내용은 빼고, 줄바꿈은 띄어쓰기로 읽는다. 대체 텍스트와 영상 제목 대신 쓴다.
+ */
+export function captionText(node: WikiNode): string {
+  const caption = mediaCaption(node);
+  return caption ? nodeText(caption).trim() : "";
 }

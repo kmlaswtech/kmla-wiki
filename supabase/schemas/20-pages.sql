@@ -240,12 +240,11 @@ begin
   case v_type
     when 'text' then return coalesce(p_body ->> 'text', '');
     when 'hardBreak' then return E'\n';
-    -- 이미지·영상은 아래에 보이는 캡션이 글자다(`markup/model/text.ts`의 `visibleTextLength`와 같다).
-    when 'image', 'youtube' then return btrim(coalesce(p_body -> 'attrs' ->> 'caption', ''));
     else null;
   end case;
 
-  v_separator := case when v_type in ('paragraph', 'heading', 'codeBlock', 'footnote') then '' else E'\n' end;
+  -- 이미지·영상은 내용(캡션 노드)의 글자만 보인다. 대체 텍스트는 보이지 않는다.
+  v_separator := case when v_type in ('paragraph', 'heading', 'codeBlock', 'footnote', 'caption') then '' else E'\n' end;
   -- 접기는 제목도 보이는 글자다.
   v_out := case when v_type = 'fold' then nullif(p_body -> 'attrs' ->> 'title', '') end;
   -- 자식 글자는 한 번에 잇는다. 하나씩 덧붙이면 글이 길수록 앞부분을 거듭 복사한다.
@@ -262,6 +261,10 @@ begin
   -- 각주 내용은 앞 글자와 띄어 둔다(검색에서 앞 낱말과 붙지 않게).
   if v_type = 'footnote' then
     return ' ' || coalesce(v_out, '');
+  end if;
+  -- 캡션 앞뒤의 빈칸은 화면에서 보이지 않는다.
+  if v_type = 'caption' then
+    return btrim(coalesce(v_out, ''));
   end if;
   -- 프로필도 보이는 글자다(검색, 문서 길이). 문서 보기처럼 본문 앞에 둔다.
   -- 이 줄이 생기기 전의 판에는 프로필이 없으므로 저장된 `body_text`는 그대로 맞다.

@@ -8,8 +8,9 @@
 import { isWikiDoc, type WikiDoc } from "~/features/markup";
 
 // 본문 형식이 바뀔 때마다 접두사를 바꾼다. 예전 형식의 임시 저장은 읽지 않는다.
-// (2: 글자 → 문서 구조, 3: 각주 내용이 `attrs.note`에서 `content`로)
-const PREFIX = "wiki:draft3:";
+// (2: 글자 → 문서 구조, 3: 각주 내용이 `attrs.note`에서 `content`로, 4: 캡션이 `attrs.caption`에서
+// 캡션 노드로)
+const PREFIX = "wiki:draft4:";
 /** 오래된 임시 저장은 버린다. 그 사이 문서가 많이 바뀌었을 것이다. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 

@@ -309,6 +309,7 @@ export function Toolbar({
         <DropdownMenuItem
           onClick={() =>
             chain()
+              .leaveCaption()
               .insertContent({
                 type: NODE.fold,
                 attrs: { title: "" },
@@ -323,11 +324,15 @@ export function Toolbar({
         <DropdownMenuItem onClick={() => request({ kind: "template" })}>
           <Puzzle />틀 삽입
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => chain().toggleCodeBlock().run()}>
+        <DropdownMenuItem
+          onClick={() => chain().leaveCaption().toggleCodeBlock().run()}
+        >
           <Code />
           코드 블록
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => chain().setHorizontalRule().run()}>
+        <DropdownMenuItem
+          onClick={() => chain().leaveCaption().setHorizontalRule().run()}
+        >
           <Minus />
           구분선
         </DropdownMenuItem>

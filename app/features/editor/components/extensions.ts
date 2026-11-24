@@ -22,6 +22,7 @@ import {
 } from "./node-views";
 import {
   MARK,
+  NODE,
   pageHref,
   parseTitle,
   sectionAnchor,
@@ -138,6 +139,38 @@ const MissingLinks = Extension.create<Pick<WikiEditorOptions, "isMissing">>({
 });
 
 /**
+ * 빈 캡션에 `is-empty`를 붙인다. CSS가 그 자리에 "캡션 (선택)"을 보여 적을 자리를 알린다. 기본
+ * placeholder 확장은 맨 바깥 블록만 보므로 캡션에 닿지 않는다.
+ */
+const EmptyCaption = Extension.create({
+  name: "wikiEmptyCaption",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          decorations: (state) => {
+            const decorations: Decoration[] = [];
+            state.doc.descendants((node, pos) => {
+              if (node.type.name !== NODE.caption) return true;
+              if (node.content.size === 0) {
+                decorations.push(
+                  Decoration.node(pos, pos + node.nodeSize, {
+                    class: "is-empty",
+                  }),
+                );
+              }
+              return false;
+            });
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+      }),
+    ];
+  },
+});
+
+/**
  * Ctrl+클릭(맥은 Cmd+클릭)으로 링크를 새 탭에서 연다. 그냥 클릭은 지금처럼 커서만 옮긴다.
  * 새 탭으로 여는 것은 저장하지 않은 편집 내용을 잃지 않기 위해서다.
  */
@@ -238,5 +271,6 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
     WikiShortcuts.configure({ request: options.request }),
     MissingLinks.configure({ isMissing: options.isMissing }),
     OpenLinkOnModClick,
+    EmptyCaption,
   ];
 }
