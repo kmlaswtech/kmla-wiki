@@ -191,6 +191,7 @@ begin
   perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
   update public.pages set deleted_at = now() where id = p_page_id;
   perform private.close_reports(array(select revision.id from public.revisions as revision where revision.page_id = p_page_id));
+  perform private.close_page_discussion_reports(p_page_id);
 end;
 $function$;
 

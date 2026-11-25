@@ -15,6 +15,7 @@ import {
   RestorableRevocationList,
 } from "~/features/admin";
 import { loadMemberStatus, withVerifiedMember } from "~/features/auth";
+import { listOpenPostReports, PostReportList } from "~/features/discussions";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
@@ -22,17 +23,17 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   // 화면을 가리는 검사다. 실제 권한은 각 RPC가 검사한다.
   const status = await loadMemberStatus();
   if (!status?.isAdmin) throw redirect("/");
-  const [admins, revocations, lookups, reports] = await withVerifiedMember(
-    request,
-    () =>
+  const [admins, revocations, lookups, reports, postReports] =
+    await withVerifiedMember(request, () =>
       Promise.all([
         listAdmins(),
         listRestorableRevocations(),
         listMyAuthorLookups(),
         listOpenReports(),
+        listOpenPostReports(),
       ]),
-  );
-  return { admins, revocations, lookups, reports };
+    );
+  return { admins, revocations, lookups, reports, postReports };
 }
 
 export const meta: Route.MetaFunction = () => [{ title: "관리 - 큼온 위키" }];
@@ -42,7 +43,8 @@ export const meta: Route.MetaFunction = () => [{ title: "관리 - 큼온 위키"
  * 것(관리자 목록)과 다른 화면으로 가는 길만 둔다.
  */
 export default function AdminRoute({ loaderData }: Route.ComponentProps) {
-  const { admins, revocations, lookups, reports } = loaderData;
+  const { admins, revocations, lookups, reports, postReports } = loaderData;
+  const reportCount = reports.length + postReports.length;
   const revalidator = useRevalidator();
   const [revoking, setRevoking] = useState<string | null>(null);
   const me = admins.find((admin) => admin.isMe);
@@ -84,16 +86,27 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
 
       <section>
         <h2 className="mb-2 text-lg font-semibold">
-          신고{reports.length > 0 ? ` ${reports.length}건` : ""}
+          신고{reportCount > 0 ? ` ${reportCount}건` : ""}
         </h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          신고 대상이 판 숨김, 문서 삭제 또는 일괄 되돌리기로 제거되면 신고가
-          자동으로 처리됩니다. 별도로 조치했다면 ‘처리 완료’, 조치가 필요 없다면
-          ‘기각’을 선택하세요. 같은 회원은 기각된 판을 다시 신고할 수 없습니다.
-          신고 처리 결과는 공개 기록에 남지 않습니다.
+          신고 대상이 판 숨김, 문서 삭제, 일괄 되돌리기, 토론 글 숨김 또는 토론
+          지우기로 제거되면 신고가 자동으로 처리됩니다. 별도로 조치했다면 ‘처리
+          완료’, 조치가 필요 없다면 ‘기각’을 선택하세요. 같은 회원은 기각된
+          판이나 글을 다시 신고할 수 없습니다. 신고 처리 결과는 공개 기록에 남지
+          않습니다.
         </p>
+        <h3 className="mb-2 text-sm font-semibold">
+          판{reports.length > 0 ? ` ${reports.length}건` : ""}
+        </h3>
         <OpenReportList
           reports={reports}
+          onChanged={() => void revalidator.revalidate()}
+        />
+        <h3 className="mt-4 mb-2 text-sm font-semibold">
+          토론 글{postReports.length > 0 ? ` ${postReports.length}건` : ""}
+        </h3>
+        <PostReportList
+          reports={postReports}
           onChanged={() => void revalidator.revalidate()}
         />
       </section>

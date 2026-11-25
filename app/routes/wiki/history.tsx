@@ -226,7 +226,9 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
               </Button>
             ) : null}
             {canReport && !revision.hiddenAt ? (
-              <ReportButton revisionId={revision.id} pageTitle={title} />
+              <ReportButton
+                target={{ kind: "revision", id: revision.id, pageTitle: title }}
+              />
             ) : null}
             {isAdmin ? (
               <RevisionAdminMenu

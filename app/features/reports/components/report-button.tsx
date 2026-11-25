@@ -1,13 +1,15 @@
 import { Flag } from "lucide-react";
 import { useState } from "react";
 
-import { reportRevision } from "../data/mutations";
+import { submitReport } from "../data/mutations";
 import {
   canSubmitReport,
   describeReportError,
+  describeReportTarget,
   REPORT_CATEGORIES,
   REPORT_NOTE_MAX,
   type ReportCategory,
+  type ReportTarget,
 } from "../model/report";
 import { Button } from "~/shared/ui/button";
 import {
@@ -23,16 +25,14 @@ import { Spinner } from "~/shared/ui/spinner";
 import { Textarea } from "~/shared/ui/textarea";
 
 /**
- * 판 하나를 관리자에게 알리는 단추. 내용을 고치는 일은 누구나 할 수 있으므로, 회원이 직접 할 수 없는
- * 일(기록에서 판 숨기기, 차단, 보호)을 부탁할 때 쓴다.
+ * 판 하나나 토론 글 하나를 관리자에게 알리는 단추. 내용을 고치는 일은 누구나 할 수 있으므로, 회원이
+ * 직접 할 수 없는 일(판·글 숨기기, 차단, 보호)을 부탁할 때 쓴다.
  */
 export function ReportButton({
-  revisionId,
-  pageTitle,
+  target,
   size = "icon-xs",
 }: {
-  revisionId: number;
-  pageTitle: string;
+  target: ReportTarget;
   /** 판 기록의 줄은 작게, 문서 제목 줄은 옆 단추에 맞춘다. */
   size?: "icon-xs" | "icon-sm";
 }) {
@@ -43,7 +43,7 @@ export function ReportButton({
         type="button"
         size={size}
         variant="ghost"
-        aria-label={`r${revisionId} 신고`}
+        aria-label={`${describeReportTarget(target)} 신고`}
         title="신고"
         onClick={() => setOpen(true)}
       >
@@ -51,23 +51,17 @@ export function ReportButton({
       </Button>
       {/* 닫히면 내려가므로 열 때마다 빈 폼으로 시작한다. */}
       <DialogContent>
-        <ReportForm
-          revisionId={revisionId}
-          pageTitle={pageTitle}
-          onClose={() => setOpen(false)}
-        />
+        <ReportForm target={target} onClose={() => setOpen(false)} />
       </DialogContent>
     </Dialog>
   );
 }
 
 function ReportForm({
-  revisionId,
-  pageTitle,
+  target,
   onClose,
 }: {
-  revisionId: number;
-  pageTitle: string;
+  target: ReportTarget;
   onClose: () => void;
 }) {
   const [category, setCategory] = useState<ReportCategory | null>(null);
@@ -100,10 +94,10 @@ function ReportForm({
     setPending(true);
     setError(null);
     try {
-      await reportRevision(revisionId, category, note);
+      await submitReport(target, category, note);
       setSent(true);
     } catch (caught) {
-      setError(describeReportError(caught));
+      setError(describeReportError(caught, target.kind));
     } finally {
       setPending(false);
     }
@@ -121,8 +115,10 @@ function ReportForm({
       <DialogHeader>
         <DialogTitle>신고</DialogTitle>
         <DialogDescription>
-          신고 대상 · ‘{pageTitle}’ r{revisionId}. 판 숨김이나 편집 차단 등 관리
-          조치가 필요할 때 신고해 주세요.
+          신고 대상 · {describeReportTarget(target)}.{" "}
+          {target.kind === "revision"
+            ? "판 숨김이나 편집 차단 등 관리 조치가 필요할 때 신고해 주세요."
+            : "글 숨김이나 차단 등 관리 조치가 필요할 때 신고해 주세요."}
         </DialogDescription>
       </DialogHeader>
 
@@ -145,7 +141,7 @@ function ReportForm({
               {entry.label}
               {entry.hint ? (
                 <span className="block text-xs text-muted-foreground">
-                  {entry.hint}
+                  {(target.kind === "post" && entry.postHint) || entry.hint}
                 </span>
               ) : null}
             </span>
@@ -165,7 +161,8 @@ function ReportForm({
           onChange={(event) => setNote(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          신고하려는 판의 개인정보를 여기에 옮겨 적지 마세요.
+          신고하려는 {target.kind === "revision" ? "판" : "글"}의 개인정보를
+          여기에 옮겨 적지 마세요.
         </p>
       </div>
 

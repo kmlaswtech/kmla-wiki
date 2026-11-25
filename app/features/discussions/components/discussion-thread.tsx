@@ -7,6 +7,7 @@ import type { DiscussionPost } from "../model/types";
 import { PostText } from "./post-text";
 import { WithdrawButton } from "./withdraw-button";
 import { ReasonDialog } from "~/features/admin";
+import { ReportButton } from "~/features/reports";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { cn } from "~/shared/lib/utils";
 import { Badge } from "~/shared/ui/badge";
@@ -24,16 +25,21 @@ const KIND_LABEL: Partial<Record<DiscussionPost["kind"], string>> = {
   rename: "제목 바꿈",
 };
 
-/** 토론의 글 목록. 내 글 거두기와 관리자의 글 숨기기가 줄마다 붙는다. */
+/**
+ * 토론의 글 목록. 내 글 거두기, 남의 글 신고, 관리자의 글 숨기기가 줄마다 붙는다. 토론을 신고하려면
+ * 첫 글을 신고한다.
+ */
 export function DiscussionThread({
   posts,
+  pageTitle,
   isAdmin,
   canWrite,
   onAdminDone,
 }: {
   posts: readonly DiscussionPost[];
+  pageTitle: string;
   isAdmin: boolean;
-  /** 차단 중이거나 지운 토론이면 거두기 단추를 내지 않는다. */
+  /** 차단 중이거나 지운 토론이면 거두기·신고 단추를 내지 않는다. */
   canWrite: boolean;
   onAdminDone: () => void;
 }) {
@@ -44,6 +50,15 @@ export function DiscussionThread({
           <PostCard
             post={post}
             canWithdraw={canWrite && canWithdrawPost(posts, post)}
+            // 관리자는 신고하지 않고 바로 숨긴다. 닫기·다시 열기·제목 바꾸기 글은 서버도 받지 않는다.
+            canReport={
+              canWrite &&
+              !isAdmin &&
+              !post.mine &&
+              post.state === "visible" &&
+              (post.kind === "open" || post.kind === "post")
+            }
+            pageTitle={pageTitle}
             isAdmin={isAdmin}
             onAdminDone={onAdminDone}
           />
@@ -56,11 +71,16 @@ export function DiscussionThread({
 function PostCard({
   post,
   canWithdraw,
+  canReport,
+  pageTitle,
   isAdmin,
   onAdminDone,
 }: {
   post: DiscussionPost;
   canWithdraw: boolean;
+  canReport: boolean;
+  /** 신고 대화상자에 적는 문서 제목. */
+  pageTitle: string;
   isAdmin: boolean;
   onAdminDone: () => void;
 }) {
@@ -97,6 +117,16 @@ function PostCard({
             >
               삭제
             </WithdrawButton>
+          ) : null}
+          {canReport ? (
+            <ReportButton
+              target={{
+                kind: "post",
+                id: post.id,
+                pageTitle,
+                authorName: post.authorName,
+              }}
+            />
           ) : null}
           {isAdmin && post.state !== "withdrawn" ? (
             <PostAdminMenu post={post} onDone={onAdminDone} />

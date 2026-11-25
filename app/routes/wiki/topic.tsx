@@ -157,6 +157,7 @@ export default function TopicRoute({ loaderData }: Route.ComponentProps) {
 
       <DiscussionThread
         posts={discussion.posts}
+        pageTitle={discussion.pageTitle}
         isAdmin={status.isAdmin}
         canWrite={canWrite}
         onAdminDone={refresh}

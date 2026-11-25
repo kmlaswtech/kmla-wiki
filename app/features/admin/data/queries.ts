@@ -6,6 +6,7 @@ import type {
   RestorableRevocation,
 } from "../model/log";
 import type { RecentChange } from "~/features/pages";
+import { toReportNotes, type ReportNote } from "~/features/reports";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap, WikiError } from "~/shared/supabase/errors";
 
@@ -196,12 +197,6 @@ export async function previewBulkRevert(
 }
 
 /** 신고 한 건. 신고자는 오지 않는다. */
-export interface ReportNote {
-  category: string;
-  note: string;
-  createdAt: string;
-}
-
 /** 처리되지 않은 신고를 판별로 묶은 것. */
 export interface OpenReport {
   revisionId: number;
@@ -231,13 +226,7 @@ export async function listOpenReports(): Promise<OpenReport[]> {
     hiddenAt: row.hidden_at,
     isCurrent: row.is_current,
     pageDeleted: row.page_deleted,
-    reports: (
-      row.reports as { category: string; note: string; created_at: string }[]
-    ).map((report) => ({
-      category: report.category,
-      note: report.note,
-      createdAt: report.created_at,
-    })),
+    reports: toReportNotes(row.reports),
     dismissedCount: row.dismissed_count,
   }));
 }
