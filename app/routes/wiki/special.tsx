@@ -143,7 +143,7 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
                     {row.title}
                   </Link>{" "}
                   <span className="text-muted-foreground tabular-nums">
-                    ({row.byteSize.toLocaleString("ko")}바이트)
+                    ({row.textSize.toLocaleString("ko")}자)
                   </span>
                 </span>
               </li>

@@ -637,7 +637,8 @@ CREATE OR REPLACE FUNCTION public.list_author_edits (
     pseudonym          text,
     kind               text,
     summary            text,
-    byte_delta         integer,
+    text_added         integer,
+    text_removed       integer,
     created_at         timestamp with time zone,
     parent_revision_id bigint,
     is_current         boolean,
@@ -658,7 +659,7 @@ begin
   return query
   select
     revision.id, page.id, page.title, revision.author_pseudonym, revision.kind, revision.summary,
-    revision.byte_delta, revision.created_at, revision.parent_revision_id,
+    revision.text_added, revision.text_removed, revision.created_at, revision.parent_revision_id,
     revision.id = page.current_revision_id, revision.hidden_at, page.deleted_at is not null
   from private.revision_authors as author
   join public.revisions as revision on revision.id = author.revision_id

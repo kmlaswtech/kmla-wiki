@@ -96,8 +96,9 @@ export interface RevisionSummary {
   summary: string;
   /** 그 문서에서의 가명. */
   authorPseudonym: string;
-  byteSize: number;
-  byteDelta: number;
+  /** 앞 판에서 더한 글자 수와 뺀 글자 수(보이는 글자 기준). */
+  textAdded: number;
+  textRemoved: number;
   createdAt: string;
   hiddenAt: string | null;
 }

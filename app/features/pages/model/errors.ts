@@ -76,13 +76,6 @@ export function describeWriteError(error: unknown): string {
   return "저장하지 못했습니다. 잠시 뒤에 다시 시도해 주세요.";
 }
 
-/** 변화량을 `+120`, `-45`, `0`으로. */
-export function formatByteDelta(delta: number): string {
-  return delta > 0
-    ? `+${delta.toLocaleString("ko")}`
-    : delta.toLocaleString("ko");
-}
-
 const KIND_LABEL: Record<string, string> = {
   edit: "",
   revert: "되돌림",
