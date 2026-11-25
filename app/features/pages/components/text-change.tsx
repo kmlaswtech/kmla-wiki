@@ -5,7 +5,7 @@ const count = (value: number) => value.toLocaleString("ko");
 
 /**
  * 판에서 더한 글자와 뺀 글자(`+12 −3`). 보이는 글자가 그대로인 판(꾸밈, 표, 분류, 넘겨줄 곳만 바꿨거나
- * 이동한 판)은 숫자 대신 "글자 그대로"를 보인다. 첫 판은 빈 문서라도 `+0`이다. 세는 방법은 DB의
+ * 이동한 판)은 숫자 대신 "서식 변경"을 보인다. 첫 판은 빈 문서라도 `+0`이다. 세는 방법은 DB의
  * `private.text_change`에 있다.
  */
 export function TextChange({
@@ -24,7 +24,7 @@ export function TextChange({
         className={cn("text-muted-foreground", className)}
         title="보이는 글자는 그대로이고 꾸밈, 표, 분류 같은 것만 바뀌었습니다."
       >
-        글자 그대로
+        서식 변경
       </span>
     );
   }
