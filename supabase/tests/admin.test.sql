@@ -34,6 +34,8 @@ select throws_ok($$select public.revoke_admin('관리자 A', '해제')$$, '42501
   'a member cannot revoke admin');
 select throws_ok($$select * from public.list_admins()$$, '42501', null,
   'a member cannot list admins');
+select throws_ok($$select public.set_admin_nickname('밥')$$, '42501', null,
+  'a member cannot set an admin nickname');
 select is(public.admin_count(), 1, 'a member only learns how many admins there are');
 select logout();
 
@@ -293,8 +295,31 @@ select results_eq(
   format($$values (null::text, null::bigint, null::text, '기록 #%s'::text)$$, :revoke_log),
   'the restore is public but names only the revocation, not the member'
 );
+select logout();
 
-select lives_ok($$select public.revoke_admin('관리자 A', '다시 교대')$$, 'the admin can be revoked again');
+-- ── 관리자 별명 ──────────────────────────────────────────────────────────────
+select login(:admin);
+select lives_ok($$select public.set_admin_nickname('  운영 담당  ')$$, 'an admin sets their own nickname');
+select logout();
+select login(:alice);
+select throws_ok(format($$select public.set_admin_nickname(%L)$$, repeat('가', 21)), 'WK021', null,
+  'a nickname is at most 20 characters');
+select throws_ok($$select public.set_admin_nickname('줄' || chr(10) || '바꿈')$$, 'WK021', null,
+  'a nickname has no control characters');
+select lives_ok($$select public.set_admin_nickname('운영 담당')$$, 'nicknames may be the same');
+select lives_ok($$select public.set_admin_nickname('   ')$$, 'a blank nickname clears it');
+select results_eq(
+  $$select admin_handle, admin_nickname, is_me from public.list_admins() order by admin_handle$$,
+  $$values ('관리자 A'::text, '운영 담당'::text, false), ('관리자 B', null, true)$$,
+  'admins see each other''s trimmed nicknames'
+);
+select is_empty(
+  $$select 1 from public.admin_log where coalesce(note, '') || coalesce(reason, '') like '%운영 담당%'$$,
+  'a nickname is not written to the public log'
+);
+
+-- 관리자 A에게 별명이 있으므로, 해제가 통과하면 별명도 지운 것이다(`members_admin_nickname_shape`).
+select lives_ok($$select public.revoke_admin('관리자 A', '다시 교대')$$, 'the admin with a nickname can be revoked again');
 select id as second_revoke from public.admin_log where action = 'revoke_admin' order by id desc limit 1 \gset
 select logout();
 update public.admin_log set created_at = now() - interval '8 days' where id = :second_revoke;

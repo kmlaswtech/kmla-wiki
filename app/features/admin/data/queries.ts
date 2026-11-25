@@ -248,10 +248,14 @@ export async function countOpenReports(): Promise<number> {
 
 /** 관리자 목록(관리자 전용). 관리자 전용 이름만 온다. */
 export async function listAdmins(): Promise<
-  { handle: string; isMe: boolean }[]
+  { handle: string; nickname: string | null; isMe: boolean }[]
 > {
   const rows = unwrap(await getSupabase().rpc("list_admins"));
-  return rows.map((row) => ({ handle: row.admin_handle, isMe: row.is_me }));
+  return rows.map((row) => ({
+    handle: row.admin_handle,
+    nickname: row.admin_nickname,
+    isMe: row.is_me,
+  }));
 }
 
 /** 되돌릴 수 있는 관리자 해제(관리자 전용). 해제된 사람은 관리자 전용 이름으로만 온다. */

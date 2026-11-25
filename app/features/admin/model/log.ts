@@ -101,7 +101,7 @@ export function describeAdminLog(entry: AdminLogEntry): string {
 }
 
 // DB 마이그레이션(`*_admin.sql`, `*_admin_lookups_ban_end.sql`, `*_admin_bulk_revert_reports.sql`,
-// `*_restore_revoked_admin.sql`)
+// `*_restore_revoked_admin.sql`, `*_admin_nickname.sql`)
 // 머리말의 표와 같다.
 const MESSAGE: Record<string, string> = {
   "42501": "관리자 권한이 필요합니다.",
@@ -116,6 +116,7 @@ const MESSAGE: Record<string, string> = {
   WK018: "일괄 되돌리기는 한 번에 200개 문서까지 할 수 있습니다.",
   WK020:
     "해제한 지 7일이 지나 되돌릴 수 없습니다. 판 기록에서 다시 지정해 주세요.",
+  WK021: "별명은 20자까지, 줄바꿈 없이 적어 주세요.",
 };
 
 /** 같은 사람의 다른 편집을 보는 허가가 없거나 끝났다. */

@@ -206,6 +206,13 @@ export async function grantAdmin(
   );
 }
 
+/** 내 관리자 별명을 정한다. 빈 값이면 지운다. 공개 기록에는 남지 않는다. */
+export async function setAdminNickname(nickname: string): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("set_admin_nickname", { p_nickname: nickname }),
+  );
+}
+
 /** 최근 해제를 되돌린다. */
 export async function restoreRevokedAdmin(
   logId: number,

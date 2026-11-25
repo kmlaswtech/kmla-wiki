@@ -3,6 +3,7 @@ import { Link, redirect, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/index";
 import {
+  AdminNicknameForm,
   listAdmins,
   listMyAuthorLookups,
   listOpenReports,
@@ -44,6 +45,7 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
   const { admins, revocations, lookups, reports } = loaderData;
   const revalidator = useRevalidator();
   const [revoking, setRevoking] = useState<string | null>(null);
+  const me = admins.find((admin) => admin.isMe);
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -107,8 +109,9 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
       <section>
         <h2 className="mb-2 text-lg font-semibold">관리자 {admins.length}명</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          아래 이름은 관리자에게만 표시되며 문서의 가명과 연결되지 않습니다.
-          일반 회원에게는 관리자 수만 공개됩니다.
+          아래 이름과 별명은 관리자에게만 표시되며 문서의 가명과 연결되지
+          않습니다. 일반 회원에게는 관리자 수만 공개됩니다. 별명은 서로를
+          알아보도록 각자 정하고, 공개 기록에는 남지 않습니다.
         </p>
         <ul className="divide-y rounded-md border text-sm">
           {admins.map((admin) => (
@@ -117,6 +120,11 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
               className="flex items-center gap-2 px-3 py-2"
             >
               <span className="font-medium">{admin.handle}</span>
+              {admin.nickname ? (
+                <span className="min-w-0 truncate text-muted-foreground">
+                  ({admin.nickname})
+                </span>
+              ) : null}
               {admin.isMe ? <Badge variant="secondary">나</Badge> : null}
               <Button
                 className="ml-auto"
@@ -135,6 +143,11 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
             마지막 관리자의 권한은 해제할 수 없습니다.
           </p>
         ) : null}
+        <AdminNicknameForm
+          key={me?.nickname ?? ""}
+          nickname={me?.nickname ?? null}
+          onChanged={() => void revalidator.revalidate()}
+        />
       </section>
 
       {revocations.length > 0 ? (
@@ -156,7 +169,7 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
         title="관리자 권한 해제"
-        description={`‘${revoking ?? ""}’의 관리자 권한을 해제합니다. 공개 기록에는 해제된 관리자의 이름이 표시되지 않습니다. 잘못 해제했다면 7일 안에 이 화면에서 되돌릴 수 있습니다.`}
+        description={`‘${revoking ?? ""}’의 관리자 권한을 해제합니다. 공개 기록에는 해제된 관리자의 이름이 표시되지 않습니다. 별명은 지워집니다. 잘못 해제했다면 7일 안에 이 화면에서 되돌릴 수 있습니다.`}
         confirmLabel="해제"
         destructive
         onConfirm={(reason) => revokeAdmin(revoking ?? "", reason)}
