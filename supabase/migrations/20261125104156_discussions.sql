@@ -877,6 +877,27 @@ $function$;
 
 REVOKE ALL ON FUNCTION "public"."set_discussion_post_hidden"(bigint, boolean, text) FROM PUBLIC, "anon";
 
+-- 토론에 `p_after_post_id` 뒤의 답글이 남아 있는가. 거두지 않은 글만 센다. 첫 글과 제목 바꾸기 글은
+-- 답글이 아니다. 제목 바꾸기 글은 누구도 거둘 수 없어서 세면 영영 거둘 수 없다. 화면의
+-- `countsAsReply`와 같은 판단이다.
+CREATE OR REPLACE FUNCTION private.discussion_has_replies (
+  p_discussion_id bigint,
+  p_after_post_id bigint
+)
+  RETURNS boolean
+  LANGUAGE sql
+  STABLE
+  SET search_path TO ''
+  AS $function$
+  select exists (
+    select 1 from private.discussion_posts as reply
+    where reply.discussion_id = p_discussion_id and reply.id > p_after_post_id
+      and reply.kind not in ('open', 'rename') and reply.withdrawn_at is null
+  );
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."discussion_has_replies"(bigint, bigint) FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION public.withdraw_discussion (
   p_discussion_id bigint
 )
@@ -892,11 +913,7 @@ begin
   if v_discussion.created_by_member_id is distinct from v_member_id then
     raise exception 'not your discussion' using errcode = '42501';
   end if;
-  if exists (
-    select 1 from private.discussion_posts as reply
-    where reply.discussion_id = v_discussion.id and reply.kind not in ('open', 'rename')
-      and reply.withdrawn_at is null
-  ) then
+  if private.discussion_has_replies(v_discussion.id, 0) then
     raise exception 'there are replies' using errcode = 'WK024', detail = 'replies';
   end if;
 
@@ -939,12 +956,7 @@ begin
   if v_post.hidden_at is not null then
     raise exception 'hidden post' using errcode = 'WK024', detail = 'hidden';
   end if;
-  -- 제목 바꾸기 글은 답글이 아니다. 누구도 거둘 수 없어서 세면 영영 거둘 수 없다.
-  if exists (
-    select 1 from private.discussion_posts as later
-    where later.discussion_id = v_post.discussion_id and later.id > v_post.id
-      and later.kind <> 'rename' and later.withdrawn_at is null
-  ) then
+  if private.discussion_has_replies(v_post.discussion_id, v_post.id) then
     raise exception 'there are replies' using errcode = 'WK024', detail = 'replies';
   end if;
 
