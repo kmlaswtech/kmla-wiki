@@ -159,6 +159,29 @@ select is(
   (select count(*)::integer from private.reports where revision_id in (:c2, :d1, :e1) and resolution = 'handled'),
   3, 'hiding and deleting close the reports as handled'
 );
+select is(
+  (select count(*)::integer from private.reports as report
+   join private.members as member on member.id = report.resolved_by_member_id
+   where report.revision_id in (:c2, :d1, :e1) and member.is_admin),
+  3, 'the admin who acted is recorded as the resolver'
+);
+
+-- RPC를 거치지 않고 숨기거나 삭제해도 트리거가 신고를 닫는다.
+select login(:bob);
+select page_id as p6, revision_id as f1 from public.save_revision('직접 숨김 문서', null, wiki('하나')) \gset
+select revision_id as f2 from public.save_revision('직접 숨김 문서', :f1, wiki('둘')) \gset
+select page_id as p7, revision_id as g1 from public.save_revision('직접 삭제 문서', null, wiki('하나')) \gset
+select logout();
+select login(:admin);
+select public.report_revision(id, 'privacy') from unnest(array[:f1, :g1]::bigint[]) as id;
+select logout();
+update public.revisions set hidden_at = now() where id = :f1;
+update public.pages set deleted_at = now() where id = :p7;
+select is(
+  (select count(*)::integer from private.reports
+   where revision_id in (:f1, :g1) and resolution = 'handled' and resolved_by_member_id is null),
+  2, 'hiding a revision or deleting a page directly closes its reports with no resolver'
+);
 
 select * from finish();
 rollback;

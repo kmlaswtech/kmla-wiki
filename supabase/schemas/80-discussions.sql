@@ -604,7 +604,7 @@ REVOKE ALL ON FUNCTION "public"."withdraw_discussion"(bigint) FROM PUBLIC, "anon
 
 -- 글 하나를 숨기거나 되살린다(관리자 전용). 늘 '관리자' 이름이고 사유와 함께 관리 기록에 남는다.
 -- 관리 기록에는 문서 제목과 토론 번호(`discussion_id`)만 남긴다. 토론 제목과 글은 숨기거나 지울 대상일 수
--- 있어서 적지 않는다. 숨기면 그 글에 걸린 처리되지 않은 신고를 `handled`로 닫는다.
+-- 있어서 적지 않는다. 숨기면 트리거가 그 글의 신고를 닫는다.
 CREATE OR REPLACE FUNCTION public.set_discussion_post_hidden (
   p_post_id bigint,
   p_hidden  boolean,
@@ -635,9 +635,6 @@ begin
   update private.discussion_posts
      set hidden_at = case when p_hidden then now() end
    where id = p_post_id;
-  if p_hidden then
-    perform private.close_reports('{}', array[p_post_id]);
-  end if;
   perform private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
     v_reason, (select title from public.pages where id = v_discussion.page_id),
@@ -657,7 +654,7 @@ GRANT EXECUTE ON FUNCTION "public"."set_discussion_post_hidden"(bigint, boolean,
 REVOKE ALL ON FUNCTION "public"."set_discussion_post_hidden"(bigint, boolean, text) FROM PUBLIC, "anon";
 
 -- 토론을 지우거나 되살린다(관리자 전용). 지운 토론은 관리자에게만 보인다. 거둔 토론은 대상이 아니다.
--- 지우면 그 토론의 글에 걸린 처리되지 않은 신고를 `handled`로 닫는다.
+-- 지우면 트리거가 그 토론의 글의 신고를 닫는다.
 CREATE OR REPLACE FUNCTION public.set_discussion_deleted (
   p_discussion_id bigint,
   p_deleted       boolean,
@@ -686,11 +683,6 @@ begin
   update private.discussions
      set deleted_at = case when p_deleted then now() end
    where id = p_discussion_id;
-  if p_deleted then
-    perform private.close_reports('{}', array(
-      select post.id from private.discussion_posts as post where post.discussion_id = p_discussion_id
-    ));
-  end if;
   perform private.log_admin_action(
     case when p_deleted then 'delete_discussion' else 'restore_discussion' end,
     v_reason, (select title from public.pages where id = v_discussion.page_id),
@@ -1052,6 +1044,68 @@ REVOKE ALL ON FUNCTION "public"."get_discussion"(bigint) FROM PUBLIC, "anon";
 ALTER TABLE "private"."reports"
   ADD CONSTRAINT "reports_post_id_fkey" FOREIGN KEY (post_id) REFERENCES private.discussion_posts(id) ON DELETE CASCADE;
 
+-- 토론 글이 회원에게 보이지 않게 되면 그 글의 신고를 닫는다. 판의 트리거(`70-reports.sql`)와 같다.
+-- 글을 숨기거나 거두면 그 글의 신고를, 토론을 지우거나 거두면 그 토론의 글의 신고를 닫는다.
+CREATE OR REPLACE FUNCTION private.close_hidden_post_reports()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.close_reports('{}', array[new.id]);
+  return null;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_hidden_post_reports"() FROM PUBLIC;
+
+CREATE TRIGGER close_reports_on_hide AFTER UPDATE OF hidden_at ON private.discussion_posts FOR EACH ROW WHEN (((old.hidden_at IS NULL) AND (new.hidden_at IS NOT NULL))) EXECUTE FUNCTION private.close_hidden_post_reports();
+
+CREATE TRIGGER close_reports_on_withdraw AFTER UPDATE OF withdrawn_at ON private.discussion_posts FOR EACH ROW WHEN (((old.withdrawn_at IS NULL) AND (new.withdrawn_at IS NOT NULL))) EXECUTE FUNCTION private.close_hidden_post_reports();
+
+CREATE OR REPLACE FUNCTION private.close_hidden_discussion_reports()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.close_reports('{}', array(
+    select post.id from private.discussion_posts as post where post.discussion_id = new.id
+  ));
+  return null;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_hidden_discussion_reports"() FROM PUBLIC;
+
+CREATE TRIGGER close_reports_on_delete AFTER UPDATE OF deleted_at ON private.discussions FOR EACH ROW WHEN (((old.deleted_at IS NULL) AND (new.deleted_at IS NOT NULL))) EXECUTE FUNCTION private.close_hidden_discussion_reports();
+
+CREATE TRIGGER close_reports_on_withdraw AFTER UPDATE OF withdrawn_at ON private.discussions FOR EACH ROW WHEN (((old.withdrawn_at IS NULL) AND (new.withdrawn_at IS NOT NULL))) EXECUTE FUNCTION private.close_hidden_discussion_reports();
+
+-- 문서를 삭제하면 그 문서의 토론 글의 신고를 닫는다. 삭제된 문서의 토론은 회원에게 보이지 않는다.
+CREATE OR REPLACE FUNCTION private.close_deleted_page_post_reports()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.close_reports('{}', array(
+    select post.id
+    from private.discussion_posts as post
+    join private.discussions as discussion on discussion.id = post.discussion_id
+    where discussion.page_id = new.id
+  ));
+  return null;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_deleted_page_post_reports"() FROM PUBLIC;
+
+CREATE TRIGGER close_post_reports_on_delete AFTER UPDATE OF deleted_at ON public.pages FOR EACH ROW WHEN (((old.deleted_at IS NULL) AND (new.deleted_at IS NOT NULL))) EXECUTE FUNCTION private.close_deleted_page_post_reports();
+
 -- 토론 글 하나를 신고한다. 토론을 신고하려면 첫 글을 신고한다. 규칙은 판 신고(`report_revision`)와
 -- 같다. 내 글, 내가 볼 수 없는 토론의 글, 숨기거나 거둔 글, 닫기·다시 열기·제목 바꾸기 글은 없는 글과
 -- 같은 오류다. 닫기·다시 열기 글은 토론의 상태를, 제목 바꾸기 글은 관리 기록을 겸한다.
@@ -1168,26 +1222,6 @@ REVOKE ALL ON FUNCTION "public"."list_open_post_reports"() FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."list_open_post_reports"() FROM PUBLIC, "anon";
-
--- 문서 삭제(`delete_page_as_admin`)가 부른다. 그 문서의 토론 글에 걸린 신고를 닫는다. 삭제된 문서의
--- 토론은 회원에게 보이지 않는다.
-CREATE OR REPLACE FUNCTION private.close_page_discussion_reports (
-  p_page_id bigint
-)
-  RETURNS integer
-  LANGUAGE sql
-  SECURITY DEFINER
-  SET search_path TO ''
-  AS $function$
-  select private.close_reports('{}', array(
-    select post.id
-    from private.discussion_posts as post
-    join private.discussions as discussion on discussion.id = post.discussion_id
-    where discussion.page_id = p_page_id
-  ));
-$function$;
-
-REVOKE ALL ON FUNCTION "private"."close_page_discussion_reports"(bigint) FROM PUBLIC;
 
 -- 토론 글 하나에 걸린 처리되지 않은 신고를 모두 닫는다(관리자 전용). `resolve_reports`와 같다.
 CREATE OR REPLACE FUNCTION public.resolve_post_reports (

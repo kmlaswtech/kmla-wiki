@@ -174,8 +174,8 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."revision_target"(bigint) FROM PUBLIC;
 
--- 문서를 삭제한다(숨긴다). 삭제 판을 `관리자` 이름으로 쓰고, 삭제된 문서의 판은 보이지 않으므로 그
--- 판들의 신고를 닫는다. 잠금, 검사, 기록은 부르는 쪽이 한다.
+-- 문서를 삭제한다(숨긴다). 삭제 판을 `관리자` 이름으로 쓴다. 문서의 판과 토론 글의 신고는 트리거가
+-- 닫는다. 잠금, 검사, 기록은 부르는 쪽이 한다.
 CREATE OR REPLACE FUNCTION private.delete_page_as_admin (
   p_page_id  bigint,
   p_admin_id bigint,
@@ -190,8 +190,6 @@ CREATE OR REPLACE FUNCTION private.delete_page_as_admin (
 begin
   perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
   update public.pages set deleted_at = now() where id = p_page_id;
-  perform private.close_reports(array(select revision.id from public.revisions as revision where revision.page_id = p_page_id));
-  perform private.close_page_discussion_reports(p_page_id);
 end;
 $function$;
 
@@ -1270,7 +1268,7 @@ REVOKE ALL ON FUNCTION "public"."set_protection"(bigint, text, text) FROM PUBLIC
 
 -- 판을 숨긴다. 현재 판이면 먼저 그 앞의 보이는 판으로 되돌린다(`관리자` 이름의 새 판). 보이는 앞 판이
 -- 없으면(문서의 첫 판이거나 앞 판이 모두 숨겨졌다) 빈 본문으로 문서를 삭제한다. 숨긴 내용이 삭제 판이나
--- 복구로 다시 나오지 않게 한다. 숨기기는 `set_revision_hidden`이 하고 기록하며 신고도 닫는다.
+-- 복구로 다시 나오지 않게 한다. 숨기기는 `set_revision_hidden`이 하고 기록한다. 신고는 트리거가 닫는다.
 CREATE OR REPLACE FUNCTION public.revert_and_hide_revision (
   p_revision_id bigint,
   p_reason      text
@@ -1364,9 +1362,6 @@ begin
     case when p_hidden then 'hide_revision' else 'unhide_revision' end,
     v_reason, v_page.title, p_revision_id, v_revision.author_pseudonym
   );
-  if p_hidden then
-    perform private.close_reports(array[p_revision_id]);
-  end if;
 end;
 $function$;
 

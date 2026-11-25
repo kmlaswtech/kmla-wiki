@@ -105,8 +105,9 @@ $function$;
 REVOKE ALL ON FUNCTION "private"."check_report_rate"(bigint) FROM PUBLIC;
 
 -- 판들과 토론 글들에 걸린 처리되지 않은 신고를 닫고 닫은 건수를 돌려준다. 처리한 관리자는 지금
--- 로그인한 회원이다. 조치(판·글 숨기기, 토론 지우기, 문서 삭제, 일괄 되돌리기)는 `handled`로 닫고,
--- 관리자의 신고 닫기(`resolve_reports`, `resolve_post_reports`)는 `handled`나 `dismissed`로 닫는다.
+-- 로그인한 관리자다. 작성자가 글을 거두어 닫히면 처리자가 없다(NULL). 대상이 보이지 않게 될 때(아래
+-- 트리거)와 일괄 되돌리기가 판을 걷어 낼 때는 `handled`로 닫는다. 관리자의 신고 닫기
+-- (`resolve_reports`, `resolve_post_reports`)는 `handled`나 `dismissed`로 닫는다.
 CREATE OR REPLACE FUNCTION private.close_reports (
   p_revision_ids bigint[],
   p_post_ids     bigint[] DEFAULT '{}'::bigint[],
@@ -124,7 +125,9 @@ begin
     raise exception 'invalid resolution' using errcode = '22023';
   end if;
   update private.reports
-     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = p_resolution
+     set resolved_at = now(),
+         resolved_by_member_id = case when private.is_admin() then private.current_member_id() end,
+         resolution = p_resolution
    where (revision_id = any (p_revision_ids) or post_id = any (p_post_ids)) and resolved_at is null;
   get diagnostics v_count = row_count;
   return v_count;
@@ -132,6 +135,46 @@ end;
 $function$;
 
 REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[], bigint[], text) FROM PUBLIC;
+
+-- 열린 신고의 대상은 회원에게 보인다. 대상이 보이지 않게 되면 트리거가 신고를 `handled`로 닫는다.
+-- 그래서 숨기기·삭제 RPC는 신고를 몰라도 된다. 되살려도 신고는 다시 열지 않는다. 토론 글의 트리거는
+-- `80-discussions.sql`에 있다.
+
+-- 판을 숨기면 그 판의 신고를 닫는다.
+CREATE OR REPLACE FUNCTION private.close_hidden_revision_reports()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.close_reports(array[new.id]);
+  return null;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_hidden_revision_reports"() FROM PUBLIC;
+
+CREATE TRIGGER close_reports_on_hide AFTER UPDATE OF hidden_at ON public.revisions FOR EACH ROW WHEN (((old.hidden_at IS NULL) AND (new.hidden_at IS NOT NULL))) EXECUTE FUNCTION private.close_hidden_revision_reports();
+
+-- 문서를 삭제하면 그 문서의 모든 판의 신고를 닫는다. 삭제된 문서의 판은 회원에게 보이지 않는다.
+CREATE OR REPLACE FUNCTION private.close_deleted_page_revision_reports()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.close_reports(array(
+    select revision.id from public.revisions as revision where revision.page_id = new.id
+  ));
+  return null;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_deleted_page_revision_reports"() FROM PUBLIC;
+
+CREATE TRIGGER close_revision_reports_on_delete AFTER UPDATE OF deleted_at ON public.pages FOR EACH ROW WHEN (((old.deleted_at IS NULL) AND (new.deleted_at IS NOT NULL))) EXECUTE FUNCTION private.close_deleted_page_revision_reports();
 
 -- 처리되지 않은 신고가 걸린 대상(판과 토론 글) 수(관리자 전용).
 CREATE OR REPLACE FUNCTION public.count_open_reports()
