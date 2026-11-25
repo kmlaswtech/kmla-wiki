@@ -335,6 +335,10 @@ export type Database = {
         }[]
       }
       get_discussion: { Args: { p_discussion_id: number }; Returns: Json }
+      get_discussion_version: {
+        Args: { p_discussion_id: number }
+        Returns: string
+      }
       get_my_status: {
         Args: Record<PropertyKey, never>
         Returns: {

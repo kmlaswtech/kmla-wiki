@@ -238,6 +238,26 @@ select logout();
 
 -- ── 읽기 ─────────────────────────────────────────────────────────────────────
 select login(:bob);
+select is(public.get_discussion_version(:d1), public.get_discussion(:d1) ->> 'version',
+  'the version matches the one get_discussion returns');
+select is(public.get_discussion_version(999999), null, 'a missing discussion has no version');
+select public.get_discussion_version(:d1) as v_before \gset
+select logout();
+select login(:alice);
+select is(public.get_discussion_version(:d1), :'v_before', 'the version is the same for every reader');
+select logout();
+update private.discussion_posts set hidden_at = now()
+  where id = (select max(id) from private.discussion_posts where discussion_id = :d1);
+select login(:bob);
+select isnt(public.get_discussion_version(:d1), :'v_before', 'hiding a post changes the version');
+select logout();
+update private.discussion_posts set hidden_at = null
+  where id = (select max(id) from private.discussion_posts where discussion_id = :d1);
+select login(:bob);
+select is(public.get_discussion_version(:d1), :'v_before', 'the version follows the state, not the time');
+select logout();
+
+select login(:bob);
 select is(public.count_open_discussions(:p1), 1, 'the open count leaves out closed and withdrawn discussions');
 select is((public.get_page_view('토론 문서') ->> 'open_discussions')::integer, 1, 'the page view carries the open count');
 select results_eq(

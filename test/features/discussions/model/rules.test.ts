@@ -37,6 +37,7 @@ function discussion(overrides: Partial<Discussion>): Discussion {
     openedByMe: false,
     createdByMe: false,
     deleted: false,
+    version: "v1",
     posts: [post({ id: 1, kind: "open" })],
     ...overrides,
   };

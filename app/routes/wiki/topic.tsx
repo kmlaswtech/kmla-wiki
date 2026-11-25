@@ -21,6 +21,7 @@ import {
   DiscussionThread,
   findDiscussion,
   isDiscussionIntent,
+  useLiveDiscussion,
   withdrawDiscussion,
   withdrawPost,
   writePost,
@@ -107,6 +108,8 @@ export default function TopicRoute({ loaderData }: Route.ComponentProps) {
   const status = useOutletContext<MemberStatus>();
   const revalidator = useRevalidator();
   const refresh = () => void revalidator.revalidate();
+  // 다른 사람의 새 글, 닫기, 숨김을 5초 안에 보인다.
+  useLiveDiscussion(discussion.id, discussion.version);
   const canWrite = status.ban === null && !discussion.deleted;
 
   return (

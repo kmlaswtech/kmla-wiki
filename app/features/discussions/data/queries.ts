@@ -77,6 +77,7 @@ interface RawDiscussion {
   opened_by_me: boolean;
   created_by_me: boolean;
   deleted: boolean;
+  version: string;
   posts: RawPost[];
 }
 
@@ -110,6 +111,14 @@ export async function findDiscussion(id: number): Promise<Discussion | null> {
     openedByMe: raw.opened_by_me,
     createdByMe: raw.created_by_me,
     deleted: raw.deleted,
+    version: raw.version,
     posts: raw.posts.map(toPost),
   };
+}
+
+/** 토론의 변경 표. 볼 수 없게 된 토론이면 `null`. */
+export async function getDiscussionVersion(id: number): Promise<string | null> {
+  return unwrap(
+    await getSupabase().rpc("get_discussion_version", { p_discussion_id: id }),
+  );
 }

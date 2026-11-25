@@ -273,6 +273,26 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."can_see_discussion"(private.discussions) FROM PUBLIC;
 
+-- 토론 화면이 보이는 것이 바뀌었는지 가리는 표. 제목, 열림·닫힘, 지움, 글의 추가·거둠·숨김이 바뀌면
+-- 달라진다. 토론 화면은 5초마다 이것만 묻고, 달라졌을 때만 토론 전체를 다시 읽는다.
+CREATE OR REPLACE FUNCTION private.discussion_version (
+  p_discussion private.discussions
+)
+  RETURNS text
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select md5(concat_ws('|',
+    p_discussion.title, p_discussion.closed_at, p_discussion.deleted_at, p_discussion.opened_at,
+    (select string_agg(concat_ws(',', post.id, post.withdrawn_at, post.hidden_at), ';' order by post.id)
+      from private.discussion_posts as post where post.discussion_id = p_discussion.id)
+  ));
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."discussion_version"(private.discussions) FROM PUBLIC;
+
 -- ── 쓰기 ─────────────────────────────────────────────────────────────────────
 
 -- 토론을 연다. 있는 문서면 보호 문서도 된다. 판에 붙이려면 그 문서의 숨기지 않은 판이어야 한다.
@@ -882,7 +902,43 @@ GRANT EXECUTE ON FUNCTION "public"."revision_discussion_counts"(bigint) TO "post
 
 REVOKE ALL ON FUNCTION "public"."revision_discussion_counts"(bigint) FROM PUBLIC, "anon";
 
--- 토론 하나와 글 전체. 볼 수 없는 토론은 없는 토론과 같다(WK006).
+-- 토론의 변경 표(`private.discussion_version`). 볼 수 없는 토론이면 NULL이다. 토론 화면이 5초마다 부르므로
+-- 가볍게 둔다.
+CREATE OR REPLACE FUNCTION public.get_discussion_version (
+  p_discussion_id bigint
+)
+  RETURNS text
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_discussion private.discussions;
+begin
+  if not private.can_read() then
+    raise exception 'membership verification required' using errcode = '42501';
+  end if;
+  select * into v_discussion from private.discussions where id = p_discussion_id;
+  if v_discussion.id is null or not private.can_see_discussion(v_discussion) then
+    return null;
+  end if;
+  return private.discussion_version(v_discussion);
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."get_discussion_version"(bigint) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."get_discussion_version"(bigint) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."get_discussion_version"(bigint) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."get_discussion_version"(bigint) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."get_discussion_version"(bigint) FROM PUBLIC, "anon";
+
+-- 토론 하나와 글 전체. 볼 수 없는 토론은 없는 토론과 같다(WK006). `version`은 `get_discussion_version`과
+-- 같은 값이다.
 --
 -- 글의 `state`는 `visible`·`withdrawn`(작성자가 거둠)·`hidden`(관리자가 숨김)이다. 보이지 않는 글의
 -- 본문은 관리자에게만 준다. `mine`은 내가 쓴 글이다(거두기 단추). 토론의 `close_after`는 일반 회원이
@@ -924,6 +980,7 @@ begin
     'opened_by_me', v_discussion.opened_by_member_id = v_member_id,
     'created_by_me', v_discussion.created_by_member_id = v_member_id,
     'deleted', v_discussion.deleted_at is not null,
+    'version', private.discussion_version(v_discussion),
     'posts', coalesce((
       select jsonb_agg(
         jsonb_build_object(

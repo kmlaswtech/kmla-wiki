@@ -48,5 +48,7 @@ export interface Discussion {
   /** 토론을 처음 연 사람이 나다(토론 거두기). */
   createdByMe: boolean;
   deleted: boolean;
+  /** 변경 표. 토론 화면이 새 글을 확인할 때 견준다(`get_discussion_version`). */
+  version: string;
   posts: DiscussionPost[];
 }

@@ -3,6 +3,7 @@ export { DiscussionComposer } from "./components/discussion-composer";
 export { DiscussionList } from "./components/discussion-list";
 export { DiscussionThread } from "./components/discussion-thread";
 export { NewDiscussionForm } from "./components/new-discussion-form";
+export { useLiveDiscussion } from "./components/use-live-discussion";
 export {
   openDiscussion,
   withdrawDiscussion,

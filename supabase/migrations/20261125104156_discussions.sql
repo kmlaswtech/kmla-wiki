@@ -165,6 +165,22 @@ CREATE OR REPLACE FUNCTION private.discussion_is_public (
     and exists (select 1 from public.pages where id = p_discussion.page_id and deleted_at is null);
 $function$;
 
+CREATE OR REPLACE FUNCTION private.discussion_version (
+  p_discussion private.discussions
+)
+  RETURNS text
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select md5(concat_ws('|',
+    p_discussion.title, p_discussion.closed_at, p_discussion.deleted_at, p_discussion.opened_at,
+    (select string_agg(concat_ws(',', post.id, post.withdrawn_at, post.hidden_at), ';' order by post.id)
+      from private.discussion_posts as post where post.discussion_id = p_discussion.id)
+  ));
+$function$;
+
 CREATE OR REPLACE FUNCTION private.insert_discussion_post (
   p_discussion private.discussions,
   p_member_id  bigint,
@@ -377,6 +393,7 @@ begin
     'opened_by_me', v_discussion.opened_by_member_id = v_member_id,
     'created_by_me', v_discussion.created_by_member_id = v_member_id,
     'deleted', v_discussion.deleted_at is not null,
+    'version', private.discussion_version(v_discussion),
     'posts', coalesce((
       select jsonb_agg(
         jsonb_build_object(
@@ -405,6 +422,31 @@ end;
 $function$;
 
 REVOKE ALL ON FUNCTION "public"."get_discussion"(bigint) FROM PUBLIC, "anon";
+
+CREATE OR REPLACE FUNCTION public.get_discussion_version (
+  p_discussion_id bigint
+)
+  RETURNS text
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_discussion private.discussions;
+begin
+  if not private.can_read() then
+    raise exception 'membership verification required' using errcode = '42501';
+  end if;
+  select * into v_discussion from private.discussions where id = p_discussion_id;
+  if v_discussion.id is null or not private.can_see_discussion(v_discussion) then
+    return null;
+  end if;
+  return private.discussion_version(v_discussion);
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "public"."get_discussion_version"(bigint) FROM PUBLIC, "anon";
 
 CREATE OR REPLACE FUNCTION public.get_page_view (
   p_title           text,
@@ -959,6 +1001,8 @@ REVOKE ALL ON FUNCTION "private"."discussion_close_delay"() FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION "private"."discussion_is_public"(private.discussions) FROM PUBLIC;
 
+REVOKE ALL ON FUNCTION "private"."discussion_version"(private.discussions) FROM PUBLIC;
+
 REVOKE ALL ON FUNCTION "private"."insert_discussion_post"(private.discussions, bigint, text, text, boolean) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION "private"."lock_discussion"(bigint) FROM PUBLIC;
@@ -996,6 +1040,14 @@ REVOKE ALL ON FUNCTION "public"."get_discussion"(bigint) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."get_discussion"(bigint) TO "postgres";
 
 GRANT EXECUTE ON FUNCTION "public"."get_discussion"(bigint) TO "service_role";
+
+GRANT EXECUTE ON FUNCTION "public"."get_discussion_version"(bigint) TO "authenticated";
+
+REVOKE ALL ON FUNCTION "public"."get_discussion_version"(bigint) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."get_discussion_version"(bigint) TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."get_discussion_version"(bigint) TO "service_role";
 
 GRANT EXECUTE ON FUNCTION "public"."list_page_discussions"(bigint) TO "authenticated";
 
