@@ -33,9 +33,9 @@ export function DiscussionActions({
           size="sm"
           variant="outline"
           icon={<Trash2 />}
-          title="다른 글이 없을 때만 거둘 수 있습니다. 거둔 토론은 아무에게도 보이지 않습니다."
+          title="다른 글이 없을 때만 삭제할 수 있습니다. 삭제한 토론은 아무에게도 보이지 않습니다."
         >
-          토론 거두기
+          토론 삭제
         </WithdrawButton>
       ) : null}
       {isAdmin ? (

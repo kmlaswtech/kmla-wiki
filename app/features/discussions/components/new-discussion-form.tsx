@@ -72,7 +72,7 @@ export function NewDiscussionForm({
         />
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="discussion-body">첫 글</Label>
+        <Label htmlFor="discussion-body">토론 주제 제시</Label>
         <Textarea
           id="discussion-body"
           name={DISCUSSION_FIELD.body}
@@ -83,8 +83,8 @@ export function NewDiscussionForm({
           onChange={(event) => setBody(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          글은 고칠 수 없습니다. 이름은 이 문서에서의 가명으로 남습니다. [[문서
-          이름]]과 주소는 링크가 됩니다.
+          <b>등록된 글은 수정할 수 없습니다.</b> 이름은 이 문서에서의 가명으로
+          저장됩니다. [[문서 이름]]과 주소는 링크로 작동합니다.
         </p>
       </div>
       {isAdmin ? (

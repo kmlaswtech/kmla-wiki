@@ -92,9 +92,9 @@ function PostCard({
           {canWithdraw ? (
             <WithdrawButton
               postId={post.id}
-              title="뒤에 다른 글이 없을 때만 거둘 수 있습니다."
+              title="뒤에 다른 글이 없을 때만 삭제할 수 있습니다."
             >
-              거두기
+              삭제
             </WithdrawButton>
           ) : null}
           {isAdmin && post.state !== "withdrawn" ? (
@@ -111,7 +111,7 @@ function PostBody({ post }: { post: DiscussionPost }) {
   if (post.state === "visible") return <PostText text={post.body ?? ""} />;
   const notice =
     post.state === "withdrawn"
-      ? "작성자가 거둔 글입니다."
+      ? "작성자가 삭제한 글입니다."
       : "관리자가 숨긴 글입니다.";
   return (
     <>

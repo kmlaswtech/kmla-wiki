@@ -5,7 +5,8 @@ import { isWikiError } from "~/shared/supabase/errors";
 // DB migration(`*_discussions.sql`) 머리말의 표와 같다.
 const MESSAGE: Record<string, string> = {
   WK002: "차단 기간에는 토론에 글을 쓸 수 없습니다.",
-  WK006: "토론을 찾을 수 없습니다. 지워졌거나 거둔 토론입니다.",
+  WK006:
+    "토론을 찾을 수 없습니다. 관리자가 지웠거나 작성자가 삭제한 토론입니다.",
   WK008: "삭제된 문서의 토론에는 글을 쓸 수 없습니다.",
   WK011: "이미 처리된 상태입니다. 화면을 새로 고쳐 주세요.",
   WK022: "닫힌 토론입니다. 다시 열어야 글을 쓸 수 있습니다.",
@@ -25,8 +26,8 @@ const SHORT_MESSAGE: Record<string, string> = {
 };
 
 const WITHDRAW_MESSAGE: Record<string, string> = {
-  replies: "뒤에 다른 글이 있어 거둘 수 없습니다.",
-  kind: "이 글은 거둘 수 없습니다.",
+  replies: "뒤에 다른 글이 있어 삭제할 수 없습니다.",
+  kind: "이 글은 삭제할 수 없습니다.",
 };
 
 export function describeDiscussionError(error: unknown): string {

@@ -53,7 +53,10 @@ export function DiscussionComposer({
   const now = useMinuteClock();
   const [body, setBody] = useState("");
   const [asAdmin, setAsAdmin] = useState(false);
-  const [confirmEarly, setConfirmEarly] = useState(false);
+  // 닫기·다시 열기는 결론이나 까닭이 남고 되돌리기 어려우므로 한 번 묻는다.
+  const [confirming, setConfirming] = useState<
+    typeof DISCUSSION_INTENT.close | typeof DISCUSSION_INTENT.reopen | null
+  >(null);
 
   // 보낸 글이 들어가면 칸을 비운다. "관리자로"도 끈다. 다음 글이 모르고 관리자 이름으로 나가지 않게
   // 한다. 새 결과가 올 때 한 번만 한다.
@@ -83,6 +86,31 @@ export function DiscussionComposer({
     void fetcher.submit(form, { method: "post" });
   }
 
+  const confirmText =
+    confirming === DISCUSSION_INTENT.reopen
+      ? {
+          title: "토론 다시 열기",
+          description:
+            "쓴 글이 다시 여는 이유로 남습니다. 24시간 동안은 토론을 다시 연 사람 이외에는 닫을 수 없습니다.",
+          action: "다시 열기",
+          destructive: false,
+        }
+      : early
+        ? {
+            title: "관리자로 일찍 닫기",
+            description:
+              "토론이 열린 지 24시간이 지나지 않았습니다. 쓴 글이 결론으로 남고, 관리자로 닫으면 공개 관리 기록에 남습니다.",
+            action: "닫기",
+            destructive: true,
+          }
+        : {
+            title: "토론 닫기",
+            description:
+              "쓴 글이 이 토론의 결론으로 남습니다. 닫은 뒤에는 다시 열 때까지 글을 쓸 수 없습니다.",
+            action: "닫기",
+            destructive: false,
+          };
+
   const label = discussion.isOpen
     ? "글 (닫을 때는 이 글이 결론이 됩니다)"
     : "다시 여는 까닭";
@@ -99,10 +127,11 @@ export function DiscussionComposer({
           onChange={(event) => setBody(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          글은 고칠 수 없습니다. 뒤에 다른 글이 없을 때만 거둘 수 있습니다.
+          글은 수정할 수 없습니다. 뒤에 다른 글이 존재하지 않을 때만 삭제할 수
+          있습니다.
           {discussion.isOpen
-            ? ` 닫을 때는 ${DISCUSSION_LIMIT.conclusion}자 이상 써야 합니다.`
-            : ` 다시 열 때는 ${DISCUSSION_LIMIT.conclusion}자 이상 써야 합니다.`}
+            ? ` 닫을 때는 결론과 함께 ${DISCUSSION_LIMIT.conclusion}자 이상 작성해야 합니다.`
+            : ` 다시 열 때는 ${DISCUSSION_LIMIT.conclusion}자 이상 작성해야 합니다.`}
         </p>
       </div>
 
@@ -132,9 +161,7 @@ export function DiscussionComposer({
             type="button"
             variant="outline"
             disabled={pending || !longEnough || (early && !asAdmin)}
-            onClick={() =>
-              early ? setConfirmEarly(true) : submit(DISCUSSION_INTENT.close)
-            }
+            onClick={() => setConfirming(DISCUSSION_INTENT.close)}
           >
             결론 쓰고 닫기
           </Button>
@@ -148,38 +175,40 @@ export function DiscussionComposer({
         <Button
           type="button"
           disabled={pending || !longEnough}
-          onClick={() => submit(DISCUSSION_INTENT.reopen)}
+          onClick={() => setConfirming(DISCUSSION_INTENT.reopen)}
         >
           {pending ? <Spinner /> : null}다시 열기
         </Button>
       )}
 
-      <Dialog open={confirmEarly} onOpenChange={setConfirmEarly}>
+      <Dialog
+        open={confirming !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>관리자로 일찍 닫기</DialogTitle>
-            <DialogDescription>
-              토론이 열린 지 24시간이 지나지 않았습니다. 관리자로 닫으면 공개
-              관리 기록에 남습니다.
-            </DialogDescription>
+            <DialogTitle>{confirmText.title}</DialogTitle>
+            <DialogDescription>{confirmText.description}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setConfirmEarly(false)}
+              onClick={() => setConfirming(null)}
             >
               취소
             </Button>
             <Button
               type="button"
-              variant="destructive"
+              variant={confirmText.destructive ? "destructive" : "default"}
               onClick={() => {
-                setConfirmEarly(false);
-                submit(DISCUSSION_INTENT.close);
+                if (confirming) submit(confirming);
+                setConfirming(null);
               }}
             >
-              닫기
+              {confirmText.action}
             </Button>
           </DialogFooter>
         </DialogContent>
