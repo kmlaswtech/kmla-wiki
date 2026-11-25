@@ -7,6 +7,7 @@ import {
   sanitizeNext,
   signInForDevelopment,
   startKmlaSignIn,
+  unverifiedReason,
   type LoginReason,
 } from "~/features/auth";
 import { env } from "~/shared/lib/env";
@@ -47,8 +48,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   }
   // 로그인은 됐지만 회원 확인이 없는 계정이 주소를 직접 열었을 때도 사유를 알려 준다.
   const reason =
-    url.searchParams.get("reason") ??
-    (status ? (status.isMember ? "expired" : "not-member") : null);
+    url.searchParams.get("reason") ?? unverifiedReason(status) ?? null;
   return { reason, next: sanitizeNext(url.searchParams.get("next")) };
 }
 
