@@ -24,7 +24,7 @@ CREATE TABLE "private"."discussion_posts" (
   "withdrawn_at"  timestamp with time zone,
   "hidden_at"     timestamp with time zone,
   CONSTRAINT "discussion_posts_body" CHECK (((char_length(body) >= 1) AND (char_length(body) <= 4000))),
-  CONSTRAINT "discussion_posts_kind" CHECK ((kind = ANY (ARRAY['open'::text, 'post'::text, 'close'::text, 'reopen'::text]))),
+  CONSTRAINT "discussion_posts_kind" CHECK ((kind = ANY (ARRAY['open'::text, 'post'::text, 'close'::text, 'reopen'::text, 'rename'::text]))),
   CONSTRAINT "discussion_posts_pkey" PRIMARY KEY (id)
 );
 
@@ -659,6 +659,44 @@ $function$;
 
 REVOKE ALL ON FUNCTION "public"."open_discussion"(bigint, text, text, bigint, boolean) FROM PUBLIC, "anon";
 
+CREATE OR REPLACE FUNCTION public.rename_discussion (
+  p_discussion_id bigint,
+  p_title         text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint;
+  v_title text := btrim(coalesce(p_title, ''));
+  v_discussion private.discussions;
+begin
+  perform private.require_admin();
+  v_member_id := private.current_member_id();
+  if char_length(v_title) < 1 then
+    raise exception 'title required' using errcode = 'WK014', detail = 'title';
+  end if;
+  if char_length(v_title) > 80 then
+    raise exception 'title too long' using errcode = 'WK005', detail = 'title';
+  end if;
+
+  v_discussion := private.lock_discussion(p_discussion_id);
+  if v_discussion.title = v_title then
+    raise exception 'already in that state' using errcode = 'WK011';
+  end if;
+
+  update private.discussions set title = v_title where id = p_discussion_id;
+  perform private.insert_discussion_post(
+    v_discussion, v_member_id, 'rename',
+    format('제목을 ‘%s’에서 ‘%s’(으)로 바꿨습니다.', v_discussion.title, v_title), true
+  );
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "public"."rename_discussion"(bigint, text) FROM PUBLIC, "anon";
+
 CREATE OR REPLACE FUNCTION public.reopen_discussion (
   p_discussion_id bigint,
   p_body          text,
@@ -982,6 +1020,14 @@ REVOKE ALL ON FUNCTION "public"."open_discussion"(bigint, text, text, bigint, bo
 GRANT EXECUTE ON FUNCTION "public"."open_discussion"(bigint, text, text, bigint, boolean) TO "postgres";
 
 GRANT EXECUTE ON FUNCTION "public"."open_discussion"(bigint, text, text, bigint, boolean) TO "service_role";
+
+GRANT EXECUTE ON FUNCTION "public"."rename_discussion"(bigint, text) TO "authenticated";
+
+REVOKE ALL ON FUNCTION "public"."rename_discussion"(bigint, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."rename_discussion"(bigint, text) TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."rename_discussion"(bigint, text) TO "service_role";
 
 GRANT EXECUTE ON FUNCTION "public"."reopen_discussion"(bigint, text, boolean) TO "authenticated";
 

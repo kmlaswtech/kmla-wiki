@@ -544,6 +544,10 @@ export type Database = {
         Args: { p_height: number; p_image_id: string; p_width: number }
         Returns: undefined
       }
+      rename_discussion: {
+        Args: { p_discussion_id: number; p_title: string }
+        Returns: undefined
+      }
       reopen_discussion: {
         Args: { p_as_admin?: boolean; p_body: string; p_discussion_id: number }
         Returns: number

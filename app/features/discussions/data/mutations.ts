@@ -76,6 +76,19 @@ export async function setPostHidden(
   );
 }
 
+/** 관리자 전용. 관리 기록 대신 토론에 '관리자' 이름으로 바꾼 사실이 남는다. */
+export async function renameDiscussion(
+  discussionId: number,
+  title: string,
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("rename_discussion", {
+      p_discussion_id: discussionId,
+      p_title: title,
+    }),
+  );
+}
+
 /** 관리자 전용. 사유와 함께 관리 기록에 남는다. */
 export async function setDiscussionDeleted(
   discussionId: number,

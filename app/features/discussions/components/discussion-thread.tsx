@@ -21,6 +21,7 @@ import {
 const KIND_LABEL: Partial<Record<DiscussionPost["kind"], string>> = {
   close: "닫음",
   reopen: "다시 엶",
+  rename: "제목 바꿈",
 };
 
 /** 토론의 글 목록. 내 글 거두기와 관리자의 글 숨기기가 줄마다 붙는다. */

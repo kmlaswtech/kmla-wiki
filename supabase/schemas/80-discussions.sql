@@ -50,7 +50,8 @@ CREATE INDEX discussions_recent_idx ON private.discussions USING btree (last_pos
 -- 한 사람이 1시간에 연 토론 수.
 CREATE INDEX discussions_created_by_idx ON private.discussions USING btree (created_by_member_id, created_at DESC);
 
--- 토론 글. `open`은 토론의 첫 글, `close`·`reopen`은 닫기·다시 열기와 함께 쓴 글(결론, 다시 여는 까닭)이다.
+-- 토론 글. `open`은 토론의 첫 글, `close`·`reopen`은 닫기·다시 열기와 함께 쓴 글(결론, 다시 여는 까닭),
+-- `rename`은 관리자가 제목을 바꿀 때 서버가 남기는 글이다.
 CREATE TABLE "private"."discussion_posts" (
   "id"            bigint                   GENERATED ALWAYS AS IDENTITY NOT NULL,
   "discussion_id" bigint                   NOT NULL,
@@ -66,7 +67,7 @@ CREATE TABLE "private"."discussion_posts" (
   -- 관리자가 숨긴 글.
   "hidden_at"     timestamp with time zone,
   CONSTRAINT "discussion_posts_pkey" PRIMARY KEY (id),
-  CONSTRAINT "discussion_posts_kind" CHECK ((kind = ANY (ARRAY['open'::text, 'post'::text, 'close'::text, 'reopen'::text]))),
+  CONSTRAINT "discussion_posts_kind" CHECK ((kind = ANY (ARRAY['open'::text, 'post'::text, 'close'::text, 'reopen'::text, 'rename'::text]))),
   CONSTRAINT "discussion_posts_body" CHECK (((char_length(body) >= 1) AND (char_length(body) <= 4000))),
   CONSTRAINT "discussion_posts_discussion_id_fkey" FOREIGN KEY (discussion_id) REFERENCES private.discussions(id) ON DELETE CASCADE,
   CONSTRAINT "discussion_posts_member_id_fkey" FOREIGN KEY (member_id) REFERENCES private.members(id) ON DELETE SET NULL
@@ -659,6 +660,54 @@ REVOKE ALL ON FUNCTION "public"."set_discussion_deleted"(bigint, boolean, text) 
 GRANT EXECUTE ON FUNCTION "public"."set_discussion_deleted"(bigint, boolean, text) TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."set_discussion_deleted"(bigint, boolean, text) FROM PUBLIC, "anon";
+
+-- 관리자가 토론 제목을 바꾼다. 닫힌 토론도 된다. 관리 기록 대신 토론에 '관리자' 이름의 `rename` 글을
+-- 남긴다. 글에는 앞 제목과 새 제목이 들어 있다.
+CREATE OR REPLACE FUNCTION public.rename_discussion (
+  p_discussion_id bigint,
+  p_title         text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint;
+  v_title text := btrim(coalesce(p_title, ''));
+  v_discussion private.discussions;
+begin
+  perform private.require_admin();
+  v_member_id := private.current_member_id();
+  if char_length(v_title) < 1 then
+    raise exception 'title required' using errcode = 'WK014', detail = 'title';
+  end if;
+  if char_length(v_title) > 80 then
+    raise exception 'title too long' using errcode = 'WK005', detail = 'title';
+  end if;
+
+  v_discussion := private.lock_discussion(p_discussion_id);
+  if v_discussion.title = v_title then
+    raise exception 'already in that state' using errcode = 'WK011';
+  end if;
+
+  update private.discussions set title = v_title where id = p_discussion_id;
+  perform private.insert_discussion_post(
+    v_discussion, v_member_id, 'rename',
+    format('제목을 ‘%s’에서 ‘%s’(으)로 바꿨습니다.', v_discussion.title, v_title), true
+  );
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."rename_discussion"(bigint, text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."rename_discussion"(bigint, text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."rename_discussion"(bigint, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."rename_discussion"(bigint, text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."rename_discussion"(bigint, text) FROM PUBLIC, "anon";
 
 -- ── 읽기 ─────────────────────────────────────────────────────────────────────
 

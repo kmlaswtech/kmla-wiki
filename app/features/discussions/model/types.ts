@@ -17,7 +17,7 @@ export interface DiscussionSummary {
 }
 
 /** `open`은 첫 글, `close`·`reopen`은 닫기·다시 열기와 함께 쓴 글이다. */
-export type PostKind = "open" | "post" | "close" | "reopen";
+export type PostKind = "open" | "post" | "close" | "reopen" | "rename";
 
 /** `withdrawn`은 작성자가 거둔 글, `hidden`은 관리자가 숨긴 글이다. */
 export type PostState = "visible" | "withdrawn" | "hidden";

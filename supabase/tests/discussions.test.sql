@@ -194,6 +194,26 @@ select is((public.get_discussion(:d3) #>> '{posts,0,state}'), 'hidden', 'members
 select is((public.get_discussion(:d3) #>> '{posts,0,body}'), null, 'members do not get the body of a hidden post');
 select logout();
 
+select login(:bob);
+select throws_ok(format($$select public.rename_discussion(%s, '새 제목')$$, :d3), '42501', null,
+  'a member cannot rename a discussion');
+select logout();
+
+select login(:admin);
+select lives_ok(format($$select public.rename_discussion(%s, '  바꾼 제목  ')$$, :d3),
+  'the admin can rename a discussion');
+select is((public.get_discussion(:d3) ->> 'title'), '바꾼 제목', 'the new title is trimmed and saved');
+select is(
+  (select row(post ->> 'kind', post ->> 'author_name', post ->> 'as_admin')::text
+    from (select public.get_discussion(:d3) -> 'posts' -> -1 as post) as last),
+  row('rename', '관리자', 'true')::text,
+  'renaming leaves a post by the admin in the discussion');
+select throws_ok(format($$select public.rename_discussion(%s, '바꾼 제목')$$, :d3), 'WK011', null,
+  'renaming to the same title fails');
+select throws_ok(format($$select public.rename_discussion(%s, ' ')$$, :d3), 'WK014', null,
+  'the title cannot be empty');
+select logout();
+
 select login(:admin);
 select lives_ok(format($$select public.set_discussion_post_hidden(%s, false, '오해')$$, :d3p), 'the admin can unhide a post');
 select lives_ok(format($$select public.set_discussion_deleted(%s, true, '도배')$$, :d3), 'the admin can delete a discussion');
