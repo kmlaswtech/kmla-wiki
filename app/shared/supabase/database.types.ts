@@ -355,6 +355,7 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: {
           admin_handle: string
+          admin_nickname: string
           is_me: boolean
         }[]
       }
@@ -562,6 +563,7 @@ export type Database = {
           title: string
         }[]
       }
+      set_admin_nickname: { Args: { p_nickname: string }; Returns: undefined }
       set_protection: {
         Args: { p_level: string; p_page_id: number; p_reason: string }
         Returns: undefined

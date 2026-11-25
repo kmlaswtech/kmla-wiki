@@ -471,11 +471,12 @@ GRANT EXECUTE ON FUNCTION "public"."lift_ban"(bigint, text) TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."lift_ban"(bigint, text) FROM PUBLIC, "anon";
 
--- 관리자 목록. 관리자 전용 이름만 돌려준다.
+-- 관리자 목록. 관리자 전용 이름과 별명만 돌려준다.
 CREATE OR REPLACE FUNCTION public.list_admins()
   RETURNS TABLE (
-    admin_handle text,
-    is_me        boolean
+    admin_handle   text,
+    admin_nickname text,
+    is_me          boolean
   )
   LANGUAGE plpgsql
   STABLE
@@ -485,7 +486,7 @@ CREATE OR REPLACE FUNCTION public.list_admins()
 begin
   perform private.require_admin();
   return query
-  select member.admin_handle, member.id = private.current_member_id()
+  select member.admin_handle, member.admin_nickname, member.id = private.current_member_id()
   from private.members as member
   where member.is_admin
   order by member.admin_handle;
@@ -501,6 +502,40 @@ REVOKE ALL ON FUNCTION "public"."list_admins"() FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."list_admins"() TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."list_admins"() FROM PUBLIC, "anon";
+
+-- 내 관리자 별명을 정하거나(빈 값이면) 지운다. 관리자끼리 서로를 알아보게 돕는 것이라 관리자
+-- 목록에만 보인다. 공개 기록에 남기면 관리자 이름과 별명이 함께 공개되므로 기록하지 않는다.
+CREATE OR REPLACE FUNCTION public.set_admin_nickname (
+  p_nickname text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint := private.require_admin();
+  v_nickname text := nullif(btrim(p_nickname), '');
+begin
+  if not private.is_valid_admin_nickname(v_nickname) then
+    raise exception 'invalid admin nickname' using errcode = 'WK021';
+  end if;
+
+  -- 동시에 해제되었으면 아무것도 바꾸지 않는다(해제가 별명을 지운다).
+  update private.members set admin_nickname = v_nickname
+  where id = v_member_id and is_admin;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."set_admin_nickname"(text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."set_admin_nickname"(text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."set_admin_nickname"(text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."set_admin_nickname"(text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."set_admin_nickname"(text) FROM PUBLIC, "anon";
 
 -- 같은 사람의 다른 편집을 보는 허가를 연다. 사유를 받고 공개 기록에 남긴다. 허가는 10분 동안
 -- 이 관리자에게만 유효하고, 화면에는 사람 대신 이 허가의 ID만 간다. 같은 사람에 대해 2분 넘게 남은
@@ -1073,7 +1108,9 @@ begin
     raise exception 'cannot revoke the last admin' using errcode = 'WK013';
   end if;
 
-  update private.members set is_admin = false, admin_handle = null where id = v_member_id;
+  update private.members
+     set is_admin = false, admin_handle = null, admin_nickname = null
+   where id = v_member_id;
   -- 잘못 해제했을 때 되돌릴 수 있게 대상을 남긴다. 공개 기록에는 여전히 대상이 없다.
   insert into private.admin_revocations (admin_log_id, member_id, admin_handle)
   values (private.log_admin_action('revoke_admin', v_reason), v_member_id, p_admin_handle);

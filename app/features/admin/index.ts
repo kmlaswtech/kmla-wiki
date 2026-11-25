@@ -1,3 +1,4 @@
+export { AdminNicknameForm } from "./components/admin-nickname-form";
 export {
   AuthorEditsResult,
   AuthorLookupForm,
