@@ -154,6 +154,9 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
                 key={revocation.logId}
                 className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2"
               >
+                <span className="text-muted-foreground tabular-nums">
+                  #{revocation.logId}
+                </span>
                 <span className="font-medium">{revocation.handle}</span>
                 <span className="min-w-0 truncate text-muted-foreground">
                   {revocation.reason}
