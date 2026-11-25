@@ -64,6 +64,7 @@ export {
   type Section,
 } from "./model/sections";
 export {
+  backgroundColors,
   backgroundVars,
   contrastRatio,
   formatCustomColor,
@@ -77,6 +78,7 @@ export {
   normalizeHex,
   PAGE_BACKGROUND,
   paletteBackground,
+  paletteTextShift,
   parseBackground,
   parseTextColor,
   readableOn,
@@ -87,6 +89,7 @@ export {
   textColorVars,
   type CellBackground,
   type CellVAlign,
+  type ContrastShift,
   type CustomColor,
   type Hue,
   type TextAlign,

@@ -1,4 +1,13 @@
+import {
+  adjustForContrast,
+  contrastRatio,
+  luminance,
+  MIN_CONTRAST,
+} from "~/shared/lib/color";
+
 import { stringAttr, numberAttr, type WikiMark, type WikiNode } from "./doc";
+
+export { contrastRatio, MIN_CONTRAST };
 
 /**
  * 글자·문단·표 꾸밈의 값. 편집기 스키마(`features/editor/model/schema.ts`)와 문서 보기(`WikiContent`)가
@@ -120,30 +129,6 @@ export function parseBackground(value: unknown): CellBackground | null {
   return custom ? { kind: "custom", ...custom } : null;
 }
 
-function channel(hex: string, index: number): number {
-  const value = Number.parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16);
-  const srgb = value / 255;
-  return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
-}
-
-function luminance(hex: string): number {
-  return (
-    0.2126 * channel(hex, 0) +
-    0.7152 * channel(hex, 1) +
-    0.0722 * channel(hex, 2)
-  );
-}
-
-/** 두 `#rrggbb` 색의 대비(WCAG, 1~21). */
-export function contrastRatio(a: string, b: string): number {
-  const x = luminance(a);
-  const y = luminance(b);
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-}
-
-/** 본문 글자로 기대하는 대비. */
-export const MIN_CONTRAST = 4.5;
-
 const ON_LIGHT = "#1f2023";
 const ON_DARK = "#ffffff";
 
@@ -155,6 +140,27 @@ export function readableOn(background: string): string {
   return light >= dark ? ON_LIGHT : ON_DARK;
 }
 
+/** 보정한 글자 색이 원래 색보다 밝아졌나, 어두워졌나. 보정하지 않았으면 `null`. */
+export type ContrastShift = "lighter" | "darker" | null;
+
+function shiftOf(text: string, adjusted: string | undefined): ContrastShift {
+  if (adjusted === undefined || adjusted === text) return null;
+  return luminance(adjusted) > luminance(text) ? "lighter" : "darker";
+}
+
+/** 이 배경 위에서 팔레트 글자 색이 화면 모드별로 어떻게 보정되나. 편집기에서 미리 알릴 때 쓴다. */
+export function paletteTextShift(
+  hue: Hue,
+  background: CellBackground,
+): { light: ContrastShift; dark: ContrastShift } {
+  const [lightText, darkText] = PALETTE[hue];
+  const { vars } = backgroundVars(background);
+  return {
+    light: shiftOf(lightText, vars[`--wiki-cell-text-${hue}`]),
+    dark: shiftOf(darkText, vars[`--wiki-cell-text-${hue}-dark`]),
+  };
+}
+
 /** 각 화면 모드의 본문 바탕. 직접 넣은 글자 색의 대비를 알릴 때 쓴다(`app.css`의 `--background`). */
 export const PAGE_BACKGROUND = { light: "#ffffff", dark: "#18191a" } as const;
 
@@ -162,7 +168,8 @@ export const PAGE_BACKGROUND = { light: "#ffffff", dark: "#18191a" } as const;
 export type StyleVars = Record<`--${string}`, string>;
 
 /**
- * 팔레트 글자 색은 셀 배경과 대비를 검사한 값을 우선 쓴다. 셀 밖에서는 팔레트 원래 색을 쓴다.
+ * 팔레트 글자 색은 셀·캡션 배경에 맞춰 보정한 값(`adjustForContrast`)을 우선 쓴다. 배경 밖에서는
+ * 팔레트 원래 색을 쓴다.
  */
 export function textColorVars(color: TextColor): StyleVars {
   if (color.kind === "palette") {
@@ -181,11 +188,31 @@ export function textColorVars(color: TextColor): StyleVars {
 /**
  * 셀 배경을 CSS 변수로 바꾼다. 진한 배경과 직접 넣은 색은 그 위의 글자 색도 함께 정한다(`strong`).
  * 그런 셀 안의 링크는 링크 색 대신 글자 색에 밑줄로 그린다(배경 위에서 파랑이 읽히지 않을 수 있다).
+ *
+ * 팔레트 9색 × 화면 모드 2개의 글자 색을 대비에 맞게 보정한다(`adjustForContrast`). 이 탐색은 비싸고
+ * 배경이 있는 칸은 그릴 때마다 부르므로, 배경 값마다 결과를 기억해 둔다. 돌려준 값은 고치지 않는다.
  */
-export function backgroundVars(background: CellBackground): {
-  vars: StyleVars;
-  strong: boolean;
-} {
+export function backgroundVars(background: CellBackground): BackgroundStyle {
+  const [light, dark] = backgroundColors(background);
+  const key = `${light}/${dark}/${background.kind === "custom" || background.strong}`;
+  let style = backgroundCache.get(key);
+  if (!style) {
+    // 직접 넣은 배경은 수가 정해져 있지 않으므로 너무 커지면 비운다.
+    if (backgroundCache.size >= 500) backgroundCache.clear();
+    style = computeBackgroundVars(background);
+    backgroundCache.set(key, style);
+  }
+  return style;
+}
+
+interface BackgroundStyle {
+  readonly vars: Readonly<StyleVars>;
+  readonly strong: boolean;
+}
+
+const backgroundCache = new Map<string, BackgroundStyle>();
+
+function computeBackgroundVars(background: CellBackground): BackgroundStyle {
   const strong = background.kind === "custom" || background.strong;
   const [light, dark] = backgroundColors(background);
   const onLight = strong ? readableOn(light) : "var(--foreground)";
@@ -198,15 +225,14 @@ export function backgroundVars(background: CellBackground): {
   };
   for (const hue of HUES) {
     const [lightText, darkText] = PALETTE[hue];
-    vars[`--wiki-cell-text-${hue}`] =
-      contrastRatio(lightText, light) >= MIN_CONTRAST ? lightText : onLight;
-    vars[`--wiki-cell-text-${hue}-dark`] =
-      contrastRatio(darkText, dark) >= MIN_CONTRAST ? darkText : onDark;
+    vars[`--wiki-cell-text-${hue}`] = adjustForContrast(lightText, light);
+    vars[`--wiki-cell-text-${hue}-dark`] = adjustForContrast(darkText, dark);
   }
   return { vars, strong };
 }
 
-function backgroundColors(background: CellBackground): [string, string] {
+/** 배경의 화면 모드별 색 `[밝은 화면, 어두운 화면]`. */
+export function backgroundColors(background: CellBackground): [string, string] {
   if (background.kind === "custom") {
     return [background.light, background.dark ?? background.light];
   }
