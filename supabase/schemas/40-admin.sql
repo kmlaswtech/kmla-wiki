@@ -68,6 +68,10 @@ CREATE OR REPLACE FUNCTION private.next_admin_handle()
           where revocation.admin_handle = '관리자 ' || chr(code)
             and revocation.restored_at is null
             and revocation.revoked_at > now() - private.revocation_restore_window()
+            and not exists (
+              select 1 from private.members as revoked
+              where revoked.id = revocation.member_id and revoked.is_admin
+            )
         )
       order by code
       limit 1
@@ -390,6 +394,8 @@ begin
     raise exception 'target is banned' using errcode = 'WK002';
   end if;
 
+  -- 해제 되돌리기와 같은 잠금이다. 동시에 같은 이름을 고르지 않게 한다.
+  perform 1 from private.members where is_admin for update;
   update private.members
      set is_admin = true, admin_handle = private.next_admin_handle()
    where id = v_target.member_id;
@@ -1088,6 +1094,7 @@ begin
   where revocation.restored_at is null
     and revocation.revoked_at > now() - private.revocation_restore_window()
     and not member.is_admin
+    and not private.member_is_banned(member.id)
   order by revocation.revoked_at desc;
 end;
 $function$;

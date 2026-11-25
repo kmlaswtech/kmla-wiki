@@ -41,6 +41,10 @@ CREATE OR REPLACE FUNCTION private.next_admin_handle()
           where revocation.admin_handle = '관리자 ' || chr(code)
             and revocation.restored_at is null
             and revocation.revoked_at > now() - private.revocation_restore_window()
+            and not exists (
+              select 1 from private.members as revoked
+              where revoked.id = revocation.member_id and revoked.is_admin
+            )
         )
       order by code
       limit 1
@@ -56,6 +60,44 @@ CREATE OR REPLACE FUNCTION private.revocation_restore_window()
   SET search_path TO ''
   AS $function$
   select interval '7 days';
+$function$;
+
+CREATE OR REPLACE FUNCTION public.grant_admin (
+  p_revision_id bigint,
+  p_reason      text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_reason text;
+  v_target record;
+begin
+  perform private.require_admin();
+  v_reason := private.require_reason(p_reason);
+
+  select * into v_target from private.revision_target(p_revision_id);
+  if v_target.member_id is null then
+    raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+  if exists (select 1 from private.members where id = v_target.member_id and is_admin) then
+    raise exception 'already an admin' using errcode = 'WK011';
+  end if;
+  if private.member_is_banned(v_target.member_id) then
+    raise exception 'target is banned' using errcode = 'WK002';
+  end if;
+
+  -- 해제 되돌리기와 같은 잠금이다. 동시에 같은 이름을 고르지 않게 한다.
+  perform 1 from private.members where is_admin for update;
+  update private.members
+     set is_admin = true, admin_handle = private.next_admin_handle()
+   where id = v_target.member_id;
+
+  -- 누구를 지정했는지는 공개하지 않는다. 가명과 문서를 남기면 그 가명이 관리자라는 것이 드러난다.
+  perform private.log_admin_action('grant_admin', v_reason);
+end;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.list_restorable_revocations()
@@ -82,6 +124,7 @@ begin
   where revocation.restored_at is null
     and revocation.revoked_at > now() - private.revocation_restore_window()
     and not member.is_admin
+    and not private.member_is_banned(member.id)
   order by revocation.revoked_at desc;
 end;
 $function$;

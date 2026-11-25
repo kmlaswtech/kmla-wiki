@@ -106,6 +106,7 @@ export function describeAdminLog(entry: AdminLogEntry): string {
 // 머리말의 표와 같다.
 const MESSAGE: Record<string, string> = {
   "42501": "관리자 권한이 필요합니다.",
+  WK002: "차단된 회원은 관리자로 지정하거나 되돌릴 수 없습니다.",
   WK010: "관리자를 차단하려면 먼저 관리자 권한을 해제해 주세요.",
   WK011: "이미 처리된 상태입니다.",
   WK012: "현재 판은 숨길 수 없습니다. [되돌리고 숨기기]를 써 주세요.",
