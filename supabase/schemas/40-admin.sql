@@ -191,6 +191,13 @@ begin
   perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
   update public.pages set deleted_at = now() where id = p_page_id;
   perform private.close_reports(array(select revision.id from public.revisions as revision where revision.page_id = p_page_id));
+  -- 그 문서의 토론 글 신고도 닫는다. 삭제된 문서의 토론은 회원에게 보이지 않는다.
+  perform private.close_post_reports(array(
+    select post.id
+    from private.discussion_posts as post
+    join private.discussions as discussion on discussion.id = post.discussion_id
+    where discussion.page_id = p_page_id
+  ));
 end;
 $function$;
 

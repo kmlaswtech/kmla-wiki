@@ -51,6 +51,50 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION private.close_post_reports (
+  p_post_ids bigint[]
+)
+  RETURNS integer
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_count integer;
+begin
+  update private.reports
+     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
+   where post_id = any (p_post_ids) and resolved_at is null;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION private.delete_page_as_admin (
+  p_page_id  bigint,
+  p_admin_id bigint,
+  p_body     jsonb,
+  p_summary  text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
+  update public.pages set deleted_at = now() where id = p_page_id;
+  perform private.close_reports(array(select revision.id from public.revisions as revision where revision.page_id = p_page_id));
+  -- 그 문서의 토론 글 신고도 닫는다. 삭제된 문서의 토론은 회원에게 보이지 않는다.
+  perform private.close_post_reports(array(
+    select post.id
+    from private.discussion_posts as post
+    join private.discussions as discussion on discussion.id = post.discussion_id
+    where discussion.page_id = p_page_id
+  ));
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.count_open_reports()
   RETURNS integer
   LANGUAGE plpgsql
@@ -189,15 +233,18 @@ declare
   v_member_id bigint := private.require_editor();
   v_note text := private.check_report_note(p_category, p_note);
 begin
-  if not exists (
-    select 1
+  -- 글과 토론을 잠근다. 관리자가 같은 때 숨기거나 지우면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
+  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다.
+  perform 1
     from private.discussion_posts as post
     join private.discussions as discussion on discussion.id = post.discussion_id
-    where post.id = p_post_id
-      and post.hidden_at is null
-      and post.withdrawn_at is null
-      and private.can_see_discussion(discussion)
-  ) then
+   where post.id = p_post_id
+     and post.hidden_at is null
+     and post.withdrawn_at is null
+     and post.member_id <> v_member_id
+     and private.can_see_discussion(discussion)
+     for share of post, discussion;
+  if not found then
     raise exception 'post not found' using errcode = 'WK006';
   end if;
   -- 기각된 글은 같은 사람이 다시 신고하지 않는다. 글은 고칠 수 없으므로 같은 판단이 나온다.
@@ -325,10 +372,9 @@ begin
      set deleted_at = case when p_deleted then now() end
    where id = p_discussion_id;
   if p_deleted then
-    update private.reports
-       set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
-     where resolved_at is null
-       and post_id in (select id from private.discussion_posts where discussion_id = p_discussion_id);
+    perform private.close_post_reports(array(
+      select post.id from private.discussion_posts as post where post.discussion_id = p_discussion_id
+    ));
   end if;
   perform private.log_admin_action(
     case when p_deleted then 'delete_discussion' else 'restore_discussion' end,
@@ -369,9 +415,7 @@ begin
      set hidden_at = case when p_hidden then now() end
    where id = p_post_id;
   if p_hidden then
-    update private.reports
-       set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
-     where post_id = p_post_id and resolved_at is null;
+    perform private.close_post_reports(array[p_post_id]);
   end if;
   perform private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
@@ -396,6 +440,8 @@ CREATE UNIQUE INDEX reports_post_open_unique ON private.reports USING btree (pos
 REVOKE ALL ON FUNCTION "private"."check_report_note"(text, text) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION "private"."check_report_rate"(bigint) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION "private"."close_post_reports"(bigint[]) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "authenticated";
 

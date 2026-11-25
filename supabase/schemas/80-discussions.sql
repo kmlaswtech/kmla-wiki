@@ -636,9 +636,7 @@ begin
      set hidden_at = case when p_hidden then now() end
    where id = p_post_id;
   if p_hidden then
-    update private.reports
-       set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
-     where post_id = p_post_id and resolved_at is null;
+    perform private.close_post_reports(array[p_post_id]);
   end if;
   perform private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
@@ -689,10 +687,9 @@ begin
      set deleted_at = case when p_deleted then now() end
    where id = p_discussion_id;
   if p_deleted then
-    update private.reports
-       set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
-     where resolved_at is null
-       and post_id in (select id from private.discussion_posts where discussion_id = p_discussion_id);
+    perform private.close_post_reports(array(
+      select post.id from private.discussion_posts as post where post.discussion_id = p_discussion_id
+    ));
   end if;
   perform private.log_admin_action(
     case when p_deleted then 'delete_discussion' else 'restore_discussion' end,
@@ -1056,7 +1053,7 @@ ALTER TABLE "private"."reports"
   ADD CONSTRAINT "reports_post_id_fkey" FOREIGN KEY (post_id) REFERENCES private.discussion_posts(id) ON DELETE CASCADE;
 
 -- 토론 글 하나를 신고한다. 토론을 신고하려면 첫 글을 신고한다. 규칙은 판 신고(`report_revision`)와
--- 같다. 내가 볼 수 없는 토론의 글, 숨기거나 거둔 글은 없는 글과 같은 오류다.
+-- 같다. 내 글, 내가 볼 수 없는 토론의 글, 숨기거나 거둔 글은 없는 글과 같은 오류다.
 CREATE OR REPLACE FUNCTION public.report_discussion_post (
   p_post_id  bigint,
   p_category text,
@@ -1071,15 +1068,18 @@ declare
   v_member_id bigint := private.require_editor();
   v_note text := private.check_report_note(p_category, p_note);
 begin
-  if not exists (
-    select 1
+  -- 글과 토론을 잠근다. 관리자가 같은 때 숨기거나 지우면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
+  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다.
+  perform 1
     from private.discussion_posts as post
     join private.discussions as discussion on discussion.id = post.discussion_id
-    where post.id = p_post_id
-      and post.hidden_at is null
-      and post.withdrawn_at is null
-      and private.can_see_discussion(discussion)
-  ) then
+   where post.id = p_post_id
+     and post.hidden_at is null
+     and post.withdrawn_at is null
+     and post.member_id <> v_member_id
+     and private.can_see_discussion(discussion)
+     for share of post, discussion;
+  if not found then
     raise exception 'post not found' using errcode = 'WK006';
   end if;
   -- 기각된 글은 같은 사람이 다시 신고하지 않는다. 글은 고칠 수 없으므로 같은 판단이 나온다.

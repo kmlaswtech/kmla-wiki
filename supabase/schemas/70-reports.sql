@@ -127,6 +127,28 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[]) FROM PUBLIC;
 
+-- `close_reports`와 같은 일을 토론 글에 한다. 글 숨기기, 토론 지우기, 문서 삭제가 부른다.
+CREATE OR REPLACE FUNCTION private.close_post_reports (
+  p_post_ids bigint[]
+)
+  RETURNS integer
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_count integer;
+begin
+  update private.reports
+     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
+   where post_id = any (p_post_ids) and resolved_at is null;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_post_reports"(bigint[]) FROM PUBLIC;
+
 -- 처리되지 않은 신고가 걸린 대상(판과 토론 글) 수(관리자 전용).
 CREATE OR REPLACE FUNCTION public.count_open_reports()
   RETURNS integer

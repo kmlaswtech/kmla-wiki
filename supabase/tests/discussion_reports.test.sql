@@ -1,4 +1,4 @@
--- 토론 글 신고: 신고, 관리자 목록·닫기, 글 숨기기·토론 지우기가 신고를 닫음, 판 신고와 함께 세기.
+-- 토론 글 신고: 신고, 관리자 목록·닫기, 글 숨기기·토론 지우기·문서 삭제가 신고를 닫음, 판 신고와 함께 세기.
 begin;
 \ir helpers.inc
 select * from no_plan();
@@ -8,7 +8,16 @@ select page_id as p1, revision_id as r1 from public.save_revision('신고 토론
 select public.open_discussion(:p1, '첫 토론', '첫 글') as d1 \gset
 select public.add_discussion_post(:d1, '둘째 글') as post2 \gset
 select public.open_discussion(:p1, '둘째 토론', '다른 토론의 첫 글') as d2 \gset
+select public.open_discussion(:p1, '거둘 토론', '거둘 토론의 첫 글') as d3 \gset
+select public.add_discussion_post(:d3, '거둘 글') as post4 \gset
+select public.withdraw_discussion_post(:post4);
+select page_id as p2 from public.save_revision('지울 문서', null, wiki('판')) \gset
+select public.open_discussion(:p2, '지울 문서 토론', '지울 문서의 첫 글') as d4 \gset
+select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post2), 'WK006', null,
+  'a member cannot report their own post');
 select logout();
+select id as post5 from private.discussion_posts where discussion_id = :d3 and kind = 'open' \gset
+select id as post6 from private.discussion_posts where discussion_id = :d4 and kind = 'open' \gset
 select id as post1 from private.discussion_posts where discussion_id = :d1 and kind = 'open' \gset
 select id as post3 from private.discussion_posts where discussion_id = :d2 and kind = 'open' \gset
 
@@ -24,6 +33,8 @@ select throws_ok(format($$select public.report_discussion_post(%s, 'spam')$$, :p
   'the category must be known');
 select throws_ok($$select public.report_discussion_post(999999, 'abuse')$$, 'WK006', null,
   'a missing post cannot be reported');
+select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post4), 'WK006', null,
+  'a withdrawn post cannot be reported');
 select throws_ok($$select * from public.list_open_post_reports()$$, '42501', null,
   'a member cannot list post reports');
 select throws_ok(format($$select public.resolve_post_reports(%s, 'handled')$$, :post2), '42501', null,
@@ -36,7 +47,7 @@ select is(
   (select num_nonnulls(revision_id, post_id) from private.reports where post_id = :post2), 1,
   'a post report has no revision');
 
-select login(:bob);
+select login(:admin);
 select lives_ok(format($$select public.report_discussion_post(%s, 'abuse', '같은 글')$$, :post2),
   'another member can report the same post');
 select logout();
@@ -80,11 +91,19 @@ select is(
   (select resolution from private.reports where post_id = :post3), 'handled',
   'deleting a discussion closes the reports on its posts');
 
-select login(:bob);
+select login(:alice);
 select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post1), 'WK006', null,
   'a hidden post cannot be reported');
 select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post3), 'WK006', null,
   'a post in a deleted discussion cannot be reported');
+select logout();
+
+select login(:bob);
+select public.withdraw_discussion(:d3);
+select logout();
+select login(:alice);
+select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post5), 'WK006', null,
+  'a post in a withdrawn discussion cannot be reported');
 select logout();
 
 -- ── 횟수 제한은 판과 글을 함께 센다 ──────────────────────────────────────────
@@ -114,6 +133,16 @@ select is(
 select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :extra),
   'WK019', null, 'reports of revisions and posts share the hourly limit');
 select logout();
+
+-- ── 문서 삭제가 신고를 닫는다 ────────────────────────────────────────────────
+-- 위에서 alice는 한도를 다 썼으므로 admin이 신고한다.
+select login(:admin);
+select public.report_discussion_post(:post6, 'privacy');
+select public.delete_page(:p2, '문서 지움');
+select logout();
+select is(
+  (select resolution from private.reports where post_id = :post6), 'handled',
+  'deleting a page closes the reports on its discussion posts');
 
 select * from finish();
 rollback;
