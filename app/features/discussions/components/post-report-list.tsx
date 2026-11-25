@@ -13,7 +13,7 @@ import { isWikiError } from "~/shared/supabase/errors";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
-const STATE_LABEL = { hidden: "숨김", withdrawn: "거둔 글" } as const;
+const STATE_LABEL = { hidden: "숨김", withdrawn: "삭제한 글" } as const;
 
 /**
  * 처리되지 않은 토론 글 신고를 글별로 보인다(관리자 전용). 글 본문을 바로 보이고, [글 숨기기]로
@@ -101,7 +101,7 @@ function PostReportItem({
           <Badge variant="outline">{STATE_LABEL[report.state]}</Badge>
         ) : null}
         {report.discussionWithdrawn ? (
-          <Badge variant="outline">거둔 토론</Badge>
+          <Badge variant="outline">삭제한 토론</Badge>
         ) : report.discussionDeleted ? (
           <Badge variant="outline">지운 토론</Badge>
         ) : null}
