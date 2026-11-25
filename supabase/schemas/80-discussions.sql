@@ -394,10 +394,11 @@ begin
   update private.discussions set closed_at = now() where id = v_discussion.id;
 
   if v_early then
+    -- 사유에는 결론 글을 옮겨 적지 않고 가리키기만 한다. 관리 기록은 모든 회원이 보고 지울 수 없으므로,
+    -- 나중에 그 글을 숨겨도 기록에 남지 않게 한다. 토론 제목도 같은 까닭으로 적지 않는다.
     v_log_id := private.log_admin_action(
-      'close_discussion_early', left(v_body, 300),
-      (select title from public.pages where id = v_discussion.page_id),
-      p_note => v_discussion.title
+      'close_discussion_early', '결론 글 #' || v_post_id,
+      (select title from public.pages where id = v_discussion.page_id)
     );
     update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
   end if;
@@ -548,6 +549,8 @@ REVOKE ALL ON FUNCTION "public"."withdraw_discussion"(bigint) FROM PUBLIC, "anon
 -- ── 관리자 ───────────────────────────────────────────────────────────────────
 
 -- 글 하나를 숨기거나 되살린다(관리자 전용). 늘 '관리자' 이름이고 사유와 함께 관리 기록에 남는다.
+-- 관리 기록에는 문서 제목과 토론 번호(`discussion_id`)만 남긴다. 토론 제목과 글은 숨기거나 지울 대상일 수
+-- 있어서 적지 않는다.
 CREATE OR REPLACE FUNCTION public.set_discussion_post_hidden (
   p_post_id bigint,
   p_hidden  boolean,
@@ -582,7 +585,7 @@ begin
   v_log_id := private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
     v_reason, (select title from public.pages where id = v_discussion.page_id),
-    p_pseudonym => v_post.author_name, p_note => v_discussion.title
+    p_pseudonym => v_post.author_name
   );
   update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
 end;
@@ -630,8 +633,7 @@ begin
    where id = p_discussion_id;
   v_log_id := private.log_admin_action(
     case when p_deleted then 'delete_discussion' else 'restore_discussion' end,
-    v_reason, (select title from public.pages where id = v_discussion.page_id),
-    p_note => v_discussion.title
+    v_reason, (select title from public.pages where id = v_discussion.page_id)
   );
   update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
 end;

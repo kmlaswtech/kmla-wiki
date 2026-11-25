@@ -96,9 +96,10 @@ select lives_ok(format($$select public.close_discussion(%s, '다툼이 커져 �
   'an admin can close early as the admin');
 select logout();
 select is(
-  (select row(action, discussion_id, page_title, note) from public.admin_log order by id desc limit 1),
-  row('close_discussion_early'::text, :d1::bigint, '토론 문서'::text, '첫 판 문장'::text),
-  'an early close by the admin is in the admin log');
+  (select row(action, discussion_id, page_title, note, reason) from public.admin_log order by id desc limit 1),
+  row('close_discussion_early'::text, :d1::bigint, '토론 문서'::text, null::text,
+    '결론 글 #' || (select max(id) from private.discussion_posts where discussion_id = :d1)),
+  'an early close is in the admin log without the discussion title or the conclusion text');
 select is(
   (select author_name from private.discussion_posts where discussion_id = :d1 order by id desc limit 1),
   '관리자', 'the admin close is written as the admin');
@@ -183,10 +184,10 @@ select throws_ok(format($$select public.set_discussion_post_hidden(%s, true, '�
 select is((public.get_discussion(:d3) #>> '{posts,0,body}'), '비방 섞인 글', 'the admin still sees a hidden post');
 select logout();
 select is(
-  (select row(action, discussion_id, pseudonym) from public.admin_log order by id desc limit 1),
+  (select row(action, discussion_id, pseudonym, note) from public.admin_log order by id desc limit 1),
   row('hide_discussion_post'::text, :d3::bigint,
-    (select author_name from private.discussion_posts where id = :d3p)),
-  'hiding a post is in the admin log');
+    (select author_name from private.discussion_posts where id = :d3p), null::text),
+  'hiding a post is in the admin log without the discussion title');
 
 select login(:bob);
 select is((public.get_discussion(:d3) #>> '{posts,0,state}'), 'hidden', 'members see the post as hidden');

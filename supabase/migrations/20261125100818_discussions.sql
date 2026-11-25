@@ -262,10 +262,11 @@ begin
   update private.discussions set closed_at = now() where id = v_discussion.id;
 
   if v_early then
+    -- 사유에는 결론 글을 옮겨 적지 않고 가리키기만 한다. 관리 기록은 모든 회원이 보고 지울 수 없으므로,
+    -- 나중에 그 글을 숨겨도 기록에 남지 않게 한다. 토론 제목도 같은 까닭으로 적지 않는다.
     v_log_id := private.log_admin_action(
-      'close_discussion_early', left(v_body, 300),
-      (select title from public.pages where id = v_discussion.page_id),
-      p_note => v_discussion.title
+      'close_discussion_early', '결론 글 #' || v_post_id,
+      (select title from public.pages where id = v_discussion.page_id)
     );
     update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
   end if;
@@ -673,8 +674,7 @@ begin
    where id = p_discussion_id;
   v_log_id := private.log_admin_action(
     case when p_deleted then 'delete_discussion' else 'restore_discussion' end,
-    v_reason, (select title from public.pages where id = v_discussion.page_id),
-    p_note => v_discussion.title
+    v_reason, (select title from public.pages where id = v_discussion.page_id)
   );
   update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
 end;
@@ -716,7 +716,7 @@ begin
   v_log_id := private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
     v_reason, (select title from public.pages where id = v_discussion.page_id),
-    p_pseudonym => v_post.author_name, p_note => v_discussion.title
+    p_pseudonym => v_post.author_name
   );
   update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
 end;
