@@ -19,7 +19,7 @@ CREATE OR REPLACE FUNCTION private.is_valid_admin_nickname (
   select p_nickname = btrim(p_nickname)
      and char_length(p_nickname) between 1 and 20
      and p_nickname !~ '[[:cntrl:]\u00A0\u00AD\u115F\u1160\u1680\u180E\u2000-\u200F\u2028-\u202F\u205F-\u206F\u3000\u3164\uFE00-\uFE0F\uFEFF\uFFA0]'
-     and p_nickname !~ '^관리자 [A-Z]$';
+     and p_nickname !~ '^관리자';
 $function$;
 
 CREATE OR REPLACE FUNCTION public.list_admins()

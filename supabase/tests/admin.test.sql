@@ -311,7 +311,7 @@ select throws_ok($$select public.set_admin_nickname(chr(12288))$$, 'WK021', null
 select throws_ok($$select public.set_admin_nickname('운영' || chr(8203))$$, 'WK021', null,
   'a nickname has no invisible characters');
 select throws_ok($$select public.set_admin_nickname('관리자 A')$$, 'WK021', null,
-  'a nickname cannot look like an admin handle');
+  'a nickname cannot start like an admin handle');
 select lives_ok(format($$select public.set_admin_nickname(%L)$$, repeat('😀', 20)),
   'a nickname counts characters, not bytes');
 select lives_ok($$select public.set_admin_nickname('운영 담당')$$, 'nicknames may be the same');
