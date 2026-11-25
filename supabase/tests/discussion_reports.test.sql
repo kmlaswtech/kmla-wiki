@@ -1,4 +1,5 @@
--- 토론 글 신고: 신고, 관리자 목록·닫기, 글 숨기기·토론 지우기·문서 삭제가 신고를 닫음, 판 신고와 함께 세기.
+-- 토론 글 신고: 신고, 관리자 목록·닫기, 글 숨기기·거두기·토론 지우기·거두기·문서 삭제가 신고를 닫음,
+-- 판 신고와 함께 세기.
 begin;
 \ir helpers.inc
 select * from no_plan();
@@ -104,10 +105,42 @@ select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :
 select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post3), 'WK006', null,
   'a post in a deleted discussion cannot be reported');
 select logout();
+select login(:admin);
+select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post3), 'WK006', null,
+  'an admin who can still see a deleted discussion cannot report its posts either');
+select logout();
 
 select login(:bob);
+select public.open_discussion(:p1, '글 거둘 토론', '글 거둘 토론의 첫 글') as d5 \gset
+select public.add_discussion_post(:d5, '거둘 신고 글') as post7 \gset
+select logout();
+select login(:alice);
+select public.report_discussion_post(:post5, 'privacy');
+select public.report_discussion_post(:post7, 'privacy');
+select logout();
+
+select login(:bob);
+select public.withdraw_discussion_post(:post7);
 select public.withdraw_discussion(:d3);
 select logout();
+select is(
+  (select count(*)::integer from private.reports
+   where post_id in (:post5, :post7) and resolution = 'handled' and resolved_by_member_id is null),
+  2, 'withdrawing a post or a discussion closes its reports with no resolver');
+
+select login(:admin);
+select public.open_discussion(:p1, '관리자 토론', '관리자의 첫 글') as d6 \gset
+select public.add_discussion_post(:d6, '관리자가 거둘 글') as post9 \gset
+select logout();
+select login(:alice);
+select public.report_discussion_post(:post9, 'privacy');
+select logout();
+select login(:admin);
+select public.withdraw_discussion_post(:post9);
+select logout();
+select is(
+  (select resolved_by_member_id from private.reports where post_id = :post9), null,
+  'an admin who withdraws their own post is not recorded as the resolver');
 select login(:alice);
 select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post5), 'WK006', null,
   'a post in a withdrawn discussion cannot be reported');
@@ -150,6 +183,18 @@ select logout();
 select is(
   (select resolution from private.reports where post_id = :post6), 'handled',
   'deleting a page closes the reports on its discussion posts');
+
+-- RPC를 거치지 않고 숨겨도 트리거가 신고를 닫는다.
+select login(:bob);
+select public.add_discussion_post(:d1, '직접 숨길 글') as post8 \gset
+select logout();
+select login(:admin);
+select public.report_discussion_post(:post8, 'privacy');
+select logout();
+update private.discussion_posts set hidden_at = now() where id = :post8;
+select is(
+  (select resolution from private.reports where post_id = :post8), 'handled',
+  'hiding a post directly closes its reports');
 
 select * from finish();
 rollback;

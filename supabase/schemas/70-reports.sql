@@ -105,12 +105,15 @@ $function$;
 REVOKE ALL ON FUNCTION "private"."check_report_rate"(bigint) FROM PUBLIC;
 
 -- 판들과 토론 글들에 걸린 처리되지 않은 신고를 닫고 닫은 건수를 돌려준다. 처리한 관리자는 지금
--- 로그인한 회원이다. 조치(판·글 숨기기, 토론 지우기, 문서 삭제, 일괄 되돌리기)는 `handled`로 닫고,
--- 관리자의 신고 닫기(`resolve_reports`, `resolve_post_reports`)는 `handled`나 `dismissed`로 닫는다.
+-- 로그인한 회원이다. 작성자가 글을 거두어 닫히면 관리자의 판단이 아니므로 `p_by_admin`을 false로
+-- 주고, 처리자가 없다(NULL). 거둔 사람이 관리자여도 같다. 대상이 보이지 않게 될 때(아래
+-- 트리거)와 일괄 되돌리기가 판을 걷어 낼 때는 `handled`로 닫는다. 관리자의 신고 닫기
+-- (`resolve_reports`, `resolve_post_reports`)는 `handled`나 `dismissed`로 닫는다.
 CREATE OR REPLACE FUNCTION private.close_reports (
   p_revision_ids bigint[],
   p_post_ids     bigint[] DEFAULT '{}'::bigint[],
-  p_resolution   text     DEFAULT 'handled'::text
+  p_resolution   text     DEFAULT 'handled'::text,
+  p_by_admin     boolean  DEFAULT true
 )
   RETURNS integer
   LANGUAGE plpgsql
@@ -124,14 +127,56 @@ begin
     raise exception 'invalid resolution' using errcode = '22023';
   end if;
   update private.reports
-     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = p_resolution
+     set resolved_at = now(),
+         resolved_by_member_id = case when p_by_admin then private.current_member_id() end,
+         resolution = p_resolution
    where (revision_id = any (p_revision_ids) or post_id = any (p_post_ids)) and resolved_at is null;
   get diagnostics v_count = row_count;
   return v_count;
 end;
 $function$;
 
-REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[], bigint[], text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[], bigint[], text, boolean) FROM PUBLIC;
+
+-- 열린 신고의 대상은 회원에게 보인다. 대상이 보이지 않게 되면 트리거가 신고를 `handled`로 닫는다.
+-- 그래서 숨기기·삭제 RPC는 신고를 몰라도 된다. 되살려도 신고는 다시 열지 않는다. 토론 글의 트리거는
+-- `80-discussions.sql`에 있다.
+
+-- 판을 숨기면 그 판의 신고를 닫는다.
+CREATE OR REPLACE FUNCTION private.close_hidden_revision_reports()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.close_reports(array[new.id]);
+  return null;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_hidden_revision_reports"() FROM PUBLIC;
+
+CREATE TRIGGER close_reports_on_hide AFTER UPDATE OF hidden_at ON public.revisions FOR EACH ROW WHEN (((old.hidden_at IS NULL) AND (new.hidden_at IS NOT NULL))) EXECUTE FUNCTION private.close_hidden_revision_reports();
+
+-- 문서를 삭제하면 그 문서의 모든 판의 신고를 닫는다. 삭제된 문서의 판은 회원에게 보이지 않는다.
+CREATE OR REPLACE FUNCTION private.close_deleted_page_revision_reports()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.close_reports(array(
+    select revision.id from public.revisions as revision where revision.page_id = new.id
+  ));
+  return null;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_deleted_page_revision_reports"() FROM PUBLIC;
+
+CREATE TRIGGER close_revision_reports_on_delete AFTER UPDATE OF deleted_at ON public.pages FOR EACH ROW WHEN (((old.deleted_at IS NULL) AND (new.deleted_at IS NOT NULL))) EXECUTE FUNCTION private.close_deleted_page_revision_reports();
 
 -- 처리되지 않은 신고가 걸린 대상(판과 토론 글) 수(관리자 전용).
 CREATE OR REPLACE FUNCTION public.count_open_reports()
@@ -161,7 +206,8 @@ GRANT EXECUTE ON FUNCTION "public"."count_open_reports"() TO "postgres";
 REVOKE ALL ON FUNCTION "public"."count_open_reports"() FROM PUBLIC, "anon";
 
 -- 처리되지 않은 신고를 판별로 묶는다(관리자 전용). 신고자는 돌려주지 않는다. 오래된 신고부터. 판이
--- 지워지면 신고도 지워진다(on delete cascade). 토론 글 신고는 `list_open_post_reports`가 준다.
+-- 지워지면 신고도 지워진다(on delete cascade). 열린 신고의 판은 숨겨지지 않았고 문서도 삭제되지
+-- 않았다(트리거). 토론 글 신고는 `list_open_post_reports`가 준다.
 -- `dismissed_count`는 같은 판에서 전에 기각한 신고 수다. 관리자가 앞의 판단을 참고한다.
 CREATE OR REPLACE FUNCTION public.list_open_reports()
   RETURNS TABLE (
@@ -171,9 +217,7 @@ CREATE OR REPLACE FUNCTION public.list_open_reports()
     pseudonym           text,
     parent_revision_id  bigint,
     revision_created_at timestamp with time zone,
-    hidden_at           timestamp with time zone,
     is_current          boolean,
-    page_deleted        boolean,
     first_reported_at   timestamp with time zone,
     reports             jsonb,
     dismissed_count     integer
@@ -188,8 +232,8 @@ begin
   return query
   select
     revision.id, page.id, page.title, revision.author_pseudonym, revision.parent_revision_id,
-    revision.created_at, revision.hidden_at, revision.id = page.current_revision_id,
-    page.deleted_at is not null, grouped.first_reported_at, grouped.reports,
+    revision.created_at, revision.id = page.current_revision_id,
+    grouped.first_reported_at, grouped.reports,
     (
       select count(*)::integer from private.reports as earlier
       where earlier.revision_id = grouped.revision_id and earlier.resolution = 'dismissed'
@@ -275,14 +319,20 @@ declare
   v_member_id bigint := private.require_editor();
   v_note text := private.check_report_note(p_category, p_note);
 begin
-  if not exists (
-    select 1
+  -- 문서와 판을 잠근다. 관리자가 같은 때 숨기거나 삭제하면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
+  -- 않으면 트리거가 신고를 닫은 뒤에 이 신고가 들어가 열린 채 남는다. 관리자 쪽
+  -- (`revert_and_hide_revision`)처럼 문서를 먼저 잠가 서로 기다리지 않게 한다.
+  perform 1 from public.pages
+   where id = (select page_id from public.revisions where id = p_revision_id)
+     for share;
+  perform 1
     from public.revisions as revision
     join public.pages as page on page.id = revision.page_id
-    where revision.id = p_revision_id
-      and revision.hidden_at is null
-      and page.deleted_at is null
-  ) then
+   where revision.id = p_revision_id
+     and revision.hidden_at is null
+     and page.deleted_at is null
+     for share of revision;
+  if not found then
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
   perform private.insert_report(v_member_id, p_revision_id, null, p_category, v_note);

@@ -425,19 +425,15 @@ export type Database = {
         Returns: {
           author_name: string
           body: string
-          discussion_deleted: boolean
           discussion_id: number
           discussion_title: string
-          discussion_withdrawn: boolean
           dismissed_count: number
           first_reported_at: string
-          hidden_at: string
           kind: string
           page_title: string
           post_created_at: string
           post_id: number
           reports: Json
-          withdrawn_at: string
         }[]
       }
       list_open_reports: {
@@ -445,9 +441,7 @@ export type Database = {
         Returns: {
           dismissed_count: number
           first_reported_at: string
-          hidden_at: string
           is_current: boolean
-          page_deleted: boolean
           page_id: number
           page_title: string
           parent_revision_id: number

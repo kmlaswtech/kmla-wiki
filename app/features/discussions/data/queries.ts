@@ -137,13 +137,6 @@ export async function listOpenPostReports(): Promise<OpenPostReport[]> {
     kind: row.kind as PostKind,
     body: row.body,
     postCreatedAt: row.post_created_at,
-    state: row.hidden_at
-      ? "hidden"
-      : row.withdrawn_at
-        ? "withdrawn"
-        : "visible",
-    discussionWithdrawn: row.discussion_withdrawn,
-    discussionDeleted: row.discussion_deleted,
     reports: toReportNotes(row.reports),
     dismissedCount: row.dismissed_count,
   }));

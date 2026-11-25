@@ -12,8 +12,6 @@ import { formatDateTime } from "~/shared/lib/time";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
-const STATE_LABEL = { hidden: "숨김", withdrawn: "삭제한 글" } as const;
-
 /**
  * 처리되지 않은 토론 글 신고를 글별로 보인다(관리자 전용). 글 본문을 바로 보이고, [글 숨기기]로
  * 숨기면 신고도 닫힌다. 다른 조치를 했거나 조치할 일이 없으면 [처리 완료]이나 [기각]으로 닫는다.
@@ -64,17 +62,12 @@ function PostReportItem({
   return (
     <li className="px-3 py-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {/* 거둔 토론은 관리자도 열 수 없다. */}
-        {report.discussionWithdrawn ? (
-          <span className="font-medium">{title}</span>
-        ) : (
-          <Link
-            to={postHref(report.discussionId, report.postId)}
-            className="font-medium text-primary hover:underline"
-          >
-            {title}
-          </Link>
-        )}
+        <Link
+          to={postHref(report.discussionId, report.postId)}
+          className="font-medium text-primary hover:underline"
+        >
+          {title}
+        </Link>
         <span className="text-muted-foreground">{report.authorName}</span>
         <span className="text-muted-foreground">
           {formatDateTime(report.postCreatedAt)}
@@ -82,28 +75,18 @@ function PostReportItem({
         {report.kind === "open" ? (
           <Badge variant="secondary">첫 글</Badge>
         ) : null}
-        {report.state !== "visible" ? (
-          <Badge variant="outline">{STATE_LABEL[report.state]}</Badge>
-        ) : null}
-        {report.discussionWithdrawn ? (
-          <Badge variant="outline">삭제한 토론</Badge>
-        ) : report.discussionDeleted ? (
-          <Badge variant="outline">지운 토론</Badge>
-        ) : null}
         {report.dismissedCount > 0 ? (
           <Badge variant="outline">이전 기각 {report.dismissedCount}건</Badge>
         ) : null}
         <span className="ml-auto flex items-center gap-1">
-          {report.state === "hidden" ? null : (
-            <Button
-              size="xs"
-              variant="destructive"
-              disabled={pending}
-              onClick={() => setHiding(true)}
-            >
-              글 숨기기
-            </Button>
-          )}
+          <Button
+            size="xs"
+            variant="destructive"
+            disabled={pending}
+            onClick={() => setHiding(true)}
+          >
+            글 숨기기
+          </Button>
           <Button
             size="xs"
             variant="outline"
