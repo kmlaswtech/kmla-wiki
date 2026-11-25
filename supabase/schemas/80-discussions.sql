@@ -1053,7 +1053,10 @@ CREATE OR REPLACE FUNCTION private.close_hidden_post_reports()
   SET search_path TO ''
   AS $function$
 begin
-  perform private.close_reports('{}', array[new.id]);
+  -- 거두기는 작성자가 한 일이라 처리자를 적지 않는다.
+  perform private.close_reports(
+    '{}', array[new.id], p_by_admin => old.withdrawn_at is not distinct from new.withdrawn_at
+  );
   return null;
 end;
 $function$;
@@ -1071,9 +1074,12 @@ CREATE OR REPLACE FUNCTION private.close_hidden_discussion_reports()
   SET search_path TO ''
   AS $function$
 begin
-  perform private.close_reports('{}', array(
-    select post.id from private.discussion_posts as post where post.discussion_id = new.id
-  ));
+  -- 거두기는 작성자가 한 일이라 처리자를 적지 않는다.
+  perform private.close_reports(
+    '{}',
+    array(select post.id from private.discussion_posts as post where post.discussion_id = new.id),
+    p_by_admin => old.withdrawn_at is not distinct from new.withdrawn_at
+  );
   return null;
 end;
 $function$;
@@ -1124,9 +1130,18 @@ declare
   v_member_id bigint := private.require_editor();
   v_note text := private.check_report_note(p_category, p_note);
 begin
-  -- 글과 토론을 잠근다. 관리자가 같은 때 숨기거나 지우면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
-  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다. 다른 토론 쓰기(`lock_discussion`)처럼 토론을
-  -- 먼저 잠가, 같은 글을 거두는 일과 서로 기다리지 않게 한다.
+  -- 문서, 토론, 글을 이 순서로 잠근다. 관리자가 같은 때 숨기거나 지우거나 문서를 삭제하면 그 일이
+  -- 끝난 뒤 다시 보고 거절한다. 그러지 않으면 트리거가 신고를 닫은 뒤에 이 신고가 들어가 열린 채
+  -- 남는다. 다른 토론 쓰기(`lock_discussion`)처럼 토론을 글보다 먼저 잠가, 같은 글을 거두는 일과 서로
+  -- 기다리지 않게 한다.
+  perform 1 from public.pages
+   where id = (
+     select discussion.page_id
+     from private.discussion_posts as post
+     join private.discussions as discussion on discussion.id = post.discussion_id
+     where post.id = p_post_id
+   )
+     for share;
   perform 1 from private.discussions
    where id = (select discussion_id from private.discussion_posts where id = p_post_id)
      for share;

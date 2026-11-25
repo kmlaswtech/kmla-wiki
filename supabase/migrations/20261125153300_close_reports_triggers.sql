@@ -2,6 +2,8 @@ SET local check_function_bodies = off;
 
 DROP FUNCTION "private"."close_page_discussion_reports"(bigint);
 
+DROP FUNCTION "private"."close_reports"(bigint[], bigint[], text);
+
 DROP FUNCTION "public"."list_open_post_reports"();
 
 DROP FUNCTION "public"."list_open_reports"();
@@ -44,9 +46,12 @@ CREATE OR REPLACE FUNCTION private.close_hidden_discussion_reports()
   SET search_path TO ''
   AS $function$
 begin
-  perform private.close_reports('{}', array(
-    select post.id from private.discussion_posts as post where post.discussion_id = new.id
-  ));
+  -- 거두기는 작성자가 한 일이라 처리자를 적지 않는다.
+  perform private.close_reports(
+    '{}',
+    array(select post.id from private.discussion_posts as post where post.discussion_id = new.id),
+    p_by_admin => old.withdrawn_at is not distinct from new.withdrawn_at
+  );
   return null;
 end;
 $function$;
@@ -58,7 +63,10 @@ CREATE OR REPLACE FUNCTION private.close_hidden_post_reports()
   SET search_path TO ''
   AS $function$
 begin
-  perform private.close_reports('{}', array[new.id]);
+  -- 거두기는 작성자가 한 일이라 처리자를 적지 않는다.
+  perform private.close_reports(
+    '{}', array[new.id], p_by_admin => old.withdrawn_at is not distinct from new.withdrawn_at
+  );
   return null;
 end;
 $function$;
@@ -78,7 +86,8 @@ $function$;
 CREATE OR REPLACE FUNCTION private.close_reports (
   p_revision_ids bigint[],
   p_post_ids     bigint[] DEFAULT '{}'::bigint[],
-  p_resolution   text     DEFAULT 'handled'::text
+  p_resolution   text     DEFAULT 'handled'::text,
+  p_by_admin     boolean  DEFAULT true
 )
   RETURNS integer
   LANGUAGE plpgsql
@@ -93,7 +102,7 @@ begin
   end if;
   update private.reports
      set resolved_at = now(),
-         resolved_by_member_id = case when private.is_admin() then private.current_member_id() end,
+         resolved_by_member_id = case when p_by_admin then private.current_member_id() end,
          resolution = p_resolution
    where (revision_id = any (p_revision_ids) or post_id = any (p_post_ids)) and resolved_at is null;
   get diagnostics v_count = row_count;
@@ -233,9 +242,18 @@ declare
   v_member_id bigint := private.require_editor();
   v_note text := private.check_report_note(p_category, p_note);
 begin
-  -- 글과 토론을 잠근다. 관리자가 같은 때 숨기거나 지우면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
-  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다. 다른 토론 쓰기(`lock_discussion`)처럼 토론을
-  -- 먼저 잠가, 같은 글을 거두는 일과 서로 기다리지 않게 한다.
+  -- 문서, 토론, 글을 이 순서로 잠근다. 관리자가 같은 때 숨기거나 지우거나 문서를 삭제하면 그 일이
+  -- 끝난 뒤 다시 보고 거절한다. 그러지 않으면 트리거가 신고를 닫은 뒤에 이 신고가 들어가 열린 채
+  -- 남는다. 다른 토론 쓰기(`lock_discussion`)처럼 토론을 글보다 먼저 잠가, 같은 글을 거두는 일과 서로
+  -- 기다리지 않게 한다.
+  perform 1 from public.pages
+   where id = (
+     select discussion.page_id
+     from private.discussion_posts as post
+     join private.discussions as discussion on discussion.id = post.discussion_id
+     where post.id = p_post_id
+   )
+     for share;
   perform 1 from private.discussions
    where id = (select discussion_id from private.discussion_posts where id = p_post_id)
      for share;
@@ -253,6 +271,40 @@ begin
     raise exception 'post not found' using errcode = 'WK006';
   end if;
   perform private.insert_report(v_member_id, null, p_post_id, p_category, v_note);
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.report_revision (
+  p_revision_id bigint,
+  p_category    text,
+  p_note        text   DEFAULT ''::text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint := private.require_editor();
+  v_note text := private.check_report_note(p_category, p_note);
+begin
+  -- 문서와 판을 잠근다. 관리자가 같은 때 숨기거나 삭제하면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
+  -- 않으면 트리거가 신고를 닫은 뒤에 이 신고가 들어가 열린 채 남는다. 관리자 쪽
+  -- (`revert_and_hide_revision`)처럼 문서를 먼저 잠가 서로 기다리지 않게 한다.
+  perform 1 from public.pages
+   where id = (select page_id from public.revisions where id = p_revision_id)
+     for share;
+  perform 1
+    from public.revisions as revision
+    join public.pages as page on page.id = revision.page_id
+   where revision.id = p_revision_id
+     and revision.hidden_at is null
+     and page.deleted_at is null
+     for share of revision;
+  if not found then
+    raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+  perform private.insert_report(v_member_id, p_revision_id, null, p_category, v_note);
 end;
 $function$;
 
@@ -422,6 +474,8 @@ REVOKE ALL ON FUNCTION "private"."close_hidden_discussion_reports"() FROM PUBLIC
 REVOKE ALL ON FUNCTION "private"."close_hidden_post_reports"() FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION "private"."close_hidden_revision_reports"() FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[], bigint[], text, boolean) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "authenticated";
 

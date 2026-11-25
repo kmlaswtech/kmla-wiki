@@ -105,13 +105,15 @@ $function$;
 REVOKE ALL ON FUNCTION "private"."check_report_rate"(bigint) FROM PUBLIC;
 
 -- 판들과 토론 글들에 걸린 처리되지 않은 신고를 닫고 닫은 건수를 돌려준다. 처리한 관리자는 지금
--- 로그인한 관리자다. 작성자가 글을 거두어 닫히면 처리자가 없다(NULL). 대상이 보이지 않게 될 때(아래
+-- 로그인한 회원이다. 작성자가 글을 거두어 닫히면 관리자의 판단이 아니므로 `p_by_admin`을 false로
+-- 주고, 처리자가 없다(NULL). 거둔 사람이 관리자여도 같다. 대상이 보이지 않게 될 때(아래
 -- 트리거)와 일괄 되돌리기가 판을 걷어 낼 때는 `handled`로 닫는다. 관리자의 신고 닫기
 -- (`resolve_reports`, `resolve_post_reports`)는 `handled`나 `dismissed`로 닫는다.
 CREATE OR REPLACE FUNCTION private.close_reports (
   p_revision_ids bigint[],
   p_post_ids     bigint[] DEFAULT '{}'::bigint[],
-  p_resolution   text     DEFAULT 'handled'::text
+  p_resolution   text     DEFAULT 'handled'::text,
+  p_by_admin     boolean  DEFAULT true
 )
   RETURNS integer
   LANGUAGE plpgsql
@@ -126,7 +128,7 @@ begin
   end if;
   update private.reports
      set resolved_at = now(),
-         resolved_by_member_id = case when private.is_admin() then private.current_member_id() end,
+         resolved_by_member_id = case when p_by_admin then private.current_member_id() end,
          resolution = p_resolution
    where (revision_id = any (p_revision_ids) or post_id = any (p_post_ids)) and resolved_at is null;
   get diagnostics v_count = row_count;
@@ -134,7 +136,7 @@ begin
 end;
 $function$;
 
-REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[], bigint[], text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[], bigint[], text, boolean) FROM PUBLIC;
 
 -- 열린 신고의 대상은 회원에게 보인다. 대상이 보이지 않게 되면 트리거가 신고를 `handled`로 닫는다.
 -- 그래서 숨기기·삭제 RPC는 신고를 몰라도 된다. 되살려도 신고는 다시 열지 않는다. 토론 글의 트리거는
@@ -317,14 +319,20 @@ declare
   v_member_id bigint := private.require_editor();
   v_note text := private.check_report_note(p_category, p_note);
 begin
-  if not exists (
-    select 1
+  -- 문서와 판을 잠근다. 관리자가 같은 때 숨기거나 삭제하면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
+  -- 않으면 트리거가 신고를 닫은 뒤에 이 신고가 들어가 열린 채 남는다. 관리자 쪽
+  -- (`revert_and_hide_revision`)처럼 문서를 먼저 잠가 서로 기다리지 않게 한다.
+  perform 1 from public.pages
+   where id = (select page_id from public.revisions where id = p_revision_id)
+     for share;
+  perform 1
     from public.revisions as revision
     join public.pages as page on page.id = revision.page_id
-    where revision.id = p_revision_id
-      and revision.hidden_at is null
-      and page.deleted_at is null
-  ) then
+   where revision.id = p_revision_id
+     and revision.hidden_at is null
+     and page.deleted_at is null
+     for share of revision;
+  if not found then
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
   perform private.insert_report(v_member_id, p_revision_id, null, p_category, v_note);
