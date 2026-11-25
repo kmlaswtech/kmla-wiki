@@ -32,9 +32,9 @@ export function NewDiscussionForm({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [asAdmin, setAsAdmin] = useState(false);
+  // 제목 길이는 `maxLength`가 막는다.
   const ready =
     title.trim().length > 0 &&
-    [...title.trim()].length <= DISCUSSION_LIMIT.title &&
     postLength(body) > 0 &&
     postLength(body) <= DISCUSSION_LIMIT.post;
 

@@ -10,7 +10,8 @@ CREATE OR REPLACE FUNCTION private.log_admin_action (
   p_page_title  text   DEFAULT NULL::text,
   p_revision_id bigint DEFAULT NULL::bigint,
   p_pseudonym   text   DEFAULT NULL::text,
-  p_note        text   DEFAULT NULL::text
+  p_note        text   DEFAULT NULL::text,
+  p_discussion_id bigint DEFAULT NULL::bigint
 )
   RETURNS bigint
   LANGUAGE plpgsql
@@ -20,8 +21,8 @@ CREATE OR REPLACE FUNCTION private.log_admin_action (
 declare
   v_log_id bigint;
 begin
-  insert into public.admin_log (action, page_title, revision_id, pseudonym, reason, note)
-  values (p_action, p_page_title, p_revision_id, p_pseudonym, p_reason, p_note)
+  insert into public.admin_log (action, page_title, revision_id, pseudonym, reason, note, discussion_id)
+  values (p_action, p_page_title, p_revision_id, p_pseudonym, p_reason, p_note, p_discussion_id)
   returning id into v_log_id;
 
   insert into private.admin_actions (admin_log_id, actor_member_id)
@@ -31,7 +32,7 @@ begin
 end;
 $function$;
 
-REVOKE ALL ON FUNCTION "private"."log_admin_action"(text, text, text, bigint, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION "private"."log_admin_action"(text, text, text, bigint, text, text, bigint) FROM PUBLIC;
 
 -- ── 관리자 지정·해제 ─────────────────────────────────────────────────────────
 -- 지정은 판 작성자 기준, 해제는 관리자 전용 이름 기준이다. 최초 1명만 SQL로 지정한다.

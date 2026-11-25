@@ -9,7 +9,6 @@ export interface DiscussionSummary {
   openerName: string;
   /** 거두지 않은 글 수(첫 글 포함). */
   postCount: number;
-  createdAt: string;
   lastPostAt: string;
   /** 관리자가 지운 토론. 관리자에게만 나온다. */
   deleted: boolean;
@@ -36,13 +35,10 @@ export interface DiscussionPost {
 /** 토론 하나와 글 전체(`get_discussion`). */
 export interface Discussion {
   id: number;
-  pageId: number;
   pageTitle: string;
   title: string;
   revisionId: number | null;
   isOpen: boolean;
-  createdAt: string;
-  closedAt: string | null;
   /** 이 시각이 지나면 누구나 닫을 수 있다. */
   closeAfter: string;
   /** 지금 열린 차례를 내가 열었다(언제나 닫을 수 있다). */

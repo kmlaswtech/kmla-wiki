@@ -6,7 +6,7 @@ import type {
   PostState,
 } from "../model/types";
 import { getSupabase } from "~/shared/supabase/client";
-import { isWikiError, unwrap } from "~/shared/supabase/errors";
+import { unwrap } from "~/shared/supabase/errors";
 
 /** 문서의 토론 목록, 최근 활동순. 지운 토론은 관리자에게만 온다. */
 export async function listPageDiscussions(
@@ -22,7 +22,6 @@ export async function listPageDiscussions(
     isOpen: row.is_open,
     openerName: row.opener_name,
     postCount: row.post_count,
-    createdAt: row.created_at,
     lastPostAt: row.last_post_at,
     deleted: row.deleted,
   }));
@@ -54,13 +53,10 @@ interface RawPost {
 
 interface RawDiscussion {
   id: number;
-  page_id: number;
   page_title: string;
   title: string;
   revision_id: number | null;
   is_open: boolean;
-  created_at: string;
-  closed_at: string | null;
   close_after: string;
   opened_by_me: boolean;
   created_by_me: boolean;
@@ -83,28 +79,17 @@ function toPost(raw: RawPost): DiscussionPost {
 
 /** 토론 하나와 글 전체. 없거나, 거뒀거나, 지운 토론(관리자가 아니면)은 `null`. */
 export async function findDiscussion(id: number): Promise<Discussion | null> {
-  try {
-    return await getDiscussion(id);
-  } catch (error) {
-    if (isWikiError(error, "WK006")) return null;
-    throw error;
-  }
-}
-
-/** 토론 하나와 글 전체. 볼 수 없는 토론은 WK006으로 거절된다. */
-export async function getDiscussion(id: number): Promise<Discussion> {
-  const raw = unwrap(
-    await getSupabase().rpc("get_discussion", { p_discussion_id: id }),
-  ) as unknown as RawDiscussion;
+  const result = await getSupabase().rpc("get_discussion", {
+    p_discussion_id: id,
+  });
+  if (result.error?.code === "WK006") return null;
+  const raw = unwrap(result) as unknown as RawDiscussion;
   return {
     id: raw.id,
-    pageId: raw.page_id,
     pageTitle: raw.page_title,
     title: raw.title,
     revisionId: raw.revision_id,
     isOpen: raw.is_open,
-    createdAt: raw.created_at,
-    closedAt: raw.closed_at,
     closeAfter: raw.close_after,
     openedByMe: raw.opened_by_me,
     createdByMe: raw.created_by_me,

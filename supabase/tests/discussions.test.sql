@@ -154,8 +154,8 @@ select logout();
 select login(:alice);
 select lives_ok(format($$select public.withdraw_discussion_post(%s)$$, :a2),
   'a post can be withdrawn once the replies after it are withdrawn');
-select lives_ok(format($$select public.withdraw_discussion(%s)$$, :d2),
-  'the opener can withdraw a discussion with no replies left');
+select is(public.withdraw_discussion(:d2), '토론 문서',
+  'the opener can withdraw a discussion with no replies left and gets the page title back');
 select throws_ok(format($$select public.get_discussion(%s)$$, :d2), 'WK006', null,
   'a withdrawn discussion cannot be read');
 select logout();

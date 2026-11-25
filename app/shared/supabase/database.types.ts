@@ -649,7 +649,7 @@ export type Database = {
       }
       withdraw_discussion: {
         Args: { p_discussion_id: number }
-        Returns: undefined
+        Returns: string
       }
       withdraw_discussion_post: {
         Args: { p_post_id: number }

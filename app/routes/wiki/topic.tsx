@@ -20,7 +20,6 @@ import {
   DiscussionComposer,
   DiscussionThread,
   findDiscussion,
-  getDiscussion,
   isDiscussionIntent,
   withdrawDiscussion,
   withdrawPost,
@@ -63,8 +62,7 @@ export async function clientAction({
       switch (intent) {
         case DISCUSSION_INTENT.withdrawDiscussion: {
           // 거둔 토론은 볼 수 없으므로 문서의 토론 목록으로 간다.
-          const { pageTitle } = await getDiscussion(id);
-          await withdrawDiscussion(id);
+          const pageTitle = await withdrawDiscussion(id);
           return redirect(pageHref(pageTitle, "discussion"));
         }
         case DISCUSSION_INTENT.withdrawPost: {

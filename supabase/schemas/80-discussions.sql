@@ -378,7 +378,6 @@ declare
   v_discussion private.discussions := private.lock_discussion(p_discussion_id);
   v_early boolean;
   v_post_id bigint;
-  v_log_id bigint;
 begin
   if v_discussion.closed_at is not null then
     raise exception 'already closed' using errcode = 'WK011';
@@ -396,11 +395,10 @@ begin
   if v_early then
     -- 사유에는 결론 글을 옮겨 적지 않고 가리키기만 한다. 관리 기록은 모든 회원이 보고 지울 수 없으므로,
     -- 나중에 그 글을 숨겨도 기록에 남지 않게 한다. 토론 제목도 같은 까닭으로 적지 않는다.
-    v_log_id := private.log_admin_action(
+    perform private.log_admin_action(
       'close_discussion_early', '결론 글 #' || v_post_id,
-      (select title from public.pages where id = v_discussion.page_id)
+      (select title from public.pages where id = v_discussion.page_id), p_discussion_id => v_discussion.id
     );
-    update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
   end if;
   return v_post_id;
 end;
@@ -509,11 +507,11 @@ GRANT EXECUTE ON FUNCTION "public"."withdraw_discussion_post"(bigint) TO "postgr
 REVOKE ALL ON FUNCTION "public"."withdraw_discussion_post"(bigint) FROM PUBLIC, "anon";
 
 -- 내가 연 토론을 거둔다. 첫 글 말고 거두지 않은 글이 없을 때만 된다(WK024). 거둔 토론은 아무에게도
--- 보이지 않는다.
+-- 보이지 않는다. 화면이 토론 목록으로 돌아가도록 문서 제목을 돌려준다.
 CREATE OR REPLACE FUNCTION public.withdraw_discussion (
   p_discussion_id bigint
 )
-  RETURNS void
+  RETURNS text
   LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path TO ''
@@ -533,6 +531,7 @@ begin
   end if;
 
   update private.discussions set withdrawn_at = now() where id = v_discussion.id;
+  return (select title from public.pages where id = v_discussion.page_id);
 end;
 $function$;
 
@@ -565,7 +564,6 @@ declare
   v_reason text;
   v_post private.discussion_posts;
   v_discussion private.discussions;
-  v_log_id bigint;
 begin
   perform private.require_admin();
   v_reason := private.require_reason(p_reason);
@@ -582,12 +580,11 @@ begin
   update private.discussion_posts
      set hidden_at = case when p_hidden then now() end
    where id = p_post_id;
-  v_log_id := private.log_admin_action(
+  perform private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
     v_reason, (select title from public.pages where id = v_discussion.page_id),
-    p_pseudonym => v_post.author_name
+    p_pseudonym => v_post.author_name, p_discussion_id => v_discussion.id
   );
-  update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
 end;
 $function$;
 
@@ -615,7 +612,6 @@ CREATE OR REPLACE FUNCTION public.set_discussion_deleted (
 declare
   v_reason text;
   v_discussion private.discussions;
-  v_log_id bigint;
 begin
   perform private.require_admin();
   v_reason := private.require_reason(p_reason);
@@ -631,11 +627,11 @@ begin
   update private.discussions
      set deleted_at = case when p_deleted then now() end
    where id = p_discussion_id;
-  v_log_id := private.log_admin_action(
+  perform private.log_admin_action(
     case when p_deleted then 'delete_discussion' else 'restore_discussion' end,
-    v_reason, (select title from public.pages where id = v_discussion.page_id)
+    v_reason, (select title from public.pages where id = v_discussion.page_id),
+    p_discussion_id => v_discussion.id
   );
-  update public.admin_log set discussion_id = v_discussion.id where id = v_log_id;
 end;
 $function$;
 
@@ -719,7 +715,10 @@ begin
     where discussion.page_id = p_page_id
       and discussion.closed_at is null
       and discussion.deleted_at is null
-      and private.can_see_discussion(discussion)
+      and discussion.withdrawn_at is null
+      -- `can_see_discussion`과 같은 판단이다. 행마다 함수를 부르지 않도록 풀어 썼다. 이 조건은 행을
+      -- 가리키지 않아 한 번만 계산된다. 문서 보기마다 부르므로 가볍게 둔다.
+      and (private.is_admin() or exists (select 1 from public.pages where id = p_page_id and deleted_at is null))
   );
 end;
 $function$;

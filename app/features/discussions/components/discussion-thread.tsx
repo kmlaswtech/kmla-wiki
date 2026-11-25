@@ -1,16 +1,11 @@
-import { EyeOff, ShieldAlert, Undo2 } from "lucide-react";
+import { EyeOff, ShieldAlert } from "lucide-react";
 import { useState } from "react";
-import { useFetcher } from "react-router";
 
 import { setPostHidden } from "../data/mutations";
-import {
-  DISCUSSION_FIELD,
-  DISCUSSION_INTENT,
-  type DiscussionActionResult,
-} from "../model/form";
 import { canWithdrawPost } from "../model/rules";
 import type { DiscussionPost } from "../model/types";
 import { PostText } from "./post-text";
+import { WithdrawButton } from "./withdraw-button";
 import { ReasonDialog } from "~/features/admin";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { cn } from "~/shared/lib/utils";
@@ -94,7 +89,14 @@ function PostCard({
           <RelativeTime value={post.createdAt} />
         </a>
         <span className="ml-auto flex items-center gap-1">
-          {canWithdraw ? <WithdrawPostButton postId={post.id} /> : null}
+          {canWithdraw ? (
+            <WithdrawButton
+              postId={post.id}
+              title="뒤에 다른 글이 없을 때만 거둘 수 있습니다."
+            >
+              거두기
+            </WithdrawButton>
+          ) : null}
           {isAdmin && post.state !== "withdrawn" ? (
             <PostAdminMenu post={post} onDone={onAdminDone} />
           ) : null}
@@ -121,36 +123,6 @@ function PostBody({ post }: { post: DiscussionPost }) {
         </div>
       ) : null}
     </>
-  );
-}
-
-function WithdrawPostButton({ postId }: { postId: number }) {
-  const fetcher = useFetcher<DiscussionActionResult>();
-  const failed = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
-  return (
-    <fetcher.Form method="post" className="flex items-center gap-1">
-      <input
-        type="hidden"
-        name={DISCUSSION_FIELD.intent}
-        value={DISCUSSION_INTENT.withdrawPost}
-      />
-      <input type="hidden" name={DISCUSSION_FIELD.postId} value={postId} />
-      {failed ? (
-        <span role="alert" className="text-xs text-destructive">
-          {failed}
-        </span>
-      ) : null}
-      <Button
-        type="submit"
-        size="xs"
-        variant="ghost"
-        disabled={fetcher.state !== "idle"}
-        title="뒤에 다른 글이 없을 때만 거둘 수 있습니다."
-      >
-        <Undo2 />
-        거두기
-      </Button>
-    </fetcher.Form>
   );
 }
 

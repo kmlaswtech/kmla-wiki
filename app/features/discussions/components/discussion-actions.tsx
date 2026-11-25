@@ -1,15 +1,10 @@
 import { ShieldAlert, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useFetcher } from "react-router";
 
 import { setDiscussionDeleted } from "../data/mutations";
-import {
-  DISCUSSION_FIELD,
-  DISCUSSION_INTENT,
-  type DiscussionActionResult,
-} from "../model/form";
 import { canWithdrawDiscussion } from "../model/rules";
 import type { Discussion } from "../model/types";
+import { WithdrawButton } from "./withdraw-button";
 import { ReasonDialog } from "~/features/admin";
 import { Button } from "~/shared/ui/button";
 import {
@@ -34,41 +29,19 @@ export function DiscussionActions({
   return (
     <div className="flex shrink-0 items-center gap-1">
       {canWrite && canWithdrawDiscussion(discussion) ? (
-        <WithdrawDiscussionButton />
+        <WithdrawButton
+          size="sm"
+          variant="outline"
+          icon={<Trash2 />}
+          title="다른 글이 없을 때만 거둘 수 있습니다. 거둔 토론은 아무에게도 보이지 않습니다."
+        >
+          토론 거두기
+        </WithdrawButton>
       ) : null}
       {isAdmin ? (
         <DiscussionAdminMenu discussion={discussion} onDone={onAdminDone} />
       ) : null}
     </div>
-  );
-}
-
-function WithdrawDiscussionButton() {
-  const fetcher = useFetcher<DiscussionActionResult>();
-  const failed = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
-  return (
-    <fetcher.Form method="post" className="flex items-center gap-1">
-      <input
-        type="hidden"
-        name={DISCUSSION_FIELD.intent}
-        value={DISCUSSION_INTENT.withdrawDiscussion}
-      />
-      {failed ? (
-        <span role="alert" className="text-xs text-destructive">
-          {failed}
-        </span>
-      ) : null}
-      <Button
-        type="submit"
-        size="sm"
-        variant="outline"
-        disabled={fetcher.state !== "idle"}
-        title="다른 글이 없을 때만 거둘 수 있습니다. 거둔 토론은 아무에게도 보이지 않습니다."
-      >
-        <Trash2 />
-        토론 거두기
-      </Button>
-    </fetcher.Form>
   );
 }
 

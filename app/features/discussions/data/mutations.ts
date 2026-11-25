@@ -1,3 +1,4 @@
+import { DISCUSSION_INTENT } from "../model/form";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap } from "~/shared/supabase/errors";
 
@@ -22,16 +23,14 @@ export async function openDiscussion(input: {
 }
 
 /** 글 쓰기·닫기·다시 열기. 모두 글 하나를 쓰고 그 id를 돌려준다. */
-export type PostAction = "post" | "close" | "reopen";
-
 const POST_RPC = {
-  post: "add_discussion_post",
-  close: "close_discussion",
-  reopen: "reopen_discussion",
+  [DISCUSSION_INTENT.post]: "add_discussion_post",
+  [DISCUSSION_INTENT.close]: "close_discussion",
+  [DISCUSSION_INTENT.reopen]: "reopen_discussion",
 } as const;
 
 export async function writePost(
-  action: PostAction,
+  action: keyof typeof POST_RPC,
   discussionId: number,
   body: string,
   asAdmin: boolean,
@@ -51,8 +50,11 @@ export async function withdrawPost(postId: number): Promise<void> {
   );
 }
 
-export async function withdrawDiscussion(discussionId: number): Promise<void> {
-  unwrap(
+/** 토론을 거둔다. 돌아갈 토론 목록을 위해 문서 제목을 돌려준다. */
+export async function withdrawDiscussion(
+  discussionId: number,
+): Promise<string> {
+  return unwrap(
     await getSupabase().rpc("withdraw_discussion", {
       p_discussion_id: discussionId,
     }),

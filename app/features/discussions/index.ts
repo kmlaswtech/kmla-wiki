@@ -11,7 +11,6 @@ export {
 } from "./data/mutations";
 export {
   findDiscussion,
-  getDiscussion,
   getRevisionDiscussionCounts,
   listPageDiscussions,
 } from "./data/queries";
@@ -23,4 +22,4 @@ export {
   type DiscussionActionResult,
 } from "./model/form";
 export { topicHref } from "./model/rules";
-export type { Discussion, DiscussionSummary } from "./model/types";
+export type { Discussion } from "./model/types";

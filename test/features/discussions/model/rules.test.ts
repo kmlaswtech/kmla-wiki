@@ -30,13 +30,10 @@ function post(overrides: Partial<DiscussionPost>): DiscussionPost {
 function discussion(overrides: Partial<Discussion>): Discussion {
   return {
     id: 1,
-    pageId: 1,
     pageTitle: "문서",
     title: "토론",
     revisionId: null,
     isOpen: true,
-    createdAt: "2026-11-25T00:00:00Z",
-    closedAt: null,
     closeAfter: "2026-11-26T00:00:00Z",
     openedByMe: false,
     createdByMe: false,
