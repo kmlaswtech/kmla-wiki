@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import { CellSelection } from "@tiptap/pm/tables";
 
 import { NODE } from "~/features/markup";
@@ -12,17 +13,23 @@ export const MIXED: unique symbol = Symbol("mixed");
  * 보통 칸)의 값이다.
  */
 export function activeCellAttr(editor: Editor, name: string): unknown {
-  const { selection } = editor.state;
-  if (!(selection instanceof CellSelection)) {
+  const cells = selectedCells(editor);
+  if (!cells) {
     return editor.getAttributes(
       editor.isActive(NODE.tableHeader) ? NODE.tableHeader : NODE.tableCell,
     )[name];
   }
-  const values = new Set<unknown>();
-  selection.forEachCell((cell) => {
-    values.add(cell.attrs[name]);
-  });
+  const values = new Set(cells.map((cell) => cell.attrs[name] as unknown));
   return values.size > 1 ? MIXED : values.values().next().value;
+}
+
+/** 고른 칸들(문서 순서). 칸을 여러 개 고르지 않았으면(커서만 있거나 글자를 골랐으면) `null`. */
+export function selectedCells(editor: Editor): PMNode[] | null {
+  const { selection } = editor.state;
+  if (!(selection instanceof CellSelection)) return null;
+  const cells: PMNode[] = [];
+  selection.forEachCell((cell) => cells.push(cell));
+  return cells;
 }
 
 /**

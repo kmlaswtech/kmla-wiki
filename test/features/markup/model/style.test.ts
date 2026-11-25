@@ -6,6 +6,7 @@ import {
   contrastRatio,
   formatCustomColor,
   normalizeHex,
+  paletteTextShift,
   parseBackground,
   parseTextColor,
   readableOn,
@@ -87,9 +88,42 @@ describe("colors", () => {
     expect(vars["--wiki-on-dark"]).toBe("#ffffff");
   });
 
-  it("computes WCAG contrast", () => {
-    expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21);
-    expect(contrastRatio("#777777", "#777777")).toBeCloseTo(1);
+  it("uses adjusted palette text colors on a strong background", () => {
+    const { vars } = backgroundVars({
+      kind: "palette",
+      hue: "red",
+      strong: true,
+    });
+    const text = vars["--wiki-cell-text-red"];
+    expect(text).not.toBe("#b71824");
+    expect(text).not.toBe(readableOn("#b71824"));
+    expect(contrastRatio(text ?? "", "#b71824")).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("tells which screen mode shifts a palette text color", () => {
+    expect(
+      paletteTextShift("red", { kind: "palette", hue: "red", strong: true }),
+    ).toEqual({ light: "lighter", dark: "lighter" });
+    expect(
+      paletteTextShift("red", { kind: "palette", hue: "red", strong: false }),
+    ).toEqual({ light: null, dark: null });
+    expect(
+      paletteTextShift("blue", {
+        kind: "custom",
+        light: "#ffffff",
+        dark: "#0060c1",
+      }),
+    ).toEqual({ light: null, dark: "lighter" });
+    expect(
+      paletteTextShift("blue", {
+        kind: "custom",
+        light: "#0060c1",
+        dark: "#18191a",
+      }),
+    ).toEqual({ light: "lighter", dark: null });
+  });
+
+  it("picks readable text on a palette fill", () => {
     expect(readableOn("#0060c1")).toBe("#ffffff");
   });
 });
