@@ -1,4 +1,5 @@
 import {
+  Bell,
   History,
   LayoutList,
   Menu,
@@ -28,7 +29,7 @@ const NAV_LINK =
   "inline-flex h-7 items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground coarse:h-9 coarse:px-2.5";
 
 /**
- * 모든 화면 위의 띠: 대문, 검색, 최근 변경, 최근 토론, 특수 기능, 아무 문서, 내 정보.
+ * 모든 화면 위의 띠: 대문, 검색, 최근 변경, 최근 토론, 특수 기능, 아무 문서, 알림, 내 정보.
  *
  * `stickyOnNarrow`를 끄면 좁은 화면에서는 위에 붙지 않고 본문과 함께 올라간다. 편집 화면이 쓴다.
  * 폰에서는 편집기 툴바와 키보드까지 겹치면 글을 쓸 자리가 거의 남지 않는다.
@@ -36,17 +37,21 @@ const NAV_LINK =
 export function SiteHeader({
   status,
   openReports = 0,
+  notifications = 0,
   stickyOnNarrow = true,
   tabToSearch = false,
 }: {
   status: MemberStatus;
   /** 관리자에게 [관리] 옆에 보일 처리되지 않은 신고 수. */
   openReports?: number;
+  /** [알림] 옆에 보일 읽지 않은 알림 수. */
+  notifications?: number;
   stickyOnNarrow?: boolean;
   /** 포커스가 아무 데도 없을 때 Tab이 검색창으로 온다(`SearchBox`). */
   tabToSearch?: boolean;
 }) {
   const header = useRef<HTMLElement>(null);
+  const items = navItems(status, openReports, notifications);
 
   // 머리띠 높이를 `--site-header-height`로 알린다(기본값은 app.css). `#주소` 이동 여백과 편집기
   // 툴바의 고정 위치가 이 값을 쓴다. 손가락으로 쓰는 화면에서는 단추가 커져 높이가 달라진다. 위에
@@ -103,19 +108,19 @@ export function SiteHeader({
 
         <SearchBox className="min-w-0 flex-1" tabToSearch={tabToSearch} />
 
-        <NavMenu status={status} openReports={openReports} />
+        <NavMenu items={items} />
 
         <nav
           aria-label="둘러보기"
           className="flex items-center gap-0.5 max-sm:hidden"
         >
-          {navItems(status, openReports).map(
-            ({ to, label, icon: Icon, iconOnWide, count }) => (
+          {items.map(
+            ({ to, label, icon: Icon, iconOnWide, count, countLabel }) => (
               <NavLink
                 key={to}
                 to={to}
                 prefetch="intent"
-                aria-label={navLabel(label, count, iconOnWide)}
+                aria-label={navLabel(label, count, countLabel, iconOnWide)}
                 className={({ isActive }) =>
                   cn(NAV_LINK, isActive && "text-foreground")
                 }
@@ -137,20 +142,42 @@ interface NavItem {
   icon: LucideIcon;
   /** 넓은 화면의 머리띠에서는 아이콘만 보인다. */
   iconOnWide?: boolean;
-  /** 이름 옆에 붙일 수(처리할 신고). 0이면 붙이지 않는다. */
+  /** 이름 옆에 붙일 수. 0이면 붙이지 않는다. */
   count?: number;
+  /** 화면 낭독기가 수와 함께 읽는 말. "처리할 신고 3건"의 "처리할 신고". */
+  countLabel?: string;
 }
 
 /** 둘러보기 항목. 넓은 화면의 머리띠와 좁은 화면의 `☰` 메뉴가 함께 쓴다. */
-function navItems(status: MemberStatus, openReports: number): NavItem[] {
+function navItems(
+  status: MemberStatus,
+  openReports: number,
+  notifications: number,
+): NavItem[] {
   return [
     { to: "/recent", label: "최근 변경", icon: History },
     { to: "/recent-discussions", label: "최근 토론", icon: MessagesSquare },
     { to: "/special", label: "특수 기능", icon: LayoutList },
     { to: "/random", label: "무작위 문서", icon: Shuffle, iconOnWide: true },
     ...(status.isAdmin
-      ? [{ to: "/admin", label: "관리", icon: ShieldAlert, count: openReports }]
+      ? [
+          {
+            to: "/admin",
+            label: "관리",
+            icon: ShieldAlert,
+            count: openReports,
+            countLabel: "처리할 신고",
+          },
+        ]
       : []),
+    {
+      to: "/notifications",
+      label: "알림",
+      icon: Bell,
+      iconOnWide: true,
+      count: notifications,
+      countLabel: "읽지 않은 알림",
+    },
     { to: "/me", label: "내 정보", icon: User, iconOnWide: true },
   ];
 }
@@ -159,9 +186,10 @@ function navItems(status: MemberStatus, openReports: number): NavItem[] {
 function navLabel(
   label: string,
   count: number | undefined,
+  countLabel: string | undefined,
   iconOnWide: boolean | undefined,
 ): string | undefined {
-  if (count) return `${label} (처리할 신고 ${count}건)`;
+  if (count) return `${label} (${countLabel} ${count}건)`;
   return iconOnWide ? label : undefined;
 }
 
@@ -178,13 +206,9 @@ function CountBadge({ count }: { count: number | undefined }) {
 }
 
 /** 좁은 화면의 둘러보기 메뉴. 넓은 화면에서는 같은 항목을 머리띠에 펼쳐 둔다. */
-function NavMenu({
-  status,
-  openReports,
-}: {
-  status: MemberStatus;
-  openReports: number;
-}) {
+function NavMenu({ items }: { items: NavItem[] }) {
+  // 메뉴 안에 수가 있으면 `☰`에 점을 찍고 이름에 수를 함께 읽는다.
+  const counted = items.filter((item) => item.count);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -194,17 +218,17 @@ function NavMenu({
             size="icon-sm"
             variant="ghost"
             aria-label={
-              openReports
-                ? `둘러보기 메뉴 (처리할 신고 ${openReports}건)`
+              counted.length
+                ? `둘러보기 메뉴 (${counted.map((item) => `${item.countLabel} ${item.count}건`).join(", ")})`
                 : "둘러보기 메뉴"
             }
-            // 옆의 검색창과 높이를 맞춘다(`SearchBox`). 신고 점을 모서리에 둔다.
+            // 옆의 검색창과 높이를 맞춘다(`SearchBox`). 수가 있으면 점을 모서리에 둔다.
             className="relative shrink-0 sm:hidden coarse:size-9"
           />
         }
       >
         <Menu aria-hidden />
-        {openReports ? (
+        {counted.length ? (
           <span
             aria-hidden
             className="absolute top-1 right-1 size-2 rounded-full bg-destructive"
@@ -212,20 +236,21 @@ function NavMenu({
         ) : null}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-40">
-        {navItems(status, openReports).map(
-          ({ to, label, icon: Icon, count }) => (
-            <DropdownMenuItem
-              key={to}
-              render={
-                <Link to={to} aria-label={navLabel(label, count, false)} />
-              }
-            >
-              <Icon aria-hidden />
-              {label}
-              <CountBadge count={count} />
-            </DropdownMenuItem>
-          ),
-        )}
+        {items.map(({ to, label, icon: Icon, count, countLabel }) => (
+          <DropdownMenuItem
+            key={to}
+            render={
+              <Link
+                to={to}
+                aria-label={navLabel(label, count, countLabel, false)}
+              />
+            }
+          >
+            <Icon aria-hidden />
+            {label}
+            <CountBadge count={count} />
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -77,6 +77,10 @@ export interface FoundPage extends Viewer {
   members: string[];
   /** 열린 토론 수. 토론 단추에 붙인다. */
   openDiscussions: number;
+  /** 내가 즐겨찾기한 문서인가. 별표에 쓴다. */
+  watched: boolean;
+  /** 이 문서를 즐겨찾기한 회원 수. 별표 옆에 쓴다. */
+  watchers: number;
 }
 
 export interface MissingPage extends Viewer {

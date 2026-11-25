@@ -2,7 +2,7 @@ import { EyeOff, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 
 import { setPostHidden } from "../data/mutations";
-import { canWithdrawPost } from "../model/rules";
+import { canWithdrawPost, postAnchor } from "../model/rules";
 import type { DiscussionPost } from "../model/types";
 import { PostText } from "./post-text";
 import { WithdrawButton } from "./withdraw-button";
@@ -89,7 +89,7 @@ function PostCard({
 
   return (
     <article
-      id={`post-${post.id}`}
+      id={postAnchor(post.id)}
       className={cn(
         "rounded-lg border px-4 py-3 text-sm",
         conclusion && "border-primary/40 bg-primary/5",
@@ -106,7 +106,7 @@ function PostCard({
         {kind ? (
           <Badge variant={conclusion ? "default" : "outline"}>{kind}</Badge>
         ) : null}
-        <a href={`#post-${post.id}`} className="hover:underline">
+        <a href={`#${postAnchor(post.id)}`} className="hover:underline">
           <RelativeTime value={post.createdAt} />
         </a>
         <span className="ml-auto flex items-center gap-1">

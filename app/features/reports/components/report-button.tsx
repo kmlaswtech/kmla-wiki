@@ -28,20 +28,13 @@ import { Textarea } from "~/shared/ui/textarea";
  * 판 하나나 토론 글 하나를 관리자에게 알리는 단추. 내용을 고치는 일은 누구나 할 수 있으므로, 회원이
  * 직접 할 수 없는 일(판·글 숨기기, 차단, 보호)을 부탁할 때 쓴다.
  */
-export function ReportButton({
-  target,
-  size = "icon-xs",
-}: {
-  target: ReportTarget;
-  /** 판 기록의 줄은 작게, 문서 제목 줄은 옆 단추에 맞춘다. */
-  size?: "icon-xs" | "icon-sm";
-}) {
+export function ReportButton({ target }: { target: ReportTarget }) {
   const [open, setOpen] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
       <Button
         type="button"
-        size={size}
+        size="icon-xs"
         variant="ghost"
         aria-label={`${describeReportTarget(target)} 신고`}
         title="신고"
@@ -49,9 +42,26 @@ export function ReportButton({
       >
         <Flag />
       </Button>
+      <ReportDialog target={target} open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+/** 신고 대화상자만. 문서 머리처럼 메뉴 항목에서 열 때 쓴다. */
+export function ReportDialog({
+  target,
+  open,
+  onOpenChange,
+}: {
+  target: ReportTarget;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
       {/* 닫히면 내려가므로 열 때마다 빈 폼으로 시작한다. */}
       <DialogContent>
-        <ReportForm target={target} onClose={() => setOpen(false)} />
+        <ReportForm target={target} onClose={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

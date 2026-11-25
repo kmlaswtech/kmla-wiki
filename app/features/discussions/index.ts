@@ -25,5 +25,5 @@ export {
   isDiscussionIntent,
   type DiscussionActionResult,
 } from "./model/form";
-export { topicHref } from "./model/rules";
+export { postHref, topicHref } from "./model/rules";
 export type { Discussion } from "./model/types";
