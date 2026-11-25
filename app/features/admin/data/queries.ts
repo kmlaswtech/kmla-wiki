@@ -1,5 +1,10 @@
 import type { BulkRevertRow, BulkRevertStatus } from "../model/bulk-revert";
-import type { AdminAction, AdminLogEntry, BanEntry } from "../model/log";
+import type {
+  AdminAction,
+  AdminLogEntry,
+  BanEntry,
+  RestorableRevocation,
+} from "../model/log";
 import type { RecentChange } from "~/features/pages";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap, WikiError } from "~/shared/supabase/errors";
@@ -247,6 +252,19 @@ export async function listAdmins(): Promise<
 > {
   const rows = unwrap(await getSupabase().rpc("list_admins"));
   return rows.map((row) => ({ handle: row.admin_handle, isMe: row.is_me }));
+}
+
+/** 되돌릴 수 있는 관리자 해제(관리자 전용). 해제된 사람은 관리자 전용 이름으로만 온다. */
+export async function listRestorableRevocations(): Promise<
+  RestorableRevocation[]
+> {
+  const rows = unwrap(await getSupabase().rpc("list_restorable_revocations"));
+  return rows.map((row) => ({
+    logId: row.admin_log_id,
+    handle: row.admin_handle,
+    reason: row.reason,
+    restorableUntil: row.restorable_until,
+  }));
 }
 
 export async function getAdminCount(): Promise<number> {

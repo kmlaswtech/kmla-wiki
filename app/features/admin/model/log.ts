@@ -6,6 +6,7 @@ export type AdminAction =
   | "lift_ban"
   | "grant_admin"
   | "revoke_admin"
+  | "restore_admin"
   | "protect"
   | "unprotect"
   | "delete_page"
@@ -27,6 +28,14 @@ export interface AdminLogEntry {
   reason: string;
   note: string | null;
   createdAt: string;
+}
+
+/** 되돌릴 수 있는 관리자 해제. `logId`는 해제의 공개 기록 ID다. */
+export interface RestorableRevocation {
+  logId: number;
+  handle: string;
+  reason: string;
+  restorableUntil: string;
 }
 
 export interface BanEntry {
@@ -70,6 +79,8 @@ export function describeAdminLog(entry: AdminLogEntry): string {
       return "관리자 1명 지정";
     case "revoke_admin":
       return "관리자 권한 1건 해제";
+    case "restore_admin":
+      return `관리자 권한 해제 되돌림${note}`;
     case "protect":
       return `‘${page}’ 문서 보호`;
     case "unprotect":
@@ -89,10 +100,12 @@ export function describeAdminLog(entry: AdminLogEntry): string {
   }
 }
 
-// DB 마이그레이션(`*_admin.sql`, `*_admin_lookups_ban_end.sql`, `*_admin_bulk_revert_reports.sql`)
+// DB 마이그레이션(`*_admin.sql`, `*_admin_lookups_ban_end.sql`, `*_admin_bulk_revert_reports.sql`,
+// `*_restore_revoked_admin.sql`)
 // 머리말의 표와 같다.
 const MESSAGE: Record<string, string> = {
   "42501": "관리자 권한이 필요합니다.",
+  WK002: "차단된 회원은 관리자로 지정하거나 되돌릴 수 없습니다.",
   WK010: "관리자를 차단하려면 먼저 관리자 권한을 해제해 주세요.",
   WK011: "이미 처리된 상태입니다.",
   WK012: "현재 판은 숨길 수 없습니다. [되돌리고 숨기기]를 써 주세요.",
@@ -101,6 +114,8 @@ const MESSAGE: Record<string, string> = {
   WK016: "조회 시간이 만료되었습니다. 사유를 입력한 뒤 다시 조회해 주세요.",
   WK017: "차단 기간은 1시간부터 10년까지 정할 수 있습니다.",
   WK018: "일괄 되돌리기는 한 번에 200개 문서까지 할 수 있습니다.",
+  WK020:
+    "해제한 지 7일이 지나 되돌릴 수 없습니다. 판 기록에서 다시 지정해 주세요.",
 };
 
 /** 같은 사람의 다른 편집을 보는 허가가 없거나 끝났다. */

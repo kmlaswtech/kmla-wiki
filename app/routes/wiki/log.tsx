@@ -43,6 +43,10 @@ export default function LogRoute({ loaderData }: Route.ComponentProps) {
           {entries.map((entry) => (
             <li key={entry.id} className="py-2.5">
               <p>
+                {/* 다른 기록이 이 번호로 가리킨다(예: 해제 되돌림의 "기록 #N"). */}
+                <span className="mr-2 text-muted-foreground tabular-nums">
+                  #{entry.id}
+                </span>
                 <span className="mr-2 text-muted-foreground">
                   <RelativeTime value={entry.createdAt} />
                 </span>

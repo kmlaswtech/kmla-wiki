@@ -259,6 +259,53 @@ select throws_ok($$select public.revoke_admin('관리자 B', '나까지')$$, 'WK
   'but not themselves when they are the last one');
 select logout();
 
+-- ── 해제 되돌리기 ────────────────────────────────────────────────────────────
+select login(:bob);
+select throws_ok($$select * from public.list_restorable_revocations()$$, '42501', null,
+  'a member cannot list revocations');
+select throws_ok($$select public.restore_revoked_admin(1, '복구')$$, '42501', null,
+  'a member cannot restore an admin');
+select logout();
+
+select login(:alice);
+select id as revoke_log from public.admin_log where action = 'revoke_admin' \gset
+select results_eq(
+  $$select admin_log_id, admin_handle, reason from public.list_restorable_revocations()$$,
+  format($$values (%s::bigint, '관리자 A'::text, '교대'::text)$$, :revoke_log),
+  'an admin sees the recent revocation by handle and public log id'
+);
+select logout();
+select is(private.next_admin_handle(), '관리자 C', 'a restorable handle is not given to a new admin');
+select login(:alice);
+select lives_ok(format($$select public.restore_revoked_admin(%s, '실수로 해제')$$, :revoke_log),
+  'an admin restores a recent revocation');
+select set_eq(
+  $$select admin_handle from public.list_admins()$$,
+  array['관리자 A', '관리자 B'],
+  'the same member is back under the same handle'
+);
+select throws_ok(format($$select public.restore_revoked_admin(%s, '다시')$$, :revoke_log), 'WK011', null,
+  'a revocation is restored only once');
+select is_empty($$select 1 from public.list_restorable_revocations()$$,
+  'a restored revocation leaves the list');
+select results_eq(
+  $$select page_title, revision_id, pseudonym, note from public.admin_log where action = 'restore_admin'$$,
+  format($$values (null::text, null::bigint, null::text, '기록 #%s'::text)$$, :revoke_log),
+  'the restore is public but names only the revocation, not the member'
+);
+
+select lives_ok($$select public.revoke_admin('관리자 A', '다시 교대')$$, 'the admin can be revoked again');
+select id as second_revoke from public.admin_log where action = 'revoke_admin' order by id desc limit 1 \gset
+select logout();
+update public.admin_log set created_at = now() - interval '8 days' where id = :second_revoke;
+select login(:alice);
+select throws_ok(format($$select public.restore_revoked_admin(%s, '늦게')$$, :second_revoke), 'WK020', null,
+  'a revocation older than the window cannot be restored');
+select is_empty($$select 1 from public.list_restorable_revocations()$$,
+  'an expired revocation leaves the list');
+select logout();
+select is(private.next_admin_handle(), '관리자 A', 'an expired revocation frees its handle');
+
 -- ── 기록에는 행위자가 없다 ───────────────────────────────────────────────────
 select is_empty(
   $$select 1 from information_schema.columns
