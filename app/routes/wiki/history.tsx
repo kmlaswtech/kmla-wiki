@@ -122,9 +122,17 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
   const historyHref = pageHref(title, "history");
   const hrefs = keysetHrefs(historyHref, { newer, older });
 
-  // 비교할 두 판. 처음에는 최신 판과 그 앞 판이다.
+  // 비교할 두 판. 처음에는 이 쪽의 첫 판과 그 앞 판이다. 쪽을 넘기면(같은 화면이 그대로 남는다) 새
+  // 쪽에 맞춰 다시 고른다. 그러지 않으면 보이지 않는 판끼리 비교하게 된다.
+  const shownPage = revisions[0]?.id ?? null;
+  const [comparePage, setComparePage] = useState(shownPage);
   const [compareFrom, setCompareFrom] = useState(revisions[1]?.id ?? null);
   const [compareTo, setCompareTo] = useState(revisions[0]?.id ?? null);
+  if (comparePage !== shownPage) {
+    setComparePage(shownPage);
+    setCompareFrom(revisions[1]?.id ?? null);
+    setCompareTo(revisions[0]?.id ?? null);
+  }
   const [revertTarget, setRevertTarget] = useState<number | null>(null);
 
   const canCompare =

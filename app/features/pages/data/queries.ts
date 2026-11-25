@@ -383,30 +383,45 @@ export async function listWantedPages(): Promise<
   return rows.map((row) => ({ title: row.title_key, refCount: row.ref_count }));
 }
 
+/** 특수 문서 목록 한 쪽. 한 개 더 읽어서(`SPECIAL_PAGE_SIZE + 1`) 다음 쪽이 있는지 안다. */
+export interface SpecialPage<T> {
+  rows: T[];
+  more: boolean;
+}
+
+function specialPage<T>(rows: T[]): SpecialPage<T> {
+  return {
+    rows: rows.slice(0, SPECIAL_PAGE_SIZE),
+    more: rows.length > SPECIAL_PAGE_SIZE,
+  };
+}
+
 /** 어디서도 링크하지 않는 일반 문서. `after` 제목 다음부터. */
-export async function listOrphanPages(after?: string): Promise<string[]> {
+export async function listOrphanPages(
+  after?: string,
+): Promise<SpecialPage<string>> {
   const rows = unwrap(
     await getSupabase().rpc("orphan_pages", {
       p_after: after,
-      p_limit: SPECIAL_PAGE_SIZE,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return rows.map((row) => row.title);
+  return specialPage(rows.map((row) => row.title));
 }
 
 /** 이름공간의 모든 문서, 가나다순. `after` 제목 다음부터. */
 export async function listAllPages(
   namespace: Namespace = "main",
   after?: string,
-): Promise<string[]> {
+): Promise<SpecialPage<string>> {
   const rows = unwrap(
     await getSupabase().rpc("list_all_pages", {
       p_namespace: namespace,
       p_after: after,
-      p_limit: SPECIAL_PAGE_SIZE,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return rows.map((row) => row.title);
+  return specialPage(rows.map((row) => row.title));
 }
 
 /**
@@ -417,16 +432,18 @@ export async function listPagesBySize(
   namespace: Namespace,
   longest: boolean,
   offset = 0,
-): Promise<{ title: string; textSize: number }[]> {
+): Promise<SpecialPage<{ title: string; textSize: number }>> {
   const rows = unwrap(
     await getSupabase().rpc("page_sizes", {
       p_namespace: namespace,
       p_longest: longest,
       p_offset: offset,
-      p_limit: SPECIAL_PAGE_SIZE,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return rows.map((row) => ({ title: row.title, textSize: row.text_size }));
+  return specialPage(
+    rows.map((row) => ({ title: row.title, textSize: row.text_size })),
+  );
 }
 
 /** 손볼 넘겨주기. `next`가 `null`이면 대상이 없거나 삭제됐고, 있으면 대상도 넘겨주기다. */

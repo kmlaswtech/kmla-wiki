@@ -38,6 +38,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     sized: [],
     offset,
     paged: after !== undefined,
+    more: false,
   };
 
   return withVerifiedMember(request, async () => {
@@ -51,13 +52,19 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     }
     if (tab === "short" || tab === "long") {
       const sized = await listPagesBySize(namespace, tab === "long", offset);
-      return { ...empty, tab, namespace, sized };
+      return { ...empty, tab, namespace, sized: sized.rows, more: sized.more };
     }
     const titles =
       tab === "orphan"
         ? await listOrphanPages(after)
         : await listAllPages(namespace, after);
-    return { ...empty, tab, namespace, titles };
+    return {
+      ...empty,
+      tab,
+      namespace,
+      titles: titles.rows,
+      more: titles.more,
+    };
   });
 }
 
@@ -66,8 +73,17 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
-  const { tab, namespace, wanted, redirects, titles, sized, offset, paged } =
-    loaderData;
+  const {
+    tab,
+    namespace,
+    wanted,
+    redirects,
+    titles,
+    sized,
+    offset,
+    paged,
+    more,
+  } = loaderData;
   const current = SPECIAL_TABS.find((item) => item.key === tab)!;
   const last = titles.at(-1);
   const sizedTab = tab === "short" || tab === "long";
@@ -90,12 +106,12 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
         )
       : null;
   const nextHref =
-    sizedTab && sized.length === SPECIAL_PAGE_SIZE
+    sizedTab && more
       ? specialHref(tab, {
           ...nsParam,
           offset: String(offset + SPECIAL_PAGE_SIZE),
         })
-      : titleTab && titles.length === SPECIAL_PAGE_SIZE && last
+      : titleTab && more && last
         ? specialHref(tab, { ...nsParam, after: last })
         : null;
 
