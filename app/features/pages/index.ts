@@ -15,7 +15,6 @@ export {
   getRandomTitle,
   getRevisionBodies,
   getTitleInfo,
-  HISTORY_PAGE_SIZE,
   listAllPages,
   listPagesBySize,
   listHeadings,

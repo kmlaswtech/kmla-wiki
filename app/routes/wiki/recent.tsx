@@ -1,17 +1,14 @@
 import type { Route } from "./+types/recent";
-import { LinkButton } from "~/shared/components/link-button";
-import { positiveInt } from "./title-param";
 import { withVerifiedMember } from "~/features/auth";
-import {
-  HISTORY_PAGE_SIZE,
-  listRecentChanges,
-  RevisionList,
-} from "~/features/pages";
+import { listRecentChanges, RevisionList } from "~/features/pages";
+import { PageNav } from "~/shared/components/page-nav";
+import { keysetHrefs, readPageCursor } from "~/shared/lib/keyset";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const before = positiveInt(new URL(request.url).searchParams.get("before"));
+  const cursor = readPageCursor(new URL(request.url).searchParams);
   return {
-    changes: await withVerifiedMember(request, () => listRecentChanges(before)),
+    page: await withVerifiedMember(request, () => listRecentChanges(cursor)),
+    isFirst: cursor.kind === "first",
   };
 }
 
@@ -20,24 +17,22 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export default function RecentRoute({ loaderData }: Route.ComponentProps) {
-  const { changes } = loaderData;
-  const oldest = changes.at(-1);
+  const { page, isFirst } = loaderData;
+  const hrefs = keysetHrefs("/recent", page);
 
   return (
     <div>
       <h1 className="mb-4 border-b pb-3 text-2xl font-bold">최근 변경</h1>
       <RevisionList
-        revisions={changes}
+        revisions={page.items}
         pageTitle={(change) => change.pageTitle}
         showPage
       />
-      {changes.length === HISTORY_PAGE_SIZE && oldest ? (
-        <div className="mt-4 text-center">
-          <LinkButton variant="outline" to={`/recent?before=${oldest.id}`}>
-            더 보기
-          </LinkButton>
-        </div>
-      ) : null}
+      <PageNav
+        first={isFirst ? null : "/recent"}
+        prev={hrefs.newer}
+        next={hrefs.older}
+      />
     </div>
   );
 }

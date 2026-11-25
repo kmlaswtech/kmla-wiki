@@ -21,6 +21,12 @@ import {
   type WikiDoc,
 } from "~/features/markup";
 import { toImageMap, type RawImage } from "~/features/images";
+import {
+  keysetPage,
+  keysetRange,
+  type KeysetPage,
+  type PageCursor,
+} from "~/shared/lib/keyset";
 import { getSupabase } from "~/shared/supabase/client";
 import type { Json } from "~/shared/supabase/database.types";
 import { unwrap } from "~/shared/supabase/errors";
@@ -211,40 +217,46 @@ function toSummary(row: RawRevision): RevisionSummary {
   };
 }
 
-export const HISTORY_PAGE_SIZE = 50;
+const HISTORY_PAGE_SIZE = 50;
 
-/** 문서의 판 기록, 최신순. `before`보다 오래된 판부터 이어서 읽는다. */
+/** 문서의 판 기록 한 쪽, 최신순. */
 export async function listHistory(
   pageId: number,
-  before?: number,
-): Promise<RevisionSummary[]> {
+  cursor: PageCursor,
+): Promise<KeysetPage<RevisionSummary>> {
+  const range = keysetRange(cursor, HISTORY_PAGE_SIZE);
   let query = getSupabase()
     .from("revisions")
     .select(SUMMARY_COLUMNS)
     .eq("page_id", pageId)
-    .order("id", { ascending: false })
-    .limit(HISTORY_PAGE_SIZE);
-  if (before !== undefined) query = query.lt("id", before);
+    .order("id", { ascending: range.ascending })
+    .limit(range.limit);
+  if (range.lt !== undefined) query = query.lt("id", range.lt);
+  if (range.gt !== undefined) query = query.gt("id", range.gt);
 
-  return unwrap(await query).map(toSummary);
+  const rows = unwrap(await query).map(toSummary);
+  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE, (row) => row.id);
 }
 
-/** 모든 문서의 최근 변경, 최신순. */
+/** 모든 문서의 최근 변경 한 쪽, 최신순. */
 export async function listRecentChanges(
-  before?: number,
-): Promise<RecentChange[]> {
+  cursor: PageCursor,
+): Promise<KeysetPage<RecentChange>> {
+  const range = keysetRange(cursor, HISTORY_PAGE_SIZE);
   let query = getSupabase()
     .from("revisions")
     // pages와 revisions 사이에 외래 키가 둘이라(page_id, current_revision_id) 어느 쪽인지 적는다.
     .select(`${SUMMARY_COLUMNS}, page:pages!revisions_page_id_fkey(title)`)
-    .order("id", { ascending: false })
-    .limit(HISTORY_PAGE_SIZE);
-  if (before !== undefined) query = query.lt("id", before);
+    .order("id", { ascending: range.ascending })
+    .limit(range.limit);
+  if (range.lt !== undefined) query = query.lt("id", range.lt);
+  if (range.gt !== undefined) query = query.gt("id", range.gt);
 
-  return unwrap(await query).map((row) => ({
+  const rows = unwrap(await query).map((row) => ({
     ...toSummary(row),
     pageTitle: row.page.title,
   }));
+  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE, (row) => row.id);
 }
 
 /**

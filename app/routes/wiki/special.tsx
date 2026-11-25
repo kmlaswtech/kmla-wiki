@@ -21,6 +21,7 @@ import {
   SPECIAL_TABS,
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
+import { PageNav } from "~/shared/components/page-nav";
 import { cn } from "~/shared/lib/utils";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
@@ -30,7 +31,14 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const after = params.get("after") || undefined;
 
   const offset = sizeListOffset(nonNegativeInt(params.get("offset")));
-  const empty = { wanted: [], redirects: [], titles: [], sized: [], offset };
+  const empty = {
+    wanted: [],
+    redirects: [],
+    titles: [],
+    sized: [],
+    offset,
+    paged: after !== undefined,
+  };
 
   return withVerifiedMember(request, async () => {
     if (tab === "wanted") {
@@ -58,25 +66,37 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
-  const { tab, namespace, wanted, redirects, titles, sized, offset } =
+  const { tab, namespace, wanted, redirects, titles, sized, offset, paged } =
     loaderData;
   const current = SPECIAL_TABS.find((item) => item.key === tab)!;
   const last = titles.at(-1);
   const sizedTab = tab === "short" || tab === "long";
-  // 다음 묶음. 제목 순 목록은 마지막 제목 다음부터, 크기 순 목록은 건너뛸 개수로 잇는다.
-  const moreHref =
+  const titleTab = tab === "orphan" || tab === "all";
+  const nsParam: Record<string, string> =
+    tab === "orphan" ? {} : { ns: namespace };
+  // 쪽 넘기기. 크기 순 목록은 건너뛸 개수로 앞뒤로 간다. 제목 순 목록은 마지막 제목 다음부터만
+  // 이어 읽으므로(`after`) 앞 쪽으로 가는 단추가 없다.
+  const firstHref =
+    (sizedTab && offset > 0) || (titleTab && paged)
+      ? specialHref(tab, nsParam)
+      : null;
+  const prevHref =
+    sizedTab && offset > 0
+      ? specialHref(
+          tab,
+          offset > SPECIAL_PAGE_SIZE
+            ? { ...nsParam, offset: String(offset - SPECIAL_PAGE_SIZE) }
+            : nsParam,
+        )
+      : null;
+  const nextHref =
     sizedTab && sized.length === SPECIAL_PAGE_SIZE
       ? specialHref(tab, {
-          ns: namespace,
+          ...nsParam,
           offset: String(offset + SPECIAL_PAGE_SIZE),
         })
-      : (tab === "orphan" || tab === "all") &&
-          titles.length === SPECIAL_PAGE_SIZE &&
-          last
-        ? specialHref(tab, {
-            ...(tab === "all" ? { ns: namespace } : {}),
-            after: last,
-          })
+      : titleTab && titles.length === SPECIAL_PAGE_SIZE && last
+        ? specialHref(tab, { ...nsParam, after: last })
         : null;
 
   return (
@@ -187,12 +207,8 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
         </ul>
       )}
 
-      {moreHref ? (
-        <div className="mt-4 text-center">
-          <LinkButton variant="outline" to={moreHref}>
-            더 보기
-          </LinkButton>
-        </div>
+      {sizedTab || titleTab ? (
+        <PageNav first={firstHref} prev={prevHref} next={nextHref} />
       ) : null}
     </div>
   );

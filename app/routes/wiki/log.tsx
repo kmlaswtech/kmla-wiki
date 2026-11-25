@@ -8,13 +8,16 @@ import {
 } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
 import { topicHref } from "~/features/discussions";
+import { PageNav } from "~/shared/components/page-nav";
 import { RelativeTime } from "~/shared/components/relative-time";
+import { keysetHrefs, readPageCursor } from "~/shared/lib/keyset";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const [entries, adminCount] = await withVerifiedMember(request, () =>
-    Promise.all([listAdminLog(), getAdminCount()]),
+  const cursor = readPageCursor(new URL(request.url).searchParams);
+  const [page, adminCount] = await withVerifiedMember(request, () =>
+    Promise.all([listAdminLog(cursor), getAdminCount()]),
   );
-  return { entries, adminCount };
+  return { page, adminCount, isFirst: cursor.kind === "first" };
 }
 
 export const meta: Route.MetaFunction = () => [
@@ -28,7 +31,9 @@ export const meta: Route.MetaFunction = () => [
  * 여기에 남는다.
  */
 export default function LogRoute({ loaderData }: Route.ComponentProps) {
-  const { entries, adminCount } = loaderData;
+  const { page, adminCount, isFirst } = loaderData;
+  const entries = page.items;
+  const hrefs = keysetHrefs("/log", page);
 
   return (
     <div>
@@ -73,6 +78,11 @@ export default function LogRoute({ loaderData }: Route.ComponentProps) {
           ))}
         </ul>
       )}
+      <PageNav
+        first={isFirst ? null : "/log"}
+        prev={hrefs.newer}
+        next={hrefs.older}
+      />
     </div>
   );
 }

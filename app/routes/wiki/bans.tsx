@@ -11,16 +11,21 @@ import {
   type BanEntry,
 } from "~/features/admin";
 import { withVerifiedMember, type MemberStatus } from "~/features/auth";
+import { PageNav } from "~/shared/components/page-nav";
+import { keysetHrefs, readPageCursor } from "~/shared/lib/keyset";
 import { formatDateTime } from "~/shared/lib/time";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const bans = await withVerifiedMember(request, listBans);
+  const cursor = readPageCursor(new URL(request.url).searchParams);
+  const page = await withVerifiedMember(request, () => listBans(cursor));
   // 진행 중인지는 읽은 시점을 기준으로 가른다(렌더 중에 시계를 읽지 않는다).
   const now = Date.now();
   return {
-    bans: bans.map((ban) => ({ ...ban, active: isBanActive(ban, now) })),
+    bans: page.items.map((ban) => ({ ...ban, active: isBanActive(ban, now) })),
+    hrefs: keysetHrefs("/bans", page),
+    isFirst: cursor.kind === "first",
   };
 }
 
@@ -30,7 +35,7 @@ export const meta: Route.MetaFunction = () => [
 
 /** 공개 차단 내역. 모든 회원이 본다. 관리자에게는 해제 버튼이 보인다. */
 export default function BansRoute({ loaderData }: Route.ComponentProps) {
-  const { bans } = loaderData;
+  const { bans, hrefs, isFirst } = loaderData;
   const status = useOutletContext<MemberStatus>();
   const revalidator = useRevalidator();
   const [lifting, setLifting] = useState<BanEntry | null>(null);
@@ -86,6 +91,11 @@ export default function BansRoute({ loaderData }: Route.ComponentProps) {
           ))}
         </ul>
       )}
+      <PageNav
+        first={isFirst ? null : "/bans"}
+        prev={hrefs.newer}
+        next={hrefs.older}
+      />
 
       <ReasonDialog
         open={lifting !== null}

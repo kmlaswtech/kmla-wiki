@@ -18,7 +18,6 @@ import {
   describeWriteError,
   getMyPseudonym,
   getPageView,
-  HISTORY_PAGE_SIZE,
   listHistory,
   REVERT_FIELD,
   revertPage,
@@ -27,7 +26,8 @@ import {
   RevisionList,
 } from "~/features/pages";
 import { ReportButton } from "~/features/reports";
-import { LinkButton } from "~/shared/components/link-button";
+import { PageNav } from "~/shared/components/page-nav";
+import { keysetHrefs, readPageCursor } from "~/shared/lib/keyset";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
@@ -36,14 +36,14 @@ export async function clientLoader({
   params,
 }: Route.ClientLoaderArgs) {
   const title = titleFromParams(params);
-  const before = positiveInt(new URL(request.url).searchParams.get("before"));
+  const cursor = readPageCursor(new URL(request.url).searchParams);
 
   return withVerifiedMember(request, async () => {
     const view = await getPageView(title, { followRedirect: false });
     if (!view.found) throw data(null, { status: 404 });
 
-    const [revisions, myPseudonym, discussionCounts] = await Promise.all([
-      listHistory(view.page.id, before),
+    const [history, myPseudonym, discussionCounts] = await Promise.all([
+      listHistory(view.page.id, cursor),
       getMyPseudonym(view.page.id),
       getRevisionDiscussionCounts(view.page.id),
     ]);
@@ -56,7 +56,10 @@ export async function clientLoader({
       isAdmin: view.isAdmin,
       // 판에 토론을 붙여 열 수 있는가. 차단된 회원과 삭제된 문서는 안 된다.
       canDiscuss: view.canEdit && view.page.deletedAt === null,
-      revisions,
+      revisions: history.items,
+      newer: history.newer,
+      older: history.older,
+      isFirst: cursor.kind === "first",
       myPseudonym,
       discussionCounts,
     };
@@ -109,11 +112,15 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
     canDiscuss,
     discussionCounts,
     currentRevisionId,
+    newer,
+    older,
+    isFirst,
   } = loaderData;
   const discussionHref = pageHref(title, "discussion");
   const revalidator = useRevalidator();
   const navigate = useNavigate();
-  const oldest = revisions.at(-1);
+  const historyHref = pageHref(title, "history");
+  const hrefs = keysetHrefs(historyHref, { newer, older });
 
   // 비교할 두 판. 처음에는 최신 판과 그 앞 판이다.
   const [compareFrom, setCompareFrom] = useState(revisions[1]?.id ?? null);
@@ -242,16 +249,11 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
         )}
       />
 
-      {revisions.length === HISTORY_PAGE_SIZE && oldest ? (
-        <div className="mt-4 text-center">
-          <LinkButton
-            variant="outline"
-            to={`${pageHref(title, "history")}?before=${oldest.id}`}
-          >
-            이전 기록 더 보기
-          </LinkButton>
-        </div>
-      ) : null}
+      <PageNav
+        first={isFirst ? null : historyHref}
+        prev={hrefs.newer}
+        next={hrefs.older}
+      />
 
       <RevertDialog
         key={revertTarget ?? "closed"}
