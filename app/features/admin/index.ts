@@ -10,7 +10,7 @@ export { PageAdminMenu } from "./components/page-admin-menu";
 export { ReasonDialog } from "./components/reason-dialog";
 export { RevisionAdminMenu } from "./components/revision-admin-menu";
 export { useOpenReportCount } from "./components/use-open-report-count";
-export { liftBan, revokeAdmin } from "./data/mutations";
+export { liftBan, restoreRevokedAdmin, revokeAdmin } from "./data/mutations";
 export {
   findAuthorLookup,
   getAdminCount,
@@ -21,6 +21,7 @@ export {
   listBans,
   listMyAuthorLookups,
   listOpenReports,
+  listRestorableRevocations,
   previewBulkRevert,
 } from "./data/queries";
 export { authorEditsHref } from "./model/author-lookup";
@@ -31,4 +32,5 @@ export {
   isLookupExpired,
   type AdminLogEntry,
   type BanEntry,
+  type RestorableRevocation,
 } from "./model/log";

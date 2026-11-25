@@ -206,6 +206,19 @@ export async function grantAdmin(
   );
 }
 
+/** 최근 해제를 되돌린다. 돌아온 관리자의 이름을 돌려준다. */
+export async function restoreRevokedAdmin(
+  logId: number,
+  reason: string,
+): Promise<string> {
+  return unwrap(
+    await getSupabase().rpc("restore_revoked_admin", {
+      p_admin_log_id: logId,
+      p_reason: reason,
+    }),
+  );
+}
+
 export async function revokeAdmin(
   handle: string,
   reason: string,

@@ -35,6 +35,18 @@ REVOKE ALL ON FUNCTION "private"."log_admin_action"(text, text, text, bigint, te
 
 -- ── 관리자 지정·해제 ─────────────────────────────────────────────────────────
 -- 지정은 판 작성자 기준, 해제는 관리자 전용 이름 기준이다. 최초 1명만 SQL로 지정한다.
+-- 해제한 사람은 판을 다시 찾을 수 없으므로, 이 기간 안에는 해제 기록으로 되돌린다.
+CREATE OR REPLACE FUNCTION private.revocation_restore_window()
+  RETURNS interval
+  LANGUAGE sql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+  select interval '7 days';
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."revocation_restore_window"() FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION private.next_admin_handle()
   RETURNS text
   LANGUAGE sql
@@ -42,7 +54,8 @@ CREATE OR REPLACE FUNCTION private.next_admin_handle()
   SECURITY DEFINER
   SET search_path TO ''
   AS $function$
-  -- 관리자 A, B, … Z, 그다음은 번호.
+  -- 관리자 A, B, … Z, 그다음은 번호. 되돌릴 수 있는 해제의 이름은 비워 둔다. 되돌리면 같은
+  -- 이름으로 돌아온다.
   select coalesce(
     (
       select '관리자 ' || chr(code)
@@ -50,6 +63,12 @@ CREATE OR REPLACE FUNCTION private.next_admin_handle()
       where not exists (
         select 1 from private.members where admin_handle = '관리자 ' || chr(code)
       )
+        and not exists (
+          select 1 from private.admin_revocations as revocation
+          where revocation.admin_handle = '관리자 ' || chr(code)
+            and revocation.restored_at is null
+            and revocation.revoked_at > now() - private.revocation_restore_window()
+        )
       order by code
       limit 1
     ),
@@ -1028,7 +1047,9 @@ begin
   end if;
 
   update private.members set is_admin = false, admin_handle = null where id = v_member_id;
-  perform private.log_admin_action('revoke_admin', v_reason);
+  -- 잘못 해제했을 때 되돌릴 수 있게 대상을 남긴다. 공개 기록에는 여전히 대상이 없다.
+  insert into private.admin_revocations (admin_log_id, member_id, admin_handle)
+  values (private.log_admin_action('revoke_admin', v_reason), v_member_id, p_admin_handle);
 end;
 $function$;
 
@@ -1041,6 +1062,113 @@ REVOKE ALL ON FUNCTION "public"."revoke_admin"(text, text) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."revoke_admin"(text, text) TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."revoke_admin"(text, text) FROM PUBLIC, "anon";
+
+-- 되돌릴 수 있는 해제 목록(관리자 전용). 관리자 전용 이름과 공개 기록 ID만 돌려준다.
+CREATE OR REPLACE FUNCTION public.list_restorable_revocations()
+  RETURNS TABLE (
+    admin_log_id     bigint,
+    admin_handle     text,
+    reason           text,
+    revoked_at       timestamp with time zone,
+    restorable_until timestamp with time zone
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.require_admin();
+  return query
+  select revocation.admin_log_id, revocation.admin_handle, log.reason, revocation.revoked_at,
+         revocation.revoked_at + private.revocation_restore_window()
+  from private.admin_revocations as revocation
+  join public.admin_log as log on log.id = revocation.admin_log_id
+  join private.members as member on member.id = revocation.member_id
+  where revocation.restored_at is null
+    and revocation.revoked_at > now() - private.revocation_restore_window()
+    and not member.is_admin
+  order by revocation.revoked_at desc;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."list_restorable_revocations"() TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."list_restorable_revocations"() TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."list_restorable_revocations"() FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_restorable_revocations"() TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."list_restorable_revocations"() FROM PUBLIC, "anon";
+
+-- 해제를 되돌린다. 같은 사람을 되도록 같은 이름으로 다시 관리자로 만든다.
+CREATE OR REPLACE FUNCTION public.restore_revoked_admin (
+  p_admin_log_id bigint,
+  p_reason       text
+)
+  RETURNS text
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_reason text;
+  v_revocation private.admin_revocations;
+  v_handle text;
+begin
+  perform private.require_admin();
+  v_reason := private.require_reason(p_reason);
+
+  select * into v_revocation from private.admin_revocations
+  where admin_log_id = p_admin_log_id
+  for update;
+  if v_revocation.admin_log_id is null then
+    raise exception 'revocation not found' using errcode = 'WK006';
+  end if;
+  if v_revocation.restored_at is not null
+     or exists (select 1 from private.members where id = v_revocation.member_id and is_admin) then
+    raise exception 'already restored' using errcode = 'WK011';
+  end if;
+  if v_revocation.revoked_at <= now() - private.revocation_restore_window() then
+    raise exception 'too late to restore' using errcode = 'WK020';
+  end if;
+  if private.member_is_banned(v_revocation.member_id) then
+    raise exception 'target is banned' using errcode = 'WK002';
+  end if;
+
+  -- 이름은 기간 동안 비워 두었다. 그래도 겹치면(최초 지정처럼 SQL로 직접 바꾼 경우) 새 이름을 준다.
+  perform 1 from private.members where is_admin for update;
+  v_handle := case
+    when exists (select 1 from private.members where admin_handle = v_revocation.admin_handle)
+      then private.next_admin_handle()
+    else v_revocation.admin_handle
+  end;
+
+  update private.members
+     set is_admin = true, admin_handle = v_handle
+   where id = v_revocation.member_id;
+  update private.admin_revocations
+     set restored_at = now()
+   where admin_log_id = p_admin_log_id;
+
+  -- 지정과 같이 대상은 공개하지 않는다. 어느 해제를 되돌렸는지만 남긴다.
+  perform private.log_admin_action(
+    'restore_admin', v_reason, null, null, null, '기록 #' || p_admin_log_id
+  );
+  return v_handle;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."restore_revoked_admin"(bigint, text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."restore_revoked_admin"(bigint, text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."restore_revoked_admin"(bigint, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."restore_revoked_admin"(bigint, text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."restore_revoked_admin"(bigint, text) FROM PUBLIC, "anon";
 
 CREATE OR REPLACE FUNCTION public.set_protection (
   p_page_id bigint,
@@ -1215,7 +1343,7 @@ CREATE TABLE "public"."admin_log" (
   CONSTRAINT "admin_log_action"
     CHECK
     ((action = ANY (ARRAY['ban'::text, 'lift_ban'::text, 'grant_admin'::text, 'revoke_admin'::text, 'protect'::text, 'unprotect'::text, 'delete_page'::text, 'restore_page'::text,
-    'hide_revision'::text, 'unhide_revision'::text, 'view_author_edits'::text, 'change_ban'::text, 'bulk_revert'::text]))),
+    'hide_revision'::text, 'unhide_revision'::text, 'view_author_edits'::text, 'change_ban'::text, 'bulk_revert'::text, 'restore_admin'::text]))),
   CONSTRAINT "admin_log_pkey" PRIMARY KEY (id)
 );
 
@@ -1262,6 +1390,21 @@ CREATE TABLE "private"."admin_actions" (
 );
 
 ALTER TABLE "private"."admin_actions"
+  ENABLE ROW LEVEL SECURITY;
+
+-- 관리자 해제의 대상. 되돌리기(`restore_revoked_admin`)에만 쓰고 화면에는 이름만 낸다.
+CREATE TABLE "private"."admin_revocations" (
+  "admin_log_id" bigint                   NOT NULL,
+  "member_id"    bigint                   NOT NULL,
+  "admin_handle" text                     NOT NULL,
+  "revoked_at"   timestamp with time zone NOT NULL DEFAULT now(),
+  "restored_at"  timestamp with time zone,
+  CONSTRAINT "admin_revocations_pkey" PRIMARY KEY (admin_log_id),
+  CONSTRAINT "admin_revocations_admin_log_id_fkey" FOREIGN KEY (admin_log_id) REFERENCES public.admin_log(id) ON DELETE CASCADE,
+  CONSTRAINT "admin_revocations_member_id_fkey" FOREIGN KEY (member_id) REFERENCES private.members(id) ON DELETE CASCADE
+);
+
+ALTER TABLE "private"."admin_revocations"
   ENABLE ROW LEVEL SECURITY;
 
 -- 차단 내역. 근거가 된 문서의 가명으로만 공개한다. 효과는 모든 문서에 미친다.

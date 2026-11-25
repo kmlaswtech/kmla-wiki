@@ -6,12 +6,16 @@ import {
   listAdmins,
   listMyAuthorLookups,
   listOpenReports,
+  listRestorableRevocations,
   OpenLookupList,
   OpenReportList,
   ReasonDialog,
+  restoreRevokedAdmin,
   revokeAdmin,
+  type RestorableRevocation,
 } from "~/features/admin";
 import { loadMemberStatus, withVerifiedMember } from "~/features/auth";
+import { formatDateTime } from "~/shared/lib/time";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
@@ -19,10 +23,17 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   // 화면을 가리는 검사다. 실제 권한은 각 RPC가 검사한다.
   const status = await loadMemberStatus();
   if (!status?.isAdmin) throw redirect("/");
-  const [admins, lookups, reports] = await withVerifiedMember(request, () =>
-    Promise.all([listAdmins(), listMyAuthorLookups(), listOpenReports()]),
+  const [admins, revocations, lookups, reports] = await withVerifiedMember(
+    request,
+    () =>
+      Promise.all([
+        listAdmins(),
+        listRestorableRevocations(),
+        listMyAuthorLookups(),
+        listOpenReports(),
+      ]),
   );
-  return { admins, lookups, reports };
+  return { admins, revocations, lookups, reports };
 }
 
 export const meta: Route.MetaFunction = () => [{ title: "관리 - 큼온 위키" }];
@@ -32,9 +43,10 @@ export const meta: Route.MetaFunction = () => [{ title: "관리 - 큼온 위키"
  * 것(관리자 목록)과 다른 화면으로 가는 길만 둔다.
  */
 export default function AdminRoute({ loaderData }: Route.ComponentProps) {
-  const { admins, lookups, reports } = loaderData;
+  const { admins, revocations, lookups, reports } = loaderData;
   const revalidator = useRevalidator();
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState<RestorableRevocation | null>(null);
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -128,14 +140,62 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
         ) : null}
       </section>
 
+      {revocations.length > 0 ? (
+        <section>
+          <h2 className="mb-2 text-lg font-semibold">최근 해제</h2>
+          <p className="mb-3 text-sm text-muted-foreground">
+            잘못 해제했다면 7일 안에 되돌릴 수 있습니다. 같은 사람이 같은
+            이름으로 다시 관리자가 됩니다. 7일이 지나면 판 기록에서 다시
+            지정해야 합니다.
+          </p>
+          <ul className="divide-y rounded-md border text-sm">
+            {revocations.map((revocation) => (
+              <li
+                key={revocation.logId}
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2"
+              >
+                <span className="font-medium">{revocation.handle}</span>
+                <span className="min-w-0 truncate text-muted-foreground">
+                  {revocation.reason}
+                </span>
+                <span className="ml-auto flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {formatDateTime(revocation.restorableUntil)}까지
+                  </span>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setRestoring(revocation)}
+                  >
+                    되돌리기
+                  </Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <ReasonDialog
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
         title="관리자 권한 해제"
-        description={`‘${revoking ?? ""}’의 관리자 권한을 해제합니다. 공개 기록에는 해제된 관리자의 이름이 표시되지 않습니다.`}
+        description={`‘${revoking ?? ""}’의 관리자 권한을 해제합니다. 공개 기록에는 해제된 관리자의 이름이 표시되지 않습니다. 잘못 해제했다면 7일 안에 이 화면에서 되돌릴 수 있습니다.`}
         confirmLabel="해제"
         destructive
         onConfirm={(reason) => revokeAdmin(revoking ?? "", reason)}
+        onDone={() => void revalidator.revalidate()}
+      />
+
+      <ReasonDialog
+        open={restoring !== null}
+        onOpenChange={(open) => !open && setRestoring(null)}
+        title="관리자 해제 되돌리기"
+        description={`‘${restoring?.handle ?? ""}’의 해제를 되돌려 같은 사람에게 관리자 권한을 다시 줍니다. 공개 기록에는 어느 해제를 되돌렸는지만 표시됩니다.`}
+        confirmLabel="되돌리기"
+        onConfirm={async (reason) => {
+          if (restoring) await restoreRevokedAdmin(restoring.logId, reason);
+        }}
         onDone={() => void revalidator.revalidate()}
       />
     </div>

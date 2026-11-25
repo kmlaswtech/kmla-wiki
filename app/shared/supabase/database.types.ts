@@ -413,6 +413,16 @@ export type Database = {
           revision_id: number
         }[]
       }
+      list_restorable_revocations: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          admin_handle: string
+          admin_log_id: number
+          reason: string
+          restorable_until: string
+          revoked_at: string
+        }[]
+      }
       mark_image_deleted: { Args: { p_image_id: string }; Returns: undefined }
       move_page: {
         Args: {
@@ -506,6 +516,10 @@ export type Database = {
       restore_page: {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
+      }
+      restore_revoked_admin: {
+        Args: { p_admin_log_id: number; p_reason: string }
+        Returns: string
       }
       revert_and_hide_revision: {
         Args: { p_reason: string; p_revision_id: number }
