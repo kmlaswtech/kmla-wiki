@@ -7,6 +7,12 @@ import type {
 } from "../model/log";
 import type { RecentChange } from "~/features/pages";
 import { toReportNotes, type ReportNote } from "~/features/reports";
+import {
+  keysetPage,
+  keysetQuery,
+  type KeysetPage,
+  type PageCursor,
+} from "~/shared/lib/keyset";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap, WikiError } from "~/shared/supabase/errors";
 
@@ -15,18 +21,21 @@ const PAGE_SIZE = 50;
 /** 다른 편집 목록의 한 쪽. 클라이언트가 늘 `p_limit`으로 보낸다. 한 쪽이 꽉 차면 더 볼 것이 있다. */
 export const AUTHOR_EDITS_PAGE_SIZE = 50;
 
-/** 공개 관리 기록, 최신순. 승인 회원 누구나 읽는다. */
-export async function listAdminLog(before?: number): Promise<AdminLogEntry[]> {
-  let query = getSupabase()
-    .from("admin_log")
-    .select(
-      "id, action, page_title, revision_id, pseudonym, reason, note, discussion_id, created_at",
-    )
-    .order("id", { ascending: false })
-    .limit(PAGE_SIZE);
-  if (before !== undefined) query = query.lt("id", before);
+/** 공개 관리 기록 한 쪽, 최신순. 승인 회원 누구나 읽는다. */
+export async function listAdminLog(
+  cursor: PageCursor,
+): Promise<KeysetPage<AdminLogEntry>> {
+  const query = keysetQuery(
+    getSupabase()
+      .from("admin_log")
+      .select(
+        "id, action, page_title, revision_id, pseudonym, reason, note, discussion_id, created_at",
+      ),
+    cursor,
+    PAGE_SIZE,
+  );
 
-  return unwrap(await query).map((row) => ({
+  const rows = unwrap(await query).map((row): AdminLogEntry => ({
     id: row.id,
     action: row.action as AdminAction,
     pageTitle: row.page_title,
@@ -37,20 +46,24 @@ export async function listAdminLog(before?: number): Promise<AdminLogEntry[]> {
     discussionId: row.discussion_id,
     createdAt: row.created_at,
   }));
+  return keysetPage(rows, cursor, PAGE_SIZE);
 }
 
-/** 공개 차단 내역, 최신순. */
-export async function listBans(): Promise<BanEntry[]> {
-  const rows = unwrap(
-    await getSupabase()
+/** 공개 차단 내역 한 쪽, 최신순. */
+export async function listBans(
+  cursor: PageCursor,
+): Promise<KeysetPage<BanEntry>> {
+  const query = keysetQuery(
+    getSupabase()
       .from("ban_log")
       .select(
         "id, pseudonym, page_title, revision_id, starts_at, ends_at, reason, lifted_at",
-      )
-      .order("id", { ascending: false })
-      .limit(200),
+      ),
+    cursor,
+    PAGE_SIZE,
   );
-  return rows.map((row) => ({
+
+  const rows = unwrap(await query).map((row): BanEntry => ({
     id: row.id,
     pseudonym: row.pseudonym,
     pageTitle: row.page_title,
@@ -60,6 +73,7 @@ export async function listBans(): Promise<BanEntry[]> {
     reason: row.reason,
     liftedAt: row.lifted_at,
   }));
+  return keysetPage(rows, cursor, PAGE_SIZE);
 }
 
 export interface AuthorEdit extends RecentChange {

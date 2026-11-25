@@ -21,6 +21,13 @@ import {
   type WikiDoc,
 } from "~/features/markup";
 import { toImageMap, type RawImage } from "~/features/images";
+import {
+  keysetPage,
+  keysetQuery,
+  takePage,
+  type KeysetPage,
+  type PageCursor,
+} from "~/shared/lib/keyset";
 import { getSupabase } from "~/shared/supabase/client";
 import type { Json } from "~/shared/supabase/database.types";
 import { unwrap } from "~/shared/supabase/errors";
@@ -211,40 +218,44 @@ function toSummary(row: RawRevision): RevisionSummary {
   };
 }
 
-export const HISTORY_PAGE_SIZE = 50;
+const HISTORY_PAGE_SIZE = 50;
 
-/** 문서의 판 기록, 최신순. `before`보다 오래된 판부터 이어서 읽는다. */
+/** 문서의 판 기록 한 쪽, 최신순. */
 export async function listHistory(
   pageId: number,
-  before?: number,
-): Promise<RevisionSummary[]> {
-  let query = getSupabase()
-    .from("revisions")
-    .select(SUMMARY_COLUMNS)
-    .eq("page_id", pageId)
-    .order("id", { ascending: false })
-    .limit(HISTORY_PAGE_SIZE);
-  if (before !== undefined) query = query.lt("id", before);
+  cursor: PageCursor,
+): Promise<KeysetPage<RevisionSummary>> {
+  const query = keysetQuery(
+    getSupabase()
+      .from("revisions")
+      .select(SUMMARY_COLUMNS)
+      .eq("page_id", pageId),
+    cursor,
+    HISTORY_PAGE_SIZE,
+  );
 
-  return unwrap(await query).map(toSummary);
+  const rows = unwrap(await query).map(toSummary);
+  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE);
 }
 
-/** 모든 문서의 최근 변경, 최신순. */
+/** 모든 문서의 최근 변경 한 쪽, 최신순. */
 export async function listRecentChanges(
-  before?: number,
-): Promise<RecentChange[]> {
-  let query = getSupabase()
-    .from("revisions")
-    // pages와 revisions 사이에 외래 키가 둘이라(page_id, current_revision_id) 어느 쪽인지 적는다.
-    .select(`${SUMMARY_COLUMNS}, page:pages!revisions_page_id_fkey(title)`)
-    .order("id", { ascending: false })
-    .limit(HISTORY_PAGE_SIZE);
-  if (before !== undefined) query = query.lt("id", before);
+  cursor: PageCursor,
+): Promise<KeysetPage<RecentChange>> {
+  const query = keysetQuery(
+    getSupabase()
+      .from("revisions")
+      // pages와 revisions 사이에 외래 키가 둘이라(page_id, current_revision_id) 어느 쪽인지 적는다.
+      .select(`${SUMMARY_COLUMNS}, page:pages!revisions_page_id_fkey(title)`),
+    cursor,
+    HISTORY_PAGE_SIZE,
+  );
 
-  return unwrap(await query).map((row) => ({
+  const rows = unwrap(await query).map((row) => ({
     ...toSummary(row),
     pageTitle: row.page.title,
   }));
+  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE);
 }
 
 /**
@@ -371,30 +382,44 @@ export async function listWantedPages(): Promise<
   return rows.map((row) => ({ title: row.title_key, refCount: row.ref_count }));
 }
 
+/** 특수 문서 목록 한 쪽. 한 개 더 읽어서(`SPECIAL_PAGE_SIZE + 1`) 다음 쪽이 있는지 안다. */
+interface SpecialPage<T> {
+  rows: T[];
+  more: boolean;
+}
+
 /** 어디서도 링크하지 않는 일반 문서. `after` 제목 다음부터. */
-export async function listOrphanPages(after?: string): Promise<string[]> {
+export async function listOrphanPages(
+  after?: string,
+): Promise<SpecialPage<string>> {
   const rows = unwrap(
     await getSupabase().rpc("orphan_pages", {
       p_after: after,
-      p_limit: SPECIAL_PAGE_SIZE,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return rows.map((row) => row.title);
+  return takePage(
+    rows.map((row) => row.title),
+    SPECIAL_PAGE_SIZE,
+  );
 }
 
 /** 이름공간의 모든 문서, 가나다순. `after` 제목 다음부터. */
 export async function listAllPages(
   namespace: Namespace = "main",
   after?: string,
-): Promise<string[]> {
+): Promise<SpecialPage<string>> {
   const rows = unwrap(
     await getSupabase().rpc("list_all_pages", {
       p_namespace: namespace,
       p_after: after,
-      p_limit: SPECIAL_PAGE_SIZE,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return rows.map((row) => row.title);
+  return takePage(
+    rows.map((row) => row.title),
+    SPECIAL_PAGE_SIZE,
+  );
 }
 
 /**
@@ -405,16 +430,19 @@ export async function listPagesBySize(
   namespace: Namespace,
   longest: boolean,
   offset = 0,
-): Promise<{ title: string; textSize: number }[]> {
+): Promise<SpecialPage<{ title: string; textSize: number }>> {
   const rows = unwrap(
     await getSupabase().rpc("page_sizes", {
       p_namespace: namespace,
       p_longest: longest,
       p_offset: offset,
-      p_limit: SPECIAL_PAGE_SIZE,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return rows.map((row) => ({ title: row.title, textSize: row.text_size }));
+  return takePage(
+    rows.map((row) => ({ title: row.title, textSize: row.text_size })),
+    SPECIAL_PAGE_SIZE,
+  );
 }
 
 /** 손볼 넘겨주기. `next`가 `null`이면 대상이 없거나 삭제됐고, 있으면 대상도 넘겨주기다. */

@@ -15,12 +15,15 @@ import {
   SPECIAL_NAMESPACES,
   readSpecialNamespace,
   readSpecialTab,
+  sizeListNav,
   sizeListOffset,
-  SPECIAL_PAGE_SIZE,
   specialHref,
+  titleListNav,
+  type SpecialNav,
   SPECIAL_TABS,
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
+import { PageNav } from "~/shared/components/page-nav";
 import { cn } from "~/shared/lib/utils";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
@@ -30,7 +33,15 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const after = params.get("after") || undefined;
 
   const offset = sizeListOffset(nonNegativeInt(params.get("offset")));
-  const empty = { wanted: [], redirects: [], titles: [], sized: [], offset };
+  const noNav: SpecialNav | null = null;
+  const empty = {
+    wanted: [],
+    redirects: [],
+    titles: [],
+    sized: [],
+    offset,
+    nav: noNav,
+  };
 
   return withVerifiedMember(request, async () => {
     if (tab === "wanted") {
@@ -43,13 +54,25 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     }
     if (tab === "short" || tab === "long") {
       const sized = await listPagesBySize(namespace, tab === "long", offset);
-      return { ...empty, tab, namespace, sized };
+      return {
+        ...empty,
+        tab,
+        namespace,
+        sized: sized.rows,
+        nav: sizeListNav(tab, namespace, offset, sized.more),
+      };
     }
     const titles =
       tab === "orphan"
         ? await listOrphanPages(after)
         : await listAllPages(namespace, after);
-    return { ...empty, tab, namespace, titles };
+    return {
+      ...empty,
+      tab,
+      namespace,
+      titles: titles.rows,
+      nav: titleListNav(tab, namespace, after, titles.rows.at(-1), titles.more),
+    };
   });
 }
 
@@ -58,26 +81,10 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
-  const { tab, namespace, wanted, redirects, titles, sized, offset } =
+  const { tab, namespace, wanted, redirects, titles, sized, offset, nav } =
     loaderData;
   const current = SPECIAL_TABS.find((item) => item.key === tab)!;
-  const last = titles.at(-1);
   const sizedTab = tab === "short" || tab === "long";
-  // 다음 묶음. 제목 순 목록은 마지막 제목 다음부터, 크기 순 목록은 건너뛸 개수로 잇는다.
-  const moreHref =
-    sizedTab && sized.length === SPECIAL_PAGE_SIZE
-      ? specialHref(tab, {
-          ns: namespace,
-          offset: String(offset + SPECIAL_PAGE_SIZE),
-        })
-      : (tab === "orphan" || tab === "all") &&
-          titles.length === SPECIAL_PAGE_SIZE &&
-          last
-        ? specialHref(tab, {
-            ...(tab === "all" ? { ns: namespace } : {}),
-            after: last,
-          })
-        : null;
 
   return (
     <div>
@@ -187,13 +194,7 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
         </ul>
       )}
 
-      {moreHref ? (
-        <div className="mt-4 text-center">
-          <LinkButton variant="outline" to={moreHref}>
-            더 보기
-          </LinkButton>
-        </div>
-      ) : null}
+      {nav ? <PageNav {...nav} /> : null}
     </div>
   );
 }

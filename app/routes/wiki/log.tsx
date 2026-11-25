@@ -8,13 +8,16 @@ import {
 } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
 import { topicHref } from "~/features/discussions";
+import { KeysetNav } from "~/shared/components/page-nav";
 import { RelativeTime } from "~/shared/components/relative-time";
+import { readPageCursor } from "~/shared/lib/keyset";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const [entries, adminCount] = await withVerifiedMember(request, () =>
-    Promise.all([listAdminLog(), getAdminCount()]),
+  const cursor = readPageCursor(new URL(request.url).searchParams);
+  const [page, adminCount] = await withVerifiedMember(request, () =>
+    Promise.all([listAdminLog(cursor), getAdminCount()]),
   );
-  return { entries, adminCount };
+  return { page, adminCount };
 }
 
 export const meta: Route.MetaFunction = () => [
@@ -28,7 +31,8 @@ export const meta: Route.MetaFunction = () => [
  * 여기에 남는다.
  */
 export default function LogRoute({ loaderData }: Route.ComponentProps) {
-  const { entries, adminCount } = loaderData;
+  const { page, adminCount } = loaderData;
+  const entries = page.items;
 
   return (
     <div>
@@ -73,6 +77,7 @@ export default function LogRoute({ loaderData }: Route.ComponentProps) {
           ))}
         </ul>
       )}
+      <KeysetNav path="/log" page={page} />
     </div>
   );
 }
