@@ -86,8 +86,11 @@ export default function PageRoute({ loaderData }: Route.ComponentProps) {
         ) : view.canEdit && view.revision ? (
           // 보고 있는 판을 신고한다(예전 판을 보는 중이면 그 판).
           <ReportButton
-            revisionId={view.revision.id}
-            pageTitle={view.page.title}
+            target={{
+              kind: "revision",
+              id: view.revision.id,
+              pageTitle: view.page.title,
+            }}
             size="icon-sm"
           />
         ) : null

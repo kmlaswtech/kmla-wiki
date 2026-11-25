@@ -414,6 +414,27 @@ export type Database = {
           source_revision_id: number
         }[]
       }
+      list_open_post_reports: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          as_admin: boolean
+          author_name: string
+          body: string
+          discussion_deleted: boolean
+          discussion_id: number
+          discussion_title: string
+          discussion_withdrawn: boolean
+          dismissed_count: number
+          first_reported_at: string
+          hidden_at: string
+          kind: string
+          page_title: string
+          post_created_at: string
+          post_id: number
+          reports: Json
+          withdrawn_at: string
+        }[]
+      }
       list_open_reports: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -556,12 +577,20 @@ export type Database = {
         Args: { p_as_admin?: boolean; p_body: string; p_discussion_id: number }
         Returns: number
       }
+      report_discussion_post: {
+        Args: { p_category: string; p_note?: string; p_post_id: number }
+        Returns: undefined
+      }
       report_revision: {
         Args: { p_category: string; p_note?: string; p_revision_id: number }
         Returns: undefined
       }
       resolve_body: { Args: { p_body: Json }; Returns: Json }
       resolve_images: { Args: { p_body: Json }; Returns: Json }
+      resolve_post_reports: {
+        Args: { p_post_id: number; p_resolution: string }
+        Returns: number
+      }
       resolve_redirect: {
         Args: { p_stop_key?: string; p_title: string }
         Returns: {

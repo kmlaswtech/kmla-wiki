@@ -12,7 +12,11 @@ export { ReasonDialog } from "./components/reason-dialog";
 export { RestorableRevocationList } from "./components/restorable-revocation-list";
 export { RevisionAdminMenu } from "./components/revision-admin-menu";
 export { useOpenReportCount } from "./components/use-open-report-count";
-export { liftBan, revokeAdmin } from "./data/mutations";
+export {
+  liftBan,
+  notifyOpenReportsChanged,
+  revokeAdmin,
+} from "./data/mutations";
 export {
   findAuthorLookup,
   getAdminCount,

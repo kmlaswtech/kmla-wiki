@@ -1,4 +1,5 @@
 import { DISCUSSION_INTENT } from "../model/form";
+import { notifyOpenReportsChanged } from "~/features/admin";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap } from "~/shared/supabase/errors";
 
@@ -74,6 +75,8 @@ export async function setPostHidden(
       p_reason: reason,
     }),
   );
+  // 숨기면 그 글의 신고가 닫힌다.
+  if (hidden) notifyOpenReportsChanged();
 }
 
 /** 관리자 전용. 관리 기록 대신 토론에 '관리자' 이름으로 바꾼 사실이 남는다. */
@@ -102,4 +105,23 @@ export async function setDiscussionDeleted(
       p_reason: reason,
     }),
   );
+  // 지우면 그 토론의 글 신고가 닫힌다.
+  if (deleted) notifyOpenReportsChanged();
+}
+
+/**
+ * 관리자 전용. 글 하나에 걸린 처리되지 않은 신고를 모두 닫는다. `handled`는 조치함, `dismissed`는
+ * 기각. 닫을 신고가 없으면 WK011이다.
+ */
+export async function resolvePostReports(
+  postId: number,
+  resolution: "handled" | "dismissed",
+): Promise<void> {
+  unwrap(
+    await getSupabase().rpc("resolve_post_reports", {
+      p_post_id: postId,
+      p_resolution: resolution,
+    }),
+  );
+  notifyOpenReportsChanged();
 }

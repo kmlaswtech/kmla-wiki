@@ -52,3 +52,25 @@ export interface Discussion {
   version: string;
   posts: DiscussionPost[];
 }
+
+/** 처리되지 않은 토론 글 신고, 글별로 묶음(`list_open_post_reports`, 관리자 전용). */
+export interface OpenPostReport {
+  postId: number;
+  discussionId: number;
+  discussionTitle: string;
+  pageTitle: string;
+  authorName: string;
+  asAdmin: boolean;
+  kind: PostKind;
+  /** 상태와 관계없이 온다. 관리자가 판단해야 하기 때문이다. */
+  body: string;
+  postCreatedAt: string;
+  state: PostState;
+  /** 연 사람이 거둔 토론. 관리자도 열 수 없다. */
+  discussionWithdrawn: boolean;
+  /** 지운 토론이거나 삭제된 문서의 토론. 회원에게 보이지 않는다. */
+  discussionDeleted: boolean;
+  reports: { category: string; note: string; createdAt: string }[];
+  /** 같은 글에서 전에 기각한 신고 수. */
+  dismissedCount: number;
+}

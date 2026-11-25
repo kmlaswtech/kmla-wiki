@@ -2,6 +2,7 @@ import type {
   Discussion,
   DiscussionPost,
   DiscussionSummary,
+  OpenPostReport,
   PostKind,
   PostState,
 } from "../model/types";
@@ -121,4 +122,35 @@ export async function getDiscussionVersion(id: number): Promise<string | null> {
   return unwrap(
     await getSupabase().rpc("get_discussion_version", { p_discussion_id: id }),
   );
+}
+
+/** 처리되지 않은 토론 글 신고, 오래된 것부터(관리자 전용). 신고자는 오지 않는다. */
+export async function listOpenPostReports(): Promise<OpenPostReport[]> {
+  const rows = unwrap(await getSupabase().rpc("list_open_post_reports"));
+  return rows.map((row) => ({
+    postId: row.post_id,
+    discussionId: row.discussion_id,
+    discussionTitle: row.discussion_title,
+    pageTitle: row.page_title,
+    authorName: row.author_name,
+    asAdmin: row.as_admin,
+    kind: row.kind as PostKind,
+    body: row.body,
+    postCreatedAt: row.post_created_at,
+    state: row.hidden_at
+      ? "hidden"
+      : row.withdrawn_at
+        ? "withdrawn"
+        : "visible",
+    discussionWithdrawn: row.discussion_withdrawn,
+    discussionDeleted: row.discussion_deleted,
+    reports: (
+      row.reports as { category: string; note: string; created_at: string }[]
+    ).map((report) => ({
+      category: report.category,
+      note: report.note,
+      createdAt: report.created_at,
+    })),
+    dismissedCount: row.dismissed_count,
+  }));
 }

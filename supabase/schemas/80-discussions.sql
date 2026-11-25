@@ -604,7 +604,7 @@ REVOKE ALL ON FUNCTION "public"."withdraw_discussion"(bigint) FROM PUBLIC, "anon
 
 -- 글 하나를 숨기거나 되살린다(관리자 전용). 늘 '관리자' 이름이고 사유와 함께 관리 기록에 남는다.
 -- 관리 기록에는 문서 제목과 토론 번호(`discussion_id`)만 남긴다. 토론 제목과 글은 숨기거나 지울 대상일 수
--- 있어서 적지 않는다.
+-- 있어서 적지 않는다. 숨기면 그 글에 걸린 처리되지 않은 신고를 `handled`로 닫는다.
 CREATE OR REPLACE FUNCTION public.set_discussion_post_hidden (
   p_post_id bigint,
   p_hidden  boolean,
@@ -635,6 +635,11 @@ begin
   update private.discussion_posts
      set hidden_at = case when p_hidden then now() end
    where id = p_post_id;
+  if p_hidden then
+    update private.reports
+       set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
+     where post_id = p_post_id and resolved_at is null;
+  end if;
   perform private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
     v_reason, (select title from public.pages where id = v_discussion.page_id),
@@ -654,6 +659,7 @@ GRANT EXECUTE ON FUNCTION "public"."set_discussion_post_hidden"(bigint, boolean,
 REVOKE ALL ON FUNCTION "public"."set_discussion_post_hidden"(bigint, boolean, text) FROM PUBLIC, "anon";
 
 -- 토론을 지우거나 되살린다(관리자 전용). 지운 토론은 관리자에게만 보인다. 거둔 토론은 대상이 아니다.
+-- 지우면 그 토론의 글에 걸린 처리되지 않은 신고를 `handled`로 닫는다.
 CREATE OR REPLACE FUNCTION public.set_discussion_deleted (
   p_discussion_id bigint,
   p_deleted       boolean,
@@ -682,6 +688,12 @@ begin
   update private.discussions
      set deleted_at = case when p_deleted then now() end
    where id = p_discussion_id;
+  if p_deleted then
+    update private.reports
+       set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
+     where resolved_at is null
+       and post_id in (select id from private.discussion_posts where discussion_id = p_discussion_id);
+  end if;
   perform private.log_admin_action(
     case when p_deleted then 'delete_discussion' else 'restore_discussion' end,
     v_reason, (select title from public.pages where id = v_discussion.page_id),
@@ -1036,3 +1048,173 @@ REVOKE ALL ON FUNCTION "public"."get_discussion"(bigint) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."get_discussion"(bigint) TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."get_discussion"(bigint) FROM PUBLIC, "anon";
+
+-- ── 신고 ─────────────────────────────────────────────────────────────────────
+
+-- 토론 글 신고의 대상. 테이블은 `70-reports.sql`에 있다.
+ALTER TABLE "private"."reports"
+  ADD CONSTRAINT "reports_post_id_fkey" FOREIGN KEY (post_id) REFERENCES private.discussion_posts(id) ON DELETE CASCADE;
+
+-- 토론 글 하나를 신고한다. 토론을 신고하려면 첫 글을 신고한다. 규칙은 판 신고(`report_revision`)와
+-- 같다. 내가 볼 수 없는 토론의 글, 숨기거나 거둔 글은 없는 글과 같은 오류다.
+CREATE OR REPLACE FUNCTION public.report_discussion_post (
+  p_post_id  bigint,
+  p_category text,
+  p_note     text DEFAULT ''::text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint := private.require_editor();
+  v_note text := private.check_report_note(p_category, p_note);
+begin
+  if not exists (
+    select 1
+    from private.discussion_posts as post
+    join private.discussions as discussion on discussion.id = post.discussion_id
+    where post.id = p_post_id
+      and post.hidden_at is null
+      and post.withdrawn_at is null
+      and private.can_see_discussion(discussion)
+  ) then
+    raise exception 'post not found' using errcode = 'WK006';
+  end if;
+  -- 기각된 글은 같은 사람이 다시 신고하지 않는다. 글은 고칠 수 없으므로 같은 판단이 나온다.
+  if exists (
+    select 1 from private.reports as report
+    where report.post_id = p_post_id
+      and report.reporter_member_id = v_member_id
+      and report.resolution = 'dismissed'
+  ) then
+    raise exception 'already dismissed' using errcode = 'WK011';
+  end if;
+  perform private.check_report_rate(v_member_id);
+
+  begin
+    insert into private.reports (post_id, reporter_member_id, category, note)
+    values (p_post_id, v_member_id, p_category, v_note);
+  exception when unique_violation then
+    raise exception 'already reported' using errcode = 'WK011';
+  end;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."report_discussion_post"(bigint, text, text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."report_discussion_post"(bigint, text, text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."report_discussion_post"(bigint, text, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."report_discussion_post"(bigint, text, text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."report_discussion_post"(bigint, text, text) FROM PUBLIC, "anon";
+
+-- 처리되지 않은 토론 글 신고를 글별로 묶는다(관리자 전용). 신고자는 돌려주지 않는다. 오래된 신고부터.
+-- 글 본문은 상태(숨김, 거둠)와 관계없이 준다. 관리자가 판단해야 하기 때문이다.
+CREATE OR REPLACE FUNCTION public.list_open_post_reports()
+  RETURNS TABLE (
+    post_id              bigint,
+    discussion_id        bigint,
+    discussion_title     text,
+    page_title           text,
+    author_name          text,
+    as_admin             boolean,
+    kind                 text,
+    body                 text,
+    post_created_at      timestamp with time zone,
+    hidden_at            timestamp with time zone,
+    withdrawn_at         timestamp with time zone,
+    discussion_withdrawn boolean,
+    discussion_deleted   boolean,
+    first_reported_at    timestamp with time zone,
+    reports              jsonb,
+    dismissed_count      integer
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.require_admin();
+  return query
+  select
+    post.id, discussion.id, discussion.title, page.title, post.author_name, post.as_admin, post.kind,
+    post.body, post.created_at, post.hidden_at, post.withdrawn_at, discussion.withdrawn_at is not null,
+    discussion.deleted_at is not null or page.deleted_at is not null,
+    grouped.first_reported_at, grouped.reports,
+    (
+      select count(*)::integer from private.reports as earlier
+      where earlier.post_id = grouped.post_id and earlier.resolution = 'dismissed'
+    )
+  from (
+    select
+      report.post_id,
+      min(report.created_at) as first_reported_at,
+      jsonb_agg(
+        jsonb_build_object('category', report.category, 'note', report.note, 'created_at', report.created_at)
+        order by report.created_at
+      ) as reports
+    from private.reports as report
+    where report.resolved_at is null and report.post_id is not null
+    group by report.post_id
+  ) as grouped
+  join private.discussion_posts as post on post.id = grouped.post_id
+  join private.discussions as discussion on discussion.id = post.discussion_id
+  join public.pages as page on page.id = discussion.page_id
+  -- 자르지 않는다. 머리띠의 수(`count_open_reports`)에 든 글을 모두 보여야 닫을 수 있다.
+  order by grouped.first_reported_at;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."list_open_post_reports"() FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."list_open_post_reports"() FROM PUBLIC, "anon";
+
+-- 토론 글 하나에 걸린 처리되지 않은 신고를 모두 닫는다(관리자 전용). `resolve_reports`와 같다.
+CREATE OR REPLACE FUNCTION public.resolve_post_reports (
+  p_post_id    bigint,
+  p_resolution text
+)
+  RETURNS integer
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_admin_id bigint := private.require_admin();
+  v_count integer;
+begin
+  if p_resolution is null or p_resolution not in ('handled', 'dismissed') then
+    raise exception 'invalid resolution' using errcode = '22023';
+  end if;
+
+  update private.reports
+     set resolved_at = now(), resolved_by_member_id = v_admin_id, resolution = p_resolution
+   where post_id = p_post_id and resolved_at is null;
+  get diagnostics v_count = row_count;
+  if v_count = 0 then
+    raise exception 'no open reports' using errcode = 'WK011';
+  end if;
+  return v_count;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."resolve_post_reports"(bigint, text) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."resolve_post_reports"(bigint, text) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."resolve_post_reports"(bigint, text) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."resolve_post_reports"(bigint, text) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."resolve_post_reports"(bigint, text) FROM PUBLIC, "anon";
