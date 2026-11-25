@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 
+import type { PageMenuItem } from "~/features/pages";
+
 import { deletePage, restorePage, setProtection } from "../data/mutations";
 import { ReasonDialog } from "./reason-dialog";
 
@@ -15,13 +17,6 @@ interface PageAdminActionsOptions {
   onDone: () => void;
 }
 
-/** 문서 머리의 `⋯` 메뉴에 넣는 항목 하나. */
-export interface PageAdminAction {
-  label: string;
-  onSelect: () => void;
-  destructive?: boolean;
-}
-
 /**
  * 문서 관리(보호와 삭제·복구). `items`는 문서 머리의 `⋯` 메뉴에 넣고, `dialogs`는 메뉴 바깥에 그린다.
  * 메뉴 안에 두면 메뉴가 닫힐 때 대화상자도 사라지기 때문이다.
@@ -30,14 +25,14 @@ export function usePageAdminActions({
   page,
   aliasCount = 0,
   onDone,
-}: PageAdminActionsOptions): { items: PageAdminAction[]; dialogs: ReactNode } {
+}: PageAdminActionsOptions): { items: PageMenuItem[]; dialogs: ReactNode } {
   const [open, setOpen] = useState<"protect" | "delete" | null>(null);
   const close = (next: boolean) =>
     setOpen((current) => (next ? current : null));
   const isProtected = page.protection === "admin";
   const deleted = page.deletedAt !== null;
 
-  const items: PageAdminAction[] = [
+  const items: PageMenuItem[] = [
     {
       label: isProtected ? "보호 해제" : "문서 보호",
       onSelect: () => setOpen("protect"),

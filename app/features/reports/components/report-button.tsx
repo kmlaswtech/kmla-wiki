@@ -28,20 +28,13 @@ import { Textarea } from "~/shared/ui/textarea";
  * 판 하나나 토론 글 하나를 관리자에게 알리는 단추. 내용을 고치는 일은 누구나 할 수 있으므로, 회원이
  * 직접 할 수 없는 일(판·글 숨기기, 차단, 보호)을 부탁할 때 쓴다.
  */
-export function ReportButton({
-  target,
-  size = "icon-xs",
-}: {
-  target: ReportTarget;
-  /** 판 기록의 줄은 작게, 문서 제목 줄은 옆 단추에 맞춘다. */
-  size?: "icon-xs" | "icon-sm";
-}) {
+export function ReportButton({ target }: { target: ReportTarget }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button
         type="button"
-        size={size}
+        size="icon-xs"
         variant="ghost"
         aria-label={`${describeReportTarget(target)} 신고`}
         title="신고"

@@ -7,10 +7,7 @@ export { BulkRevertView } from "./components/bulk-revert-view";
 export { ChangeBanDialog } from "./components/change-ban-dialog";
 export { OpenLookupList } from "./components/open-lookup-list";
 export { OpenReportList } from "./components/open-report-list";
-export {
-  usePageAdminActions,
-  type PageAdminAction,
-} from "./components/page-admin-menu";
+export { usePageAdminActions } from "./components/page-admin-menu";
 export { ReasonDialog } from "./components/reason-dialog";
 export { RestorableRevocationList } from "./components/restorable-revocation-list";
 export { RevisionAdminMenu } from "./components/revision-admin-menu";

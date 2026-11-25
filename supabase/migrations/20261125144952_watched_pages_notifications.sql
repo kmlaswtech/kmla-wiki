@@ -49,7 +49,15 @@ CREATE OR REPLACE FUNCTION private.notifications_for (
     ) as seen_at
   ),
   watched as (
-    select watch.page_id, watch.created_at as watched_at
+    select
+      watch.page_id, watch.created_at as watched_at,
+      -- 내가 이 문서를 마지막으로 편집한 판. 그 앞의 편집은 알리지 않는다. 문서마다 한 번 찾는다.
+      coalesce((
+        select max(revision.id)
+        from public.revisions as revision
+        join private.revision_authors as author on author.revision_id = revision.id
+        where revision.page_id = watch.page_id and author.member_id = p_member_id
+      ), 0) as my_last_revision_id
     from private.watched_pages as watch
     join public.pages as page on page.id = watch.page_id
     where watch.member_id = p_member_id and page.deleted_at is null
@@ -117,12 +125,7 @@ CREATE OR REPLACE FUNCTION private.notifications_for (
       and revision.created_at > now() - interval '30 days'
       and revision.hidden_at is null
       and author.member_id <> p_member_id
-      and revision.id > coalesce((
-        select max(my.revision_id)
-        from private.revision_authors as my
-        join public.revisions as my_revision on my_revision.id = my.revision_id
-        where my.member_id = p_member_id and my_revision.page_id = watched.page_id
-      ), 0)
+      and revision.id > watched.my_last_revision_id
     group by watched.page_id
   )
   select
