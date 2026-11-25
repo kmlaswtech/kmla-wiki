@@ -50,9 +50,13 @@ export function DiscussionThread({
           <PostCard
             post={post}
             canWithdraw={canWrite && canWithdrawPost(posts, post)}
-            // 관리자는 신고하지 않고 바로 숨긴다.
+            // 관리자는 신고하지 않고 바로 숨긴다. 닫기·다시 열기·제목 바꾸기 글은 서버도 받지 않는다.
             canReport={
-              canWrite && !isAdmin && !post.mine && post.state === "visible"
+              canWrite &&
+              !isAdmin &&
+              !post.mine &&
+              post.state === "visible" &&
+              (post.kind === "open" || post.kind === "post")
             }
             pageTitle={pageTitle}
             isAdmin={isAdmin}

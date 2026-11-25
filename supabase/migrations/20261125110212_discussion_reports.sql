@@ -250,16 +250,21 @@ declare
   v_note text := private.check_report_note(p_category, p_note);
 begin
   -- 글과 토론을 잠근다. 관리자가 같은 때 숨기거나 지우면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
-  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다.
+  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다. 다른 토론 쓰기(`lock_discussion`)처럼 토론을
+  -- 먼저 잠가, 같은 글을 거두는 일과 서로 기다리지 않게 한다.
+  perform 1 from private.discussions
+   where id = (select discussion_id from private.discussion_posts where id = p_post_id)
+     for share;
   perform 1
     from private.discussion_posts as post
     join private.discussions as discussion on discussion.id = post.discussion_id
    where post.id = p_post_id
+     and post.kind in ('open', 'post')
      and post.hidden_at is null
      and post.withdrawn_at is null
      and post.member_id <> v_member_id
      and private.can_see_discussion(discussion)
-     for share of post, discussion;
+     for share of post;
   if not found then
     raise exception 'post not found' using errcode = 'WK006';
   end if;

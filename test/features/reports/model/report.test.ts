@@ -61,6 +61,6 @@ describe("describeReportTarget", () => {
         pageTitle: "귀가",
         authorName: "익명#AB12",
       }),
-    ).toBe("‘귀가’ 토론의 익명#AB12 글");
+    ).toBe("‘귀가’ 토론 글 #9(익명#AB12)");
   });
 });

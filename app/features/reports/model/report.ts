@@ -60,7 +60,7 @@ export function reportCategoryLabel(category: string): string {
 export function describeReportTarget(target: ReportTarget): string {
   return target.kind === "revision"
     ? `‘${target.pageTitle}’ r${target.id}`
-    : `‘${target.pageTitle}’ 토론의 ${target.authorName} 글`;
+    : `‘${target.pageTitle}’ 토론 글 #${target.id}(${target.authorName})`;
 }
 
 /** 덧붙임 길이. 서버와 같다. */

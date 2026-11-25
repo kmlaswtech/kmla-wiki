@@ -21,8 +21,15 @@ select id as post6 from private.discussion_posts where discussion_id = :d4 and k
 select id as post1 from private.discussion_posts where discussion_id = :d1 and kind = 'open' \gset
 select id as post3 from private.discussion_posts where discussion_id = :d2 and kind = 'open' \gset
 
+select login(:admin);
+select public.rename_discussion(:d2, '둘째 토론 고침');
+select logout();
+select id as rename1 from private.discussion_posts where discussion_id = :d2 and kind = 'rename' \gset
+
 -- ── 신고 ─────────────────────────────────────────────────────────────────────
 select login(:alice);
+select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :rename1), 'WK006', null,
+  'a rename post cannot be reported');
 select lives_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post2),
   'a member can report a discussion post');
 select throws_ok(format($$select public.report_discussion_post(%s, 'privacy')$$, :post2), 'WK011', null,

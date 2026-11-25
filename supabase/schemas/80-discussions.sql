@@ -1053,7 +1053,8 @@ ALTER TABLE "private"."reports"
   ADD CONSTRAINT "reports_post_id_fkey" FOREIGN KEY (post_id) REFERENCES private.discussion_posts(id) ON DELETE CASCADE;
 
 -- 토론 글 하나를 신고한다. 토론을 신고하려면 첫 글을 신고한다. 규칙은 판 신고(`report_revision`)와
--- 같다. 내 글, 내가 볼 수 없는 토론의 글, 숨기거나 거둔 글은 없는 글과 같은 오류다.
+-- 같다. 내 글, 내가 볼 수 없는 토론의 글, 숨기거나 거둔 글, 닫기·다시 열기·제목 바꾸기 글은 없는 글과
+-- 같은 오류다. 닫기·다시 열기 글은 토론의 상태를, 제목 바꾸기 글은 관리 기록을 겸한다.
 CREATE OR REPLACE FUNCTION public.report_discussion_post (
   p_post_id  bigint,
   p_category text,
@@ -1069,16 +1070,21 @@ declare
   v_note text := private.check_report_note(p_category, p_note);
 begin
   -- 글과 토론을 잠근다. 관리자가 같은 때 숨기거나 지우면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
-  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다.
+  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다. 다른 토론 쓰기(`lock_discussion`)처럼 토론을
+  -- 먼저 잠가, 같은 글을 거두는 일과 서로 기다리지 않게 한다.
+  perform 1 from private.discussions
+   where id = (select discussion_id from private.discussion_posts where id = p_post_id)
+     for share;
   perform 1
     from private.discussion_posts as post
     join private.discussions as discussion on discussion.id = post.discussion_id
    where post.id = p_post_id
+     and post.kind in ('open', 'post')
      and post.hidden_at is null
      and post.withdrawn_at is null
      and post.member_id <> v_member_id
      and private.can_see_discussion(discussion)
-     for share of post, discussion;
+     for share of post;
   if not found then
     raise exception 'post not found' using errcode = 'WK006';
   end if;
