@@ -94,10 +94,10 @@ export function titleToPath(title: string): string {
     .join("/");
 }
 
-/** 문서를 가리키는 앱 안의 주소. `action`은 `w`(보기), `edit`, `history`, `diff`, `move`. */
+/** 문서를 가리키는 앱 안의 주소. `action`은 `w`(보기), `edit`, `history`, `diff`, `move`, `discussion`. */
 export function pageHref(
   title: string,
-  action: "w" | "edit" | "history" | "diff" | "move" = "w",
+  action: "w" | "edit" | "history" | "diff" | "move" | "discussion" = "w",
 ): string {
   return `/${action}/${titleToPath(title)}`;
 }

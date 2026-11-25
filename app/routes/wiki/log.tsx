@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+
 import type { Route } from "./+types/log";
 import {
   describeAdminLog,
@@ -5,6 +7,7 @@ import {
   listAdminLog,
 } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
+import { topicHref } from "~/features/discussions";
 import { RelativeTime } from "~/shared/components/relative-time";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
@@ -51,6 +54,19 @@ export default function LogRoute({ loaderData }: Route.ComponentProps) {
                   <RelativeTime value={entry.createdAt} />
                 </span>
                 {describeAdminLog(entry)}
+                {/* 지운 토론은 회원이 열 수 없다. */}
+                {entry.discussionId !== null &&
+                entry.action !== "delete_discussion" ? (
+                  <>
+                    {" "}
+                    <Link
+                      to={topicHref(entry.discussionId)}
+                      className="text-primary hover:underline"
+                    >
+                      토론 보기
+                    </Link>
+                  </>
+                ) : null}
               </p>
               <p className="text-muted-foreground">사유: {entry.reason}</p>
             </li>

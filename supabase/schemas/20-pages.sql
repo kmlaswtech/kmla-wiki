@@ -901,6 +901,8 @@ begin
     'resolved', public.resolve_body(coalesce(v_revision.body, private.empty_doc())),
     'images', public.resolve_images(coalesce(v_revision.body, private.empty_doc())),
     'backlinks', public.page_backlinks(v_page.title_key),
+    -- 문서의 토론 단추에 붙이는 수(`80-discussions`).
+    'open_discussions', public.count_open_discussions(v_page.id),
     'children', coalesce((
       select jsonb_agg(child.title order by child.title)
       from public.pages as child

@@ -2,6 +2,7 @@ import {
   History,
   LayoutList,
   Menu,
+  MessagesSquare,
   ShieldAlert,
   Shuffle,
   User,
@@ -27,7 +28,7 @@ const NAV_LINK =
   "inline-flex h-7 items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground coarse:h-9 coarse:px-2.5";
 
 /**
- * 모든 화면 위의 띠: 대문, 검색, 최근 변경, 특수 기능, 아무 문서, 내 정보.
+ * 모든 화면 위의 띠: 대문, 검색, 최근 변경, 최근 토론, 특수 기능, 아무 문서, 내 정보.
  *
  * `stickyOnNarrow`를 끄면 좁은 화면에서는 위에 붙지 않고 본문과 함께 올라간다. 편집 화면이 쓴다.
  * 폰에서는 편집기 툴바와 키보드까지 겹치면 글을 쓸 자리가 거의 남지 않는다.
@@ -144,6 +145,7 @@ interface NavItem {
 function navItems(status: MemberStatus, openReports: number): NavItem[] {
   return [
     { to: "/recent", label: "최근 변경", icon: History },
+    { to: "/recent-discussions", label: "최근 토론", icon: MessagesSquare },
     { to: "/special", label: "특수 기능", icon: LayoutList },
     { to: "/random", label: "무작위 문서", icon: Shuffle, iconOnWide: true },
     ...(status.isAdmin

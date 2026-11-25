@@ -15,7 +15,12 @@ export type AdminAction =
   | "unhide_revision"
   | "view_author_edits"
   | "change_ban"
-  | "bulk_revert";
+  | "bulk_revert"
+  | "hide_discussion_post"
+  | "unhide_discussion_post"
+  | "delete_discussion"
+  | "restore_discussion"
+  | "close_discussion_early";
 
 /** 공개 관리 기록의 한 줄. 누가 했는지는 없다("관리자"로만 보인다). */
 export interface AdminLogEntry {
@@ -27,6 +32,8 @@ export interface AdminLogEntry {
   pseudonym: string | null;
   reason: string;
   note: string | null;
+  /** 대상 토론(토론 동작). */
+  discussionId: number | null;
   createdAt: string;
 }
 
@@ -97,6 +104,17 @@ export function describeAdminLog(entry: AdminLogEntry): string {
       return `${who}의 다른 편집 조회`;
     case "bulk_revert":
       return `${who}의 편집 일괄 되돌림${note}`;
+    // 토론은 번호로만 적는다. 토론 제목은 지우거나 숨길 대상일 수 있어서 기록에 남기지 않는다.
+    case "hide_discussion_post":
+      return `‘${page}’ 토론 #${entry.discussionId}에서 ${entry.pseudonym ?? ""}의 글 숨김`;
+    case "unhide_discussion_post":
+      return `‘${page}’ 토론 #${entry.discussionId}에서 ${entry.pseudonym ?? ""}의 글 숨김 해제`;
+    case "delete_discussion":
+      return `‘${page}’ 토론 #${entry.discussionId} 지움`;
+    case "restore_discussion":
+      return `‘${page}’ 토론 #${entry.discussionId} 되살림`;
+    case "close_discussion_early":
+      return `‘${page}’ 토론 #${entry.discussionId} 24시간 전에 닫음`;
   }
 }
 
