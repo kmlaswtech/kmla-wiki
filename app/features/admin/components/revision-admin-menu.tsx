@@ -20,7 +20,8 @@ interface RevisionAdminMenuProps {
   revision: {
     id: number;
     authorPseudonym: string;
-    hiddenAt: string | null;
+    /** 생략하면 보이는 판이다. */
+    hiddenAt?: string | null;
   };
   pageTitle: string;
   /** 현재 판은 앞 판으로 되돌린 뒤 숨긴다. */
@@ -78,7 +79,7 @@ export function RevisionAdminMenu({
             작성자 차단
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setOpen("hide")}>
-            {hideLabel(revision, isCurrent)}
+            {hideLabel(isCurrent, revision.hiddenAt)}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setOpen("grant")}>

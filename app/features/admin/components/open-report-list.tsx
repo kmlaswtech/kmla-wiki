@@ -101,7 +101,6 @@ function OpenReportItem({
             revision={{
               id: report.revisionId,
               authorPseudonym: report.authorPseudonym,
-              hiddenAt: null,
             }}
             pageTitle={report.pageTitle}
             isCurrent={report.isCurrent}
@@ -113,7 +112,7 @@ function OpenReportItem({
             disabled={pending}
             onClick={() => setHiding(true)}
           >
-            {hideLabel({ hiddenAt: null }, report.isCurrent)}
+            {hideLabel(report.isCurrent)}
           </Button>
           <Button
             size="xs"
@@ -145,7 +144,7 @@ function OpenReportItem({
       <HideRevisionDialog
         open={hiding}
         onOpenChange={setHiding}
-        revision={{ id: report.revisionId, hiddenAt: null }}
+        revision={{ id: report.revisionId }}
         isCurrent={report.isCurrent}
         onDone={onChanged}
       />

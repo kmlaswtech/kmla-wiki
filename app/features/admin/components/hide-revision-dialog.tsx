@@ -3,7 +3,8 @@ import { ReasonDialog } from "./reason-dialog";
 
 interface HideTarget {
   id: number;
-  hiddenAt: string | null;
+  /** 생략하면 보이는 판이다(열린 신고의 판은 늘 보인다). */
+  hiddenAt?: string | null;
 }
 
 type HideMode = "unhide" | "hide" | "revertAndHide";
@@ -51,12 +52,12 @@ const MODES: Record<
   },
 };
 
-/** 메뉴와 단추의 이름. */
+/** 메뉴와 단추의 이름. `hiddenAt`을 생략하면 보이는 판이다. */
 export function hideLabel(
-  revision: Pick<HideTarget, "hiddenAt">,
   isCurrent: boolean,
+  hiddenAt?: string | null,
 ): string {
-  return MODES[hideMode(revision, isCurrent)].label;
+  return MODES[hideMode({ hiddenAt }, isCurrent)].label;
 }
 
 /** 판 숨기기와 숨김 해제. 현재 판이면 되돌리고 숨긴다. 숨기면 그 판의 신고가 닫힌다. */
