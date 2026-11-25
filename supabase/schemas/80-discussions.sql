@@ -491,8 +491,8 @@ GRANT EXECUTE ON FUNCTION "public"."reopen_discussion"(bigint, text, boolean) TO
 
 REVOKE ALL ON FUNCTION "public"."reopen_discussion"(bigint, text, boolean) FROM PUBLIC, "anon";
 
--- 내 글을 거둔다. 내 글 뒤에 거두지 않은 글이 없을 때만 된다(WK024). 첫 글은 토론 거두기로,
--- 닫기·다시 열기 글은 거둘 수 없다(WK024). 거둔 글은 "거둔 글"로만 보인다.
+-- 내 글을 거둔다. 내 글 뒤에 거두지 않은 글(제목 바꾸기 글 말고)이 없을 때만 된다(WK024). 첫 글은
+-- 토론 거두기로, 닫기·다시 열기 글과 숨긴 글은 거둘 수 없다(WK024). 거둔 글은 "거둔 글"로만 보인다.
 CREATE OR REPLACE FUNCTION public.withdraw_discussion_post (
   p_post_id bigint
 )
@@ -521,9 +521,15 @@ begin
   if v_post.kind <> 'post' then
     raise exception 'this post cannot be withdrawn' using errcode = 'WK024', detail = 'kind';
   end if;
+  -- 숨긴 글을 거두면 "거둔 글"로 보여 관리자가 숨김을 되돌릴 수 없다.
+  if v_post.hidden_at is not null then
+    raise exception 'hidden post' using errcode = 'WK024', detail = 'hidden';
+  end if;
+  -- 제목 바꾸기 글은 답글이 아니다. 누구도 거둘 수 없어서 세면 영영 거둘 수 없다.
   if exists (
     select 1 from private.discussion_posts as later
-    where later.discussion_id = v_post.discussion_id and later.id > v_post.id and later.withdrawn_at is null
+    where later.discussion_id = v_post.discussion_id and later.id > v_post.id
+      and later.kind <> 'rename' and later.withdrawn_at is null
   ) then
     raise exception 'there are replies' using errcode = 'WK024', detail = 'replies';
   end if;
@@ -542,7 +548,7 @@ GRANT EXECUTE ON FUNCTION "public"."withdraw_discussion_post"(bigint) TO "postgr
 
 REVOKE ALL ON FUNCTION "public"."withdraw_discussion_post"(bigint) FROM PUBLIC, "anon";
 
--- 내가 연 토론을 거둔다. 첫 글 말고 거두지 않은 글이 없을 때만 된다(WK024). 거둔 토론은 아무에게도
+-- 내가 연 토론을 거둔다. 첫 글과 제목 바꾸기 글 말고 거두지 않은 글이 없을 때만 된다(WK024). 거둔 토론은 아무에게도
 -- 보이지 않는다. 화면이 토론 목록으로 돌아가도록 문서 제목을 돌려준다.
 CREATE OR REPLACE FUNCTION public.withdraw_discussion (
   p_discussion_id bigint
@@ -561,7 +567,8 @@ begin
   end if;
   if exists (
     select 1 from private.discussion_posts as reply
-    where reply.discussion_id = v_discussion.id and reply.kind <> 'open' and reply.withdrawn_at is null
+    where reply.discussion_id = v_discussion.id and reply.kind not in ('open', 'rename')
+      and reply.withdrawn_at is null
   ) then
     raise exception 'there are replies' using errcode = 'WK024', detail = 'replies';
   end if;

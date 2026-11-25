@@ -49,27 +49,33 @@ export function formatRemaining(until: string, now: number): string {
 }
 
 /**
- * 이 글을 거둘 수 있는가. 내 글이고, 일반 글이고, 뒤에 거두지 않은 글이 없어야 한다. 서버의
- * `withdraw_discussion_post`와 같은 판단이다.
+ * 이 글을 거둘 수 있는가. 내 글이고, 숨기지 않은 일반 글이고, 뒤에 거두지 않은 글(제목 바꾸기 글
+ * 말고)이 없어야 한다. 서버의 `withdraw_discussion_post`와 같은 판단이다.
  */
 export function canWithdrawPost(
   posts: readonly DiscussionPost[],
   post: DiscussionPost,
 ): boolean {
-  if (!post.mine || post.kind !== "post" || post.state === "withdrawn") {
+  if (!post.mine || post.kind !== "post" || post.state !== "visible") {
     return false;
   }
   return posts.every(
-    (other) => other.id <= post.id || other.state === "withdrawn",
+    (other) =>
+      other.id <= post.id ||
+      other.kind === "rename" ||
+      other.state === "withdrawn",
   );
 }
 
-/** 토론을 거둘 수 있는가. 내가 열었고 첫 글 말고 거두지 않은 글이 없어야 한다. */
+/** 토론을 거둘 수 있는가. 내가 열었고 첫 글과 제목 바꾸기 글 말고 거두지 않은 글이 없어야 한다. */
 export function canWithdrawDiscussion(discussion: Discussion): boolean {
   return (
     discussion.createdByMe &&
     discussion.posts.every(
-      (post) => post.kind === "open" || post.state === "withdrawn",
+      (post) =>
+        post.kind === "open" ||
+        post.kind === "rename" ||
+        post.state === "withdrawn",
     )
   );
 }

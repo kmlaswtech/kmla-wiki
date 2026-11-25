@@ -214,6 +214,32 @@ select throws_ok(format($$select public.rename_discussion(%s, ' ')$$, :d3), 'WK0
   'the title cannot be empty');
 select logout();
 
+-- 제목 바꾸기 글은 답글로 세지 않는다. 숨긴 글은 거둘 수 없다.
+select login(:alice);
+select public.open_discussion(:p1, '제목 오타', '첫 글') as d5 \gset
+select public.add_discussion_post(:d5, '덧붙임') as a5 \gset
+select public.add_discussion_post(:d5, '숨길 글') as a6 \gset
+select logout();
+select login(:admin);
+select public.rename_discussion(:d5, '제목 고침');
+select public.set_discussion_post_hidden(:a6, true, '비방');
+select logout();
+select login(:alice);
+select throws_ok(format($$select public.withdraw_discussion_post(%s)$$, :a6), 'WK024', null,
+  'a hidden post cannot be withdrawn');
+select logout();
+select login(:admin);
+select public.set_discussion_post_hidden(:a6, false, '오해');
+select logout();
+select login(:alice);
+select lives_ok(format($$select public.withdraw_discussion_post(%s)$$, :a6),
+  'a rename post after my post does not block withdrawing it');
+select lives_ok(format($$select public.withdraw_discussion_post(%s)$$, :a5),
+  'the next post can be withdrawn too');
+select lives_ok(format($$select public.withdraw_discussion(%s)$$, :d5),
+  'a rename post does not block withdrawing the discussion');
+select logout();
+
 select login(:admin);
 select lives_ok(format($$select public.set_discussion_post_hidden(%s, false, '오해')$$, :d3p), 'the admin can unhide a post');
 select lives_ok(format($$select public.set_discussion_deleted(%s, true, '도배')$$, :d3), 'the admin can delete a discussion');

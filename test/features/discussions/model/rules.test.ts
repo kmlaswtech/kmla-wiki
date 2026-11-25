@@ -91,6 +91,14 @@ describe("canWithdrawPost", () => {
     ).toBe(true);
   });
 
+  it("ignores a later rename post and refuses a hidden post", () => {
+    expect(canWithdrawPost([mine, post({ id: 3, kind: "rename" })], mine)).toBe(
+      true,
+    );
+    const hidden = post({ id: 2, mine: true, state: "hidden" });
+    expect(canWithdrawPost([hidden], hidden)).toBe(false);
+  });
+
   it("refuses posts of others and the opening, close and reopen posts", () => {
     const other = post({ id: 2 });
     expect(canWithdrawPost([other], other)).toBe(false);
@@ -110,6 +118,20 @@ describe("canWithdrawDiscussion", () => {
           posts: [
             post({ id: 1, kind: "open" }),
             post({ id: 2, state: "withdrawn" }),
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("ignores rename posts", () => {
+    expect(
+      canWithdrawDiscussion(
+        discussion({
+          createdByMe: true,
+          posts: [
+            post({ id: 1, kind: "open" }),
+            post({ id: 2, kind: "rename" }),
           ],
         }),
       ),

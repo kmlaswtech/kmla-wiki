@@ -2,7 +2,7 @@
 -- discussion_id 열을 더한다. 새 오류 코드:
 --   WK022  닫힌 토론에는 글을 쓸 수 없다(다시 열기로 쓴다)
 --   WK023  이 차례가 열린 지 24시간이 지나지 않아 닫을 수 없다
---   WK024  거둘 수 없다. detail = 'replies'(뒤에 글이 있음), 'kind'(첫 글·닫기·다시 열기 글)
+--   WK024  거둘 수 없다. detail = 'replies'(뒤에 글이 있음), 'kind'(첫 글·닫기·다시 열기 글), 'hidden'(숨긴 글)
 -- 같이 쓰는 코드: WK005 detail 'post'·'title'·'rate', WK014 detail 'post'·'conclusion'·'title'(비었거나 짧음).
 
 SET local check_function_bodies = off;
@@ -894,7 +894,8 @@ begin
   end if;
   if exists (
     select 1 from private.discussion_posts as reply
-    where reply.discussion_id = v_discussion.id and reply.kind <> 'open' and reply.withdrawn_at is null
+    where reply.discussion_id = v_discussion.id and reply.kind not in ('open', 'rename')
+      and reply.withdrawn_at is null
   ) then
     raise exception 'there are replies' using errcode = 'WK024', detail = 'replies';
   end if;
@@ -934,9 +935,15 @@ begin
   if v_post.kind <> 'post' then
     raise exception 'this post cannot be withdrawn' using errcode = 'WK024', detail = 'kind';
   end if;
+  -- 숨긴 글을 거두면 "거둔 글"로 보여 관리자가 숨김을 되돌릴 수 없다.
+  if v_post.hidden_at is not null then
+    raise exception 'hidden post' using errcode = 'WK024', detail = 'hidden';
+  end if;
+  -- 제목 바꾸기 글은 답글이 아니다. 누구도 거둘 수 없어서 세면 영영 거둘 수 없다.
   if exists (
     select 1 from private.discussion_posts as later
-    where later.discussion_id = v_post.discussion_id and later.id > v_post.id and later.withdrawn_at is null
+    where later.discussion_id = v_post.discussion_id and later.id > v_post.id
+      and later.kind <> 'rename' and later.withdrawn_at is null
   ) then
     raise exception 'there are replies' using errcode = 'WK024', detail = 'replies';
   end if;

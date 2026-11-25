@@ -28,6 +28,7 @@ const SHORT_MESSAGE: Record<string, string> = {
 const WITHDRAW_MESSAGE: Record<string, string> = {
   replies: "뒤에 다른 글이 있어 삭제할 수 없습니다.",
   kind: "이 글은 삭제할 수 없습니다.",
+  hidden: "관리자가 숨긴 글은 삭제할 수 없습니다.",
 };
 
 export function describeDiscussionError(error: unknown): string {
