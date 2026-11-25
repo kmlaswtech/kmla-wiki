@@ -2,20 +2,32 @@ import { MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import {
-  sortDiscussions,
-  topicHref,
-  type DiscussionSort,
-} from "../model/rules";
+import { topicHref } from "../model/rules";
 import type { DiscussionSummary } from "../model/types";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { cn } from "~/shared/lib/utils";
 import { Badge } from "~/shared/ui/badge";
-import { Checkbox } from "~/shared/ui/checkbox";
-import { Label } from "~/shared/ui/label";
-import { NativeSelect } from "~/shared/ui/native-select";
 
-/** 문서의 토론 목록과 정렬·"열린 것만" 거르개. */
+type DiscussionFilter = "all" | "open" | "closed";
+
+const FILTERS: { value: DiscussionFilter; label: string }[] = [
+  { value: "all", label: "모두" },
+  { value: "open", label: "열린 토론" },
+  { value: "closed", label: "닫힌 토론" },
+];
+
+const EMPTY: Record<DiscussionFilter, string> = {
+  all: "토론이 없습니다.",
+  open: "열린 토론이 없습니다.",
+  closed: "닫힌 토론이 없습니다.",
+};
+
+function matches(row: DiscussionSummary, filter: DiscussionFilter): boolean {
+  if (filter === "all") return true;
+  return row.isOpen === (filter === "open");
+}
+
+/** 문서의 토론 목록(서버가 준 최근 활동순)과 모두·열린·닫힌 거르개. 처음에는 열린 토론만 보인다. */
 export function DiscussionList({
   discussions,
   revisionHref,
@@ -24,37 +36,39 @@ export function DiscussionList({
   /** 붙인 판을 여는 주소. */
   revisionHref: (revisionId: number) => string;
 }) {
-  const [sort, setSort] = useState<DiscussionSort>("recent");
-  const [openOnly, setOpenOnly] = useState(false);
+  const [filter, setFilter] = useState<DiscussionFilter>("open");
 
-  const rows = sortDiscussions(
-    openOnly ? discussions.filter((row) => row.isOpen) : discussions,
-    sort,
-  );
+  const rows = discussions.filter((row) => matches(row, filter));
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
-        <NativeSelect
-          size="sm"
-          aria-label="정렬"
-          value={sort}
-          onChange={(event) => setSort(event.target.value as DiscussionSort)}
-        >
-          <option value="recent">최근 활동순</option>
-          <option value="open-first">열린 것 먼저</option>
-        </NativeSelect>
-        <Label className="flex items-center gap-2 font-normal">
-          <Checkbox checked={openOnly} onCheckedChange={setOpenOnly} />
-          열린 것만
-        </Label>
+      <div
+        role="group"
+        aria-label="보일 토론"
+        className="mb-2 inline-flex rounded-md border p-0.5 text-sm"
+      >
+        {FILTERS.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={filter === value}
+            onClick={() => setFilter(value)}
+            className={cn(
+              "rounded-sm px-3 py-1 text-muted-foreground hover:text-foreground coarse:py-1.5",
+              filter === value && "bg-muted font-medium text-foreground",
+            )}
+          >
+            {label}{" "}
+            <span className="tabular-nums">
+              {discussions.filter((row) => matches(row, value)).length}
+            </span>
+          </button>
+        ))}
       </div>
 
       {rows.length === 0 ? (
         <p className="py-8 text-center text-muted-foreground">
-          {discussions.length === 0
-            ? "토론이 없습니다."
-            : "열린 토론이 없습니다."}
+          {EMPTY[filter]}
         </p>
       ) : (
         <ul className="divide-y text-sm">

@@ -105,14 +105,13 @@ export function DiscussionComposer({
           }
         : {
             title: "토론 닫기",
-            description:
-              "쓴 글이 이 토론의 결론으로 남습니다. 닫은 뒤에는 다시 열 때까지 글을 쓸 수 없습니다.",
+            description: "작성한 글이 이 토론의 결론으로 남습니다.",
             action: "닫기",
             destructive: false,
           };
 
   const label = discussion.isOpen
-    ? "글 (닫을 때는 이 글이 결론이 됩니다)"
+    ? "글 (닫을 때는 결론과 함께 닫아주세요)"
     : "다시 여는 까닭";
 
   return (
@@ -127,8 +126,8 @@ export function DiscussionComposer({
           onChange={(event) => setBody(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          글은 수정할 수 없습니다. 뒤에 다른 글이 존재하지 않을 때만 삭제할 수
-          있습니다.
+          등록된 글은 수정할 수 없습니다. 뒤에 다른 글이 존재하지 않을 때만
+          삭제할 수 있습니다.
           {discussion.isOpen
             ? ` 닫을 때는 결론과 함께 ${DISCUSSION_LIMIT.conclusion}자 이상 작성해야 합니다.`
             : ` 다시 열 때는 ${DISCUSSION_LIMIT.conclusion}자 이상 작성해야 합니다.`}

@@ -179,7 +179,9 @@ export function PageArticle({
             >
               토론
               {view.openDiscussions > 0 ? (
-                <Badge className="tabular-nums">{view.openDiscussions}</Badge>
+                <span className="text-muted-foreground tabular-nums">
+                  {view.openDiscussions}
+                </span>
               ) : null}
             </LinkButton>
             {editable ? (

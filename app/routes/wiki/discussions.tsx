@@ -101,7 +101,7 @@ function DiscussionsPage({ loaderData, actionData }: Route.ComponentProps) {
             <span className="font-normal text-muted-foreground">토론</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            이 문서를 어떻게 쓸지 이야기하는 곳입니다.
+            이 문서를 어떻게 작성할지 이야기하는 곳입니다.
           </p>
         </div>
         {canWrite && !showNew ? (

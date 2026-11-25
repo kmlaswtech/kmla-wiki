@@ -73,17 +73,3 @@ export function canWithdrawDiscussion(discussion: Discussion): boolean {
     )
   );
 }
-
-export type DiscussionSort = "recent" | "open-first";
-
-/** 목록 정렬. 서버는 최근 활동순으로 준다. "열린 것 먼저"는 그 안에서 열린 토론을 앞으로 뺀다. */
-export function sortDiscussions<Row extends { isOpen: boolean }>(
-  rows: readonly Row[],
-  sort: DiscussionSort,
-): Row[] {
-  if (sort === "recent") return [...rows];
-  return [
-    ...rows.filter((row) => row.isOpen),
-    ...rows.filter((row) => !row.isOpen),
-  ];
-}

@@ -6,7 +6,6 @@ import {
   closeState,
   formatRemaining,
   postLength,
-  sortDiscussions,
 } from "~/features/discussions/model/rules";
 import type {
   Discussion,
@@ -126,25 +125,6 @@ describe("canWithdrawDiscussion", () => {
       ),
     ).toBe(false);
     expect(canWithdrawDiscussion(discussion({}))).toBe(false);
-  });
-});
-
-describe("sortDiscussions", () => {
-  const rows = [
-    { id: 1, isOpen: false },
-    { id: 2, isOpen: true },
-    { id: 3, isOpen: false },
-    { id: 4, isOpen: true },
-  ];
-  it("keeps the server order for recent activity", () => {
-    expect(sortDiscussions(rows, "recent").map((row) => row.id)).toEqual([
-      1, 2, 3, 4,
-    ]);
-  });
-  it("moves open discussions first and keeps the order inside each group", () => {
-    expect(sortDiscussions(rows, "open-first").map((row) => row.id)).toEqual([
-      2, 4, 1, 3,
-    ]);
   });
 });
 
