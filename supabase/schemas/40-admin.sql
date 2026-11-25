@@ -1391,10 +1391,13 @@ CREATE TABLE "public"."admin_log" (
   -- 기간, 보호 등급 같은 덧붙임.
   "note"        text,
   "created_at"  timestamp with time zone NOT NULL DEFAULT now(),
+  -- 대상 토론. 토론 글 숨기기, 토론 지우기, 관리자로 일찍 닫기에 남긴다.
+  "discussion_id" bigint,
   CONSTRAINT "admin_log_action"
     CHECK
     ((action = ANY (ARRAY['ban'::text, 'lift_ban'::text, 'grant_admin'::text, 'revoke_admin'::text, 'protect'::text, 'unprotect'::text, 'delete_page'::text, 'restore_page'::text,
-    'hide_revision'::text, 'unhide_revision'::text, 'view_author_edits'::text, 'change_ban'::text, 'bulk_revert'::text, 'restore_admin'::text]))),
+    'hide_revision'::text, 'unhide_revision'::text, 'view_author_edits'::text, 'change_ban'::text, 'bulk_revert'::text, 'restore_admin'::text,
+    'hide_discussion_post'::text, 'unhide_discussion_post'::text, 'delete_discussion'::text, 'restore_discussion'::text, 'close_discussion_early'::text]))),
   CONSTRAINT "admin_log_pkey" PRIMARY KEY (id)
 );
 
