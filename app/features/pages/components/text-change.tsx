@@ -22,7 +22,7 @@ export function TextChange({
     return (
       <span
         className={cn("text-muted-foreground", className)}
-        title="보이는 글자는 그대로이고 꾸밈, 표, 분류 같은 것만 바뀌었습니다."
+        title="글자 변경 없음 (서식·표·분류·이동)"
       >
         서식 변경
       </span>
