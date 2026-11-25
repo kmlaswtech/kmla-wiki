@@ -223,6 +223,42 @@ GRANT EXECUTE ON FUNCTION "public"."list_open_reports"() TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."list_open_reports"() FROM PUBLIC, "anon";
 
+-- 신고 한 건을 넣는다. 판 신고와 글 신고가 같이 쓴다. 대상(`p_revision_id`, `p_post_id` 중 하나)은 부르는
+-- 쪽이 확인한다. 기각된 대상은 같은 사람이 다시 신고하지 않는다. 판과 글은 고칠 수 없으므로 같은 판단이
+-- 나온다.
+CREATE OR REPLACE FUNCTION private.insert_report (
+  p_member_id   bigint,
+  p_revision_id bigint,
+  p_post_id     bigint,
+  p_category    text,
+  p_note        text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SET search_path TO ''
+  AS $function$
+begin
+  if exists (
+    select 1 from private.reports as report
+    where (report.revision_id = p_revision_id or report.post_id = p_post_id)
+      and report.reporter_member_id = p_member_id
+      and report.resolution = 'dismissed'
+  ) then
+    raise exception 'already dismissed' using errcode = 'WK011';
+  end if;
+  perform private.check_report_rate(p_member_id);
+
+  begin
+    insert into private.reports (revision_id, post_id, reporter_member_id, category, note)
+    values (p_revision_id, p_post_id, p_member_id, p_category, p_note);
+  exception when unique_violation then
+    raise exception 'already reported' using errcode = 'WK011';
+  end;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."insert_report"(bigint, bigint, bigint, text, text) FROM PUBLIC;
+
 -- 판 하나를 신고한다. 회원 확인을 마치고 차단되지 않은 회원만 한다. 숨긴 판과 삭제된 문서의 판은
 -- 보이지 않으므로 신고할 수 없다(없는 판과 같은 오류).
 CREATE OR REPLACE FUNCTION public.report_revision (
@@ -249,23 +285,7 @@ begin
   ) then
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
-  -- 기각된 판은 같은 사람이 다시 신고하지 않는다. 판의 내용은 바뀌지 않으므로 같은 판단이 나온다.
-  if exists (
-    select 1 from private.reports as report
-    where report.revision_id = p_revision_id
-      and report.reporter_member_id = v_member_id
-      and report.resolution = 'dismissed'
-  ) then
-    raise exception 'already dismissed' using errcode = 'WK011';
-  end if;
-  perform private.check_report_rate(v_member_id);
-
-  begin
-    insert into private.reports (revision_id, reporter_member_id, category, note)
-    values (p_revision_id, v_member_id, p_category, v_note);
-  exception when unique_violation then
-    raise exception 'already reported' using errcode = 'WK011';
-  end;
+  perform private.insert_report(v_member_id, p_revision_id, null, p_category, v_note);
 end;
 $function$;
 

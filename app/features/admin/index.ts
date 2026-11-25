@@ -12,6 +12,7 @@ export { ReasonDialog } from "./components/reason-dialog";
 export { RestorableRevocationList } from "./components/restorable-revocation-list";
 export { RevisionAdminMenu } from "./components/revision-admin-menu";
 export { useOpenReportCount } from "./components/use-open-report-count";
+export { useResolveReport } from "./components/use-resolve-report";
 export {
   liftBan,
   notifyOpenReportsChanged,

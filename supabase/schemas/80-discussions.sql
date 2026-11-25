@@ -1088,23 +1088,7 @@ begin
   if not found then
     raise exception 'post not found' using errcode = 'WK006';
   end if;
-  -- 기각된 글은 같은 사람이 다시 신고하지 않는다. 글은 고칠 수 없으므로 같은 판단이 나온다.
-  if exists (
-    select 1 from private.reports as report
-    where report.post_id = p_post_id
-      and report.reporter_member_id = v_member_id
-      and report.resolution = 'dismissed'
-  ) then
-    raise exception 'already dismissed' using errcode = 'WK011';
-  end if;
-  perform private.check_report_rate(v_member_id);
-
-  begin
-    insert into private.reports (post_id, reporter_member_id, category, note)
-    values (p_post_id, v_member_id, p_category, v_note);
-  exception when unique_violation then
-    raise exception 'already reported' using errcode = 'WK011';
-  end;
+  perform private.insert_report(v_member_id, null, p_post_id, p_category, v_note);
 end;
 $function$;
 

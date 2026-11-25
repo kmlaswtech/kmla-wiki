@@ -2,16 +2,16 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { notifyOpenReportsChanged, resolveReports } from "../data/mutations";
+import { resolveReports } from "../data/mutations";
 import type { OpenReport } from "../data/queries";
 import { describeAdminError } from "../model/log";
 import { HideRevisionDialog, hideLabel } from "./hide-revision-dialog";
 import { InlineRevisionDiff } from "./inline-revision-diff";
 import { RevisionAdminMenu } from "./revision-admin-menu";
+import { useResolveReport } from "./use-resolve-report";
 import { pageHref } from "~/features/markup";
 import { ReportNoteList } from "~/features/reports";
 import { formatDateTime } from "~/shared/lib/time";
-import { isWikiError } from "~/shared/supabase/errors";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
@@ -55,25 +55,11 @@ function OpenReportItem({
 }) {
   const [open, setOpen] = useState(false);
   const [hiding, setHiding] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function resolve(resolution: "handled" | "dismissed") {
-    setPending(true);
-    setError(null);
-    try {
-      await resolveReports(report.revisionId, resolution);
-      onChanged();
-    } catch (caught) {
-      // 다른 관리자가 먼저 닫았다(WK011). 목록과 머리띠의 수에서 빼면 된다.
-      if (isWikiError(caught, "WK011")) {
-        notifyOpenReportsChanged();
-        onChanged();
-      } else setError(describeAdminError(caught));
-    } finally {
-      setPending(false);
-    }
-  }
+  const { pending, error, resolve } = useResolveReport(
+    (resolution) => resolveReports(report.revisionId, resolution),
+    describeAdminError,
+    onChanged,
+  );
 
   return (
     <li className="px-3 py-2">
