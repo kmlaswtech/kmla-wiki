@@ -51,11 +51,10 @@ export function DiscussionThread({
             post={post}
             canWithdraw={canWrite && canWithdrawPost(posts, post)}
             // 관리자는 신고하지 않고 바로 숨긴다.
-            reportTitle={
+            canReport={
               canWrite && !isAdmin && !post.mine && post.state === "visible"
-                ? pageTitle
-                : null
             }
+            pageTitle={pageTitle}
             isAdmin={isAdmin}
             onAdminDone={onAdminDone}
           />
@@ -68,14 +67,16 @@ export function DiscussionThread({
 function PostCard({
   post,
   canWithdraw,
-  reportTitle,
+  canReport,
+  pageTitle,
   isAdmin,
   onAdminDone,
 }: {
   post: DiscussionPost;
   canWithdraw: boolean;
-  /** 신고할 수 있으면 문서 제목, 아니면 null. */
-  reportTitle: string | null;
+  canReport: boolean;
+  /** 신고 대화상자에 적는 문서 제목. */
+  pageTitle: string;
   isAdmin: boolean;
   onAdminDone: () => void;
 }) {
@@ -113,12 +114,12 @@ function PostCard({
               삭제
             </WithdrawButton>
           ) : null}
-          {reportTitle !== null ? (
+          {canReport ? (
             <ReportButton
               target={{
                 kind: "post",
                 id: post.id,
-                pageTitle: reportTitle,
+                pageTitle,
                 authorName: post.authorName,
               }}
             />

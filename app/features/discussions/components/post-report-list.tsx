@@ -7,7 +7,7 @@ import { topicHref } from "../model/rules";
 import type { OpenPostReport } from "../model/types";
 import { PostText } from "./post-text";
 import { notifyOpenReportsChanged, ReasonDialog } from "~/features/admin";
-import { reportCategoryLabel } from "~/features/reports";
+import { ReportNoteList } from "~/features/reports";
 import { formatDateTime } from "~/shared/lib/time";
 import { isWikiError } from "~/shared/supabase/errors";
 import { Badge } from "~/shared/ui/badge";
@@ -142,20 +142,7 @@ function PostReportItem({
         <PostText text={report.body} />
       </div>
 
-      <ul className="mt-1 space-y-0.5">
-        {report.reports.map((entry, index) => (
-          <li key={index} className="text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {reportCategoryLabel(entry.category)}
-            </span>
-            {entry.note ? ` · ${entry.note}` : null}
-            <span className="text-xs">
-              {" "}
-              · {formatDateTime(entry.createdAt)}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <ReportNoteList notes={report.reports} />
 
       {error ? (
         <p role="alert" className="mt-1 text-destructive">

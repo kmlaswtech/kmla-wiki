@@ -104,10 +104,13 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."check_report_rate"(bigint) FROM PUBLIC;
 
--- 조치(판 숨기기, 문서 삭제, 일괄 되돌리기)가 부른다. 그 판들에 걸린 처리되지 않은 신고를 `handled`로
--- 닫고 닫은 건수를 돌려준다. 처리한 관리자는 지금 로그인한 회원이다.
+-- 판들과 토론 글들에 걸린 처리되지 않은 신고를 닫고 닫은 건수를 돌려준다. 처리한 관리자는 지금
+-- 로그인한 회원이다. 조치(판·글 숨기기, 토론 지우기, 문서 삭제, 일괄 되돌리기)는 `handled`로 닫고,
+-- 관리자의 신고 닫기(`resolve_reports`, `resolve_post_reports`)는 `handled`나 `dismissed`로 닫는다.
 CREATE OR REPLACE FUNCTION private.close_reports (
-  p_revision_ids bigint[]
+  p_revision_ids bigint[],
+  p_post_ids     bigint[] DEFAULT '{}'::bigint[],
+  p_resolution   text     DEFAULT 'handled'::text
 )
   RETURNS integer
   LANGUAGE plpgsql
@@ -117,37 +120,18 @@ CREATE OR REPLACE FUNCTION private.close_reports (
 declare
   v_count integer;
 begin
+  if p_resolution is null or p_resolution not in ('handled', 'dismissed') then
+    raise exception 'invalid resolution' using errcode = '22023';
+  end if;
   update private.reports
-     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
-   where revision_id = any (p_revision_ids) and resolved_at is null;
+     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = p_resolution
+   where (revision_id = any (p_revision_ids) or post_id = any (p_post_ids)) and resolved_at is null;
   get diagnostics v_count = row_count;
   return v_count;
 end;
 $function$;
 
-REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[]) FROM PUBLIC;
-
--- `close_reports`와 같은 일을 토론 글에 한다. 글 숨기기, 토론 지우기, 문서 삭제가 부른다.
-CREATE OR REPLACE FUNCTION private.close_post_reports (
-  p_post_ids bigint[]
-)
-  RETURNS integer
-  LANGUAGE plpgsql
-  SECURITY DEFINER
-  SET search_path TO ''
-  AS $function$
-declare
-  v_count integer;
-begin
-  update private.reports
-     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
-   where post_id = any (p_post_ids) and resolved_at is null;
-  get diagnostics v_count = row_count;
-  return v_count;
-end;
-$function$;
-
-REVOKE ALL ON FUNCTION "private"."close_post_reports"(bigint[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[], bigint[], text) FROM PUBLIC;
 
 -- 처리되지 않은 신고가 걸린 대상(판과 토론 글) 수(관리자 전용).
 CREATE OR REPLACE FUNCTION public.count_open_reports()
@@ -307,17 +291,10 @@ CREATE OR REPLACE FUNCTION public.resolve_reports (
   SET search_path TO ''
   AS $function$
 declare
-  v_admin_id bigint := private.require_admin();
   v_count integer;
 begin
-  if p_resolution is null or p_resolution not in ('handled', 'dismissed') then
-    raise exception 'invalid resolution' using errcode = '22023';
-  end if;
-
-  update private.reports
-     set resolved_at = now(), resolved_by_member_id = v_admin_id, resolution = p_resolution
-   where revision_id = p_revision_id and resolved_at is null;
-  get diagnostics v_count = row_count;
+  perform private.require_admin();
+  v_count := private.close_reports(array[p_revision_id], p_resolution => p_resolution);
   if v_count = 0 then
     raise exception 'no open reports' using errcode = 'WK011';
   end if;

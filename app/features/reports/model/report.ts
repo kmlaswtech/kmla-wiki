@@ -31,6 +31,24 @@ export const REPORT_CATEGORIES: readonly {
   { value: "other", label: "기타", hint: "신고 사유를 입력해 주세요." },
 ];
 
+/** 관리자 목록의 신고 한 건. 신고자는 오지 않는다. */
+export interface ReportNote {
+  category: string;
+  note: string;
+  createdAt: string;
+}
+
+/** 목록 RPC가 jsonb로 주는 신고들(`list_open_reports`, `list_open_post_reports`의 `reports`). */
+export function toReportNotes(raw: unknown): ReportNote[] {
+  return (raw as { category: string; note: string; created_at: string }[]).map(
+    (report) => ({
+      category: report.category,
+      note: report.note,
+      createdAt: report.created_at,
+    }),
+  );
+}
+
 export function reportCategoryLabel(category: string): string {
   return (
     REPORT_CATEGORIES.find((entry) => entry.value === category)?.label ??
@@ -72,7 +90,7 @@ const MESSAGE: Record<string, (noun: string) => string> = {
 
 export function describeReportError(
   error: unknown,
-  kind: ReportTarget["kind"] = "revision",
+  kind: ReportTarget["kind"],
 ): string {
   if (isWikiError(error)) {
     const message = MESSAGE[error.code];

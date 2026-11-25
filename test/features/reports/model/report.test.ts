@@ -34,12 +34,12 @@ describe("reportCategoryLabel", () => {
 
 describe("describeReportError", () => {
   it("explains the report limits", () => {
-    expect(describeReportError(new WikiError("WK019", "too many"))).toContain(
-      "1시간에 10건",
-    );
-    expect(describeReportError(new WikiError("WK011", "again"))).toContain(
-      "이미 신고",
-    );
+    expect(
+      describeReportError(new WikiError("WK019", "too many"), "revision"),
+    ).toContain("1시간에 10건");
+    expect(
+      describeReportError(new WikiError("WK011", "again"), "revision"),
+    ).toContain("이미 신고");
   });
 
   it("names a post when a post report fails", () => {

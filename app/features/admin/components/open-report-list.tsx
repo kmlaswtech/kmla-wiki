@@ -9,7 +9,7 @@ import { HideRevisionDialog, hideLabel } from "./hide-revision-dialog";
 import { InlineRevisionDiff } from "./inline-revision-diff";
 import { RevisionAdminMenu } from "./revision-admin-menu";
 import { pageHref } from "~/features/markup";
-import { reportCategoryLabel } from "~/features/reports";
+import { ReportNoteList } from "~/features/reports";
 import { formatDateTime } from "~/shared/lib/time";
 import { isWikiError } from "~/shared/supabase/errors";
 import { Badge } from "~/shared/ui/badge";
@@ -153,20 +153,7 @@ function OpenReportItem({
         </span>
       </div>
 
-      <ul className="mt-1 space-y-0.5">
-        {report.reports.map((entry, index) => (
-          <li key={index} className="text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {reportCategoryLabel(entry.category)}
-            </span>
-            {entry.note ? ` · ${entry.note}` : null}
-            <span className="text-xs">
-              {" "}
-              · {formatDateTime(entry.createdAt)}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <ReportNoteList notes={report.reports} />
 
       {error ? (
         <p role="alert" className="mt-1 text-destructive">

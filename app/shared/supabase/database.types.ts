@@ -417,7 +417,6 @@ export type Database = {
       list_open_post_reports: {
         Args: Record<PropertyKey, never>
         Returns: {
-          as_admin: boolean
           author_name: string
           body: string
           discussion_deleted: boolean

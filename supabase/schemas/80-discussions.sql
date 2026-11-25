@@ -636,7 +636,7 @@ begin
      set hidden_at = case when p_hidden then now() end
    where id = p_post_id;
   if p_hidden then
-    perform private.close_post_reports(array[p_post_id]);
+    perform private.close_reports('{}', array[p_post_id]);
   end if;
   perform private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
@@ -687,7 +687,7 @@ begin
      set deleted_at = case when p_deleted then now() end
    where id = p_discussion_id;
   if p_deleted then
-    perform private.close_post_reports(array(
+    perform private.close_reports('{}', array(
       select post.id from private.discussion_posts as post where post.discussion_id = p_discussion_id
     ));
   end if;
@@ -1121,7 +1121,6 @@ CREATE OR REPLACE FUNCTION public.list_open_post_reports()
     discussion_title     text,
     page_title           text,
     author_name          text,
-    as_admin             boolean,
     kind                 text,
     body                 text,
     post_created_at      timestamp with time zone,
@@ -1142,7 +1141,7 @@ begin
   perform private.require_admin();
   return query
   select
-    post.id, discussion.id, discussion.title, page.title, post.author_name, post.as_admin, post.kind,
+    post.id, discussion.id, discussion.title, page.title, post.author_name, post.kind,
     post.body, post.created_at, post.hidden_at, post.withdrawn_at, discussion.withdrawn_at is not null,
     discussion.deleted_at is not null or page.deleted_at is not null,
     grouped.first_reported_at, grouped.reports,
@@ -1180,6 +1179,26 @@ GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."list_open_post_reports"() FROM PUBLIC, "anon";
 
+-- 문서 삭제(`delete_page_as_admin`)가 부른다. 그 문서의 토론 글에 걸린 신고를 닫는다. 삭제된 문서의
+-- 토론은 회원에게 보이지 않는다.
+CREATE OR REPLACE FUNCTION private.close_page_discussion_reports (
+  p_page_id bigint
+)
+  RETURNS integer
+  LANGUAGE sql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select private.close_reports('{}', array(
+    select post.id
+    from private.discussion_posts as post
+    join private.discussions as discussion on discussion.id = post.discussion_id
+    where discussion.page_id = p_page_id
+  ));
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."close_page_discussion_reports"(bigint) FROM PUBLIC;
+
 -- 토론 글 하나에 걸린 처리되지 않은 신고를 모두 닫는다(관리자 전용). `resolve_reports`와 같다.
 CREATE OR REPLACE FUNCTION public.resolve_post_reports (
   p_post_id    bigint,
@@ -1191,17 +1210,10 @@ CREATE OR REPLACE FUNCTION public.resolve_post_reports (
   SET search_path TO ''
   AS $function$
 declare
-  v_admin_id bigint := private.require_admin();
   v_count integer;
 begin
-  if p_resolution is null or p_resolution not in ('handled', 'dismissed') then
-    raise exception 'invalid resolution' using errcode = '22023';
-  end if;
-
-  update private.reports
-     set resolved_at = now(), resolved_by_member_id = v_admin_id, resolution = p_resolution
-   where post_id = p_post_id and resolved_at is null;
-  get diagnostics v_count = row_count;
+  perform private.require_admin();
+  v_count := private.close_reports('{}', array[p_post_id], p_resolution);
   if v_count = 0 then
     raise exception 'no open reports' using errcode = 'WK011';
   end if;

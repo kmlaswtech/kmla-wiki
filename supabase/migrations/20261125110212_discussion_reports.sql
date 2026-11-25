@@ -1,5 +1,7 @@
 SET local check_function_bodies = off;
 
+DROP FUNCTION "private"."close_reports"(bigint[]);
+
 ALTER TABLE "private"."reports"
   ADD COLUMN "post_id" bigint;
 
@@ -51,8 +53,26 @@ begin
 end;
 $function$;
 
-CREATE OR REPLACE FUNCTION private.close_post_reports (
-  p_post_ids bigint[]
+CREATE OR REPLACE FUNCTION private.close_page_discussion_reports (
+  p_page_id bigint
+)
+  RETURNS integer
+  LANGUAGE sql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select private.close_reports('{}', array(
+    select post.id
+    from private.discussion_posts as post
+    join private.discussions as discussion on discussion.id = post.discussion_id
+    where discussion.page_id = p_page_id
+  ));
+$function$;
+
+CREATE OR REPLACE FUNCTION private.close_reports (
+  p_revision_ids bigint[],
+  p_post_ids     bigint[] DEFAULT '{}'::bigint[],
+  p_resolution   text     DEFAULT 'handled'::text
 )
   RETURNS integer
   LANGUAGE plpgsql
@@ -62,9 +82,12 @@ CREATE OR REPLACE FUNCTION private.close_post_reports (
 declare
   v_count integer;
 begin
+  if p_resolution is null or p_resolution not in ('handled', 'dismissed') then
+    raise exception 'invalid resolution' using errcode = '22023';
+  end if;
   update private.reports
-     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = 'handled'
-   where post_id = any (p_post_ids) and resolved_at is null;
+     set resolved_at = now(), resolved_by_member_id = private.current_member_id(), resolution = p_resolution
+   where (revision_id = any (p_revision_ids) or post_id = any (p_post_ids)) and resolved_at is null;
   get diagnostics v_count = row_count;
   return v_count;
 end;
@@ -85,13 +108,7 @@ begin
   perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
   update public.pages set deleted_at = now() where id = p_page_id;
   perform private.close_reports(array(select revision.id from public.revisions as revision where revision.page_id = p_page_id));
-  -- 그 문서의 토론 글 신고도 닫는다. 삭제된 문서의 토론은 회원에게 보이지 않는다.
-  perform private.close_post_reports(array(
-    select post.id
-    from private.discussion_posts as post
-    join private.discussions as discussion on discussion.id = post.discussion_id
-    where discussion.page_id = p_page_id
-  ));
+  perform private.close_page_discussion_reports(p_page_id);
 end;
 $function$;
 
@@ -118,7 +135,6 @@ CREATE OR REPLACE FUNCTION public.list_open_post_reports()
     discussion_title     text,
     page_title           text,
     author_name          text,
-    as_admin             boolean,
     kind                 text,
     body                 text,
     post_created_at      timestamp with time zone,
@@ -139,7 +155,7 @@ begin
   perform private.require_admin();
   return query
   select
-    post.id, discussion.id, discussion.title, page.title, post.author_name, post.as_admin, post.kind,
+    post.id, discussion.id, discussion.title, page.title, post.author_name, post.kind,
     post.body, post.created_at, post.hidden_at, post.withdrawn_at, discussion.withdrawn_at is not null,
     discussion.deleted_at is not null or page.deleted_at is not null,
     grouped.first_reported_at, grouped.reports,
@@ -323,17 +339,10 @@ CREATE OR REPLACE FUNCTION public.resolve_post_reports (
   SET search_path TO ''
   AS $function$
 declare
-  v_admin_id bigint := private.require_admin();
   v_count integer;
 begin
-  if p_resolution is null or p_resolution not in ('handled', 'dismissed') then
-    raise exception 'invalid resolution' using errcode = '22023';
-  end if;
-
-  update private.reports
-     set resolved_at = now(), resolved_by_member_id = v_admin_id, resolution = p_resolution
-   where post_id = p_post_id and resolved_at is null;
-  get diagnostics v_count = row_count;
+  perform private.require_admin();
+  v_count := private.close_reports('{}', array[p_post_id], p_resolution);
   if v_count = 0 then
     raise exception 'no open reports' using errcode = 'WK011';
   end if;
@@ -342,6 +351,27 @@ end;
 $function$;
 
 REVOKE ALL ON FUNCTION "public"."resolve_post_reports"(bigint, text) FROM PUBLIC, "anon";
+
+CREATE OR REPLACE FUNCTION public.resolve_reports (
+  p_revision_id bigint,
+  p_resolution  text
+)
+  RETURNS integer
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_count integer;
+begin
+  perform private.require_admin();
+  v_count := private.close_reports(array[p_revision_id], p_resolution => p_resolution);
+  if v_count = 0 then
+    raise exception 'no open reports' using errcode = 'WK011';
+  end if;
+  return v_count;
+end;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.set_discussion_deleted (
   p_discussion_id bigint,
@@ -372,7 +402,7 @@ begin
      set deleted_at = case when p_deleted then now() end
    where id = p_discussion_id;
   if p_deleted then
-    perform private.close_post_reports(array(
+    perform private.close_reports('{}', array(
       select post.id from private.discussion_posts as post where post.discussion_id = p_discussion_id
     ));
   end if;
@@ -415,7 +445,7 @@ begin
      set hidden_at = case when p_hidden then now() end
    where id = p_post_id;
   if p_hidden then
-    perform private.close_post_reports(array[p_post_id]);
+    perform private.close_reports('{}', array[p_post_id]);
   end if;
   perform private.log_admin_action(
     case when p_hidden then 'hide_discussion_post' else 'unhide_discussion_post' end,
@@ -441,7 +471,9 @@ REVOKE ALL ON FUNCTION "private"."check_report_note"(text, text) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION "private"."check_report_rate"(bigint) FROM PUBLIC;
 
-REVOKE ALL ON FUNCTION "private"."close_post_reports"(bigint[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION "private"."close_page_discussion_reports"(bigint) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION "private"."close_reports"(bigint[], bigint[], text) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "authenticated";
 

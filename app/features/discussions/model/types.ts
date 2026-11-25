@@ -1,3 +1,5 @@
+import type { ReportNote } from "~/features/reports";
+
 /** 토론 목록 한 줄(`list_page_discussions`, `list_recent_discussions`). */
 export interface DiscussionSummary {
   id: number;
@@ -60,7 +62,6 @@ export interface OpenPostReport {
   discussionTitle: string;
   pageTitle: string;
   authorName: string;
-  asAdmin: boolean;
   kind: PostKind;
   /** 상태와 관계없이 온다. 관리자가 판단해야 하기 때문이다. */
   body: string;
@@ -70,7 +71,7 @@ export interface OpenPostReport {
   discussionWithdrawn: boolean;
   /** 지운 토론이거나 삭제된 문서의 토론. 회원에게 보이지 않는다. */
   discussionDeleted: boolean;
-  reports: { category: string; note: string; createdAt: string }[];
+  reports: ReportNote[];
   /** 같은 글에서 전에 기각한 신고 수. */
   dismissedCount: number;
 }

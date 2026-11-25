@@ -6,6 +6,7 @@ import type {
   PostKind,
   PostState,
 } from "../model/types";
+import { toReportNotes } from "~/features/reports";
 import { getSupabase } from "~/shared/supabase/client";
 import { unwrap } from "~/shared/supabase/errors";
 
@@ -133,7 +134,6 @@ export async function listOpenPostReports(): Promise<OpenPostReport[]> {
     discussionTitle: row.discussion_title,
     pageTitle: row.page_title,
     authorName: row.author_name,
-    asAdmin: row.as_admin,
     kind: row.kind as PostKind,
     body: row.body,
     postCreatedAt: row.post_created_at,
@@ -144,13 +144,7 @@ export async function listOpenPostReports(): Promise<OpenPostReport[]> {
         : "visible",
     discussionWithdrawn: row.discussion_withdrawn,
     discussionDeleted: row.discussion_deleted,
-    reports: (
-      row.reports as { category: string; note: string; created_at: string }[]
-    ).map((report) => ({
-      category: report.category,
-      note: report.note,
-      createdAt: report.created_at,
-    })),
+    reports: toReportNotes(row.reports),
     dismissedCount: row.dismissed_count,
   }));
 }
