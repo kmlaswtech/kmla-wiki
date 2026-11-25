@@ -1,9 +1,14 @@
 import { Link, redirect } from "react-router";
 
+import type { WikiShellHandle } from "./gate";
 import type { Route } from "./+types/search";
 import { withVerifiedMember } from "~/features/auth";
 import { pageHref, parseTitle } from "~/features/markup";
 import { findExactTitle, searchPages } from "~/features/pages";
+
+// 검색을 보내면 검색창의 포커스를 뺀다. 그 뒤 Tab이 검색창 다음의 돋보기로 가지 않고 검색창으로
+// 오게 한다. 결과가 없으면 다시 검색하는 일이 많다.
+export const handle: WikiShellHandle = { reading: true };
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const params = new URL(request.url).searchParams;

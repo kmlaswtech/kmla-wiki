@@ -38,7 +38,7 @@ export function ReportButton({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
       <Button
         type="button"
         size={size}
@@ -49,9 +49,26 @@ export function ReportButton({
       >
         <Flag />
       </Button>
+      <ReportDialog target={target} open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+/** 신고 대화상자만. 문서 머리처럼 메뉴 항목에서 열 때 쓴다. */
+export function ReportDialog({
+  target,
+  open,
+  onOpenChange,
+}: {
+  target: ReportTarget;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
       {/* 닫히면 내려가므로 열 때마다 빈 폼으로 시작한다. */}
       <DialogContent>
-        <ReportForm target={target} onClose={() => setOpen(false)} />
+        <ReportForm target={target} onClose={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

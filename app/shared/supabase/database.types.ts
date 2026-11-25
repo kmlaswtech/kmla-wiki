@@ -318,6 +318,11 @@ export type Database = {
       }
       count_open_discussions: { Args: { p_page_id: number }; Returns: number }
       count_open_reports: { Args: Record<PropertyKey, never>; Returns: number }
+      count_page_watchers: { Args: { p_page_id: number }; Returns: number }
+      count_unread_notifications: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       delete_page: {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
@@ -363,6 +368,7 @@ export type Database = {
         Args: { p_reason: string; p_revision_id: number }
         Returns: undefined
       }
+      is_page_watched: { Args: { p_page_id: number }; Returns: boolean }
       keepalive: { Args: Record<PropertyKey, never>; Returns: boolean }
       lift_ban: {
         Args: { p_ban_log_id: number; p_reason: string }
@@ -486,6 +492,15 @@ export type Database = {
           restorable_until: string
         }[]
       }
+      list_watched_pages: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          page_deleted: boolean
+          page_id: number
+          page_title: string
+          watched_at: string
+        }[]
+      }
       mark_image_deleted: { Args: { p_image_id: string }; Returns: undefined }
       move_page: {
         Args: {
@@ -548,6 +563,22 @@ export type Database = {
         }[]
       }
       random_page: { Args: Record<PropertyKey, never>; Returns: string }
+      read_notifications: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          author_name: string
+          discussion_id: number
+          discussion_title: string
+          first_post_id: number
+          from_revision_id: number
+          last_at: string
+          new_count: number
+          page_title: string
+          reason: string
+          to_revision_id: number
+          unread: boolean
+        }[]
+      }
       record_member_verification: {
         Args: {
           p_auth_user_id: string
@@ -666,6 +697,10 @@ export type Database = {
       }
       set_discussion_post_hidden: {
         Args: { p_hidden: boolean; p_post_id: number; p_reason: string }
+        Returns: undefined
+      }
+      set_page_watched: {
+        Args: { p_page_id: number; p_watched: boolean }
         Returns: undefined
       }
       set_protection: {

@@ -1,4 +1,10 @@
-import { ChevronRight, CornerDownRight, Lock, Pencil } from "lucide-react";
+import {
+  ChevronRight,
+  CornerDownRight,
+  Ellipsis,
+  Lock,
+  Pencil,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 
@@ -21,13 +27,29 @@ import { RelativeTime } from "~/shared/components/relative-time";
 import { formatDateTime } from "~/shared/lib/time";
 import { cn } from "~/shared/lib/utils";
 import { Badge } from "~/shared/ui/badge";
+import { Button } from "~/shared/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "~/shared/ui/dropdown-menu";
+
+/** 문서 머리 `⋯` 메뉴의 항목 하나. 대화상자는 메뉴 바깥에 둔다(메뉴가 닫히면 안의 것이 사라진다). */
+export interface PageMenuItem {
+  label: string;
+  onSelect: () => void;
+  destructive?: boolean;
+}
 
 interface PageArticleProps {
   view: FoundPage;
   /** 올린 이미지를 그리는 방법. 이미지 기능이 준다. */
   renderImage?: (imageId: string, alt: string) => ReactNode;
-  /** 제목 줄 오른쪽에 덧붙일 버튼(관리 메뉴). */
-  headerActions?: ReactNode;
+  /** 단추 줄 맨 앞에 따로 두는 별표(즐겨찾기). */
+  watchAction?: ReactNode;
+  /** `⋯` 메뉴에 이동 다음으로 넣을 항목(신고, 관리). */
+  menuItems?: readonly PageMenuItem[];
   /** "다른 이름" 칸 끝에 둘 `이름 추가` 단추. 더할 수 없으면 비운다. */
   aliasAction?: ReactNode;
 }
@@ -36,7 +58,8 @@ interface PageArticleProps {
 export function PageArticle({
   view,
   renderImage,
-  headerActions,
+  watchAction,
+  menuItems = [],
   aliasAction,
 }: PageArticleProps) {
   const { page, revision, resolved } = view;
@@ -118,54 +141,48 @@ export function PageArticle({
             />
           </p>
         </div>
-        {/* 화면에서 가장 눈에 띄는 것은 제목이어야 한다. 버튼은 모두 차분한 외곽선으로 둔다. */}
-        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-          {/* 편집·기록 단추는 마우스를 올리거나 누르기 시작하면 갈 화면의 코드를 미리 받는다. 문서를
-           * 읽다가 가장 많이 가는 곳이다. 편집 화면은 편집기 때문에 코드가 크다. */}
-          {viewingOldRevision ? null : editable ? (
-            <LinkButton
-              size="sm"
-              variant="outline"
-              to={pageHref(page.title, "edit")}
-              prefetch="intent"
-            >
-              {/* 폰에서는 아이콘을 뺀다. 글자만으로 충분하고 줄 자리가 좁다. */}
-              <Pencil aria-hidden className="max-sm:hidden" />
-              편집
-            </LinkButton>
-          ) : (
-            // 고칠 수 없어도 편집기로 열어 볼 수는 있다. 표·틀을 그대로 복사해 다른 문서에 쓸 수 있다.
-            // 폰에서는 `편집`만 쓴다. 자물쇠는 제목 옆에 자물쇠가 없을 때(차단, 삭제)만 남긴다.
-            <LinkButton
-              size="sm"
-              variant="outline"
-              to={pageHref(page.title, "edit")}
-              prefetch="intent"
-              title={
-                adminProtected
-                  ? "보호된 문서입니다. 관리자만 편집할 수 있습니다."
-                  : "지금은 편집할 수 없습니다."
-              }
-            >
-              <Lock
-                aria-hidden
-                className={adminProtected ? "max-sm:hidden" : undefined}
-              />
-              <span className="max-sm:hidden">편집 화면 보기</span>
-              <span className="sm:hidden">편집</span>
-            </LinkButton>
-          )}
-          {/* 기록·토론·이동은 문서를 둘러싼 화면이라 한 묶음으로 붙인다. 편집은 따로 둔다. */}
+        {/* 화면에서 가장 눈에 띄는 것은 제목이어야 한다. 버튼은 모두 차분한 외곽선으로 둔다. 별표는
+         * 따로 두고, 편집·토론·기록은 한 묶음으로 붙인다. 가끔 쓰는 것(이동, 신고, 관리)은 `⋯`에
+         * 넣는다. 폰에서도 한 줄에 들어간다. */}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {watchAction}
           <div role="group" aria-label="문서 화면" className="flex">
-            <LinkButton
-              size="sm"
-              variant="outline"
-              className={GROUPED}
-              to={pageHref(page.title, "history")}
-              prefetch="intent"
-            >
-              기록
-            </LinkButton>
+            {/* 편집·기록 단추는 마우스를 올리거나 누르기 시작하면 갈 화면의 코드를 미리 받는다. 문서를
+             * 읽다가 가장 많이 가는 곳이다. 편집 화면은 편집기 때문에 코드가 크다. */}
+            {viewingOldRevision ? null : editable ? (
+              <LinkButton
+                size="sm"
+                variant="outline"
+                className={GROUPED}
+                to={pageHref(page.title, "edit")}
+                prefetch="intent"
+              >
+                {/* 폰에서는 아이콘을 뺀다. 글자만으로 충분하고 줄 자리가 좁다. */}
+                <Pencil aria-hidden className="max-sm:hidden" />
+                편집
+              </LinkButton>
+            ) : (
+              // 고칠 수 없어도 편집기로 열어 볼 수는 있다. 표·틀을 그대로 복사해 다른 문서에 쓸 수 있다.
+              // 자물쇠는 폰에서 제목 옆에 자물쇠가 없을 때(차단, 삭제)만 남긴다.
+              <LinkButton
+                size="sm"
+                variant="outline"
+                className={GROUPED}
+                to={pageHref(page.title, "edit")}
+                prefetch="intent"
+                title={
+                  adminProtected
+                    ? "보호된 문서입니다. 관리자만 편집할 수 있습니다."
+                    : "지금은 편집할 수 없습니다."
+                }
+              >
+                <Lock
+                  aria-hidden
+                  className={adminProtected ? "max-sm:hidden" : undefined}
+                />
+                편집
+              </LinkButton>
+            )}
             <LinkButton
               size="sm"
               variant="outline"
@@ -184,18 +201,51 @@ export function PageArticle({
                 </span>
               ) : null}
             </LinkButton>
-            {editable ? (
-              <LinkButton
-                size="sm"
-                variant="outline"
-                className={GROUPED}
-                to={pageHref(page.title, "move")}
-              >
-                이동
-              </LinkButton>
+            <LinkButton
+              size="sm"
+              variant="outline"
+              className={GROUPED}
+              to={pageHref(page.title, "history")}
+              prefetch="intent"
+            >
+              기록
+            </LinkButton>
+            {editable || menuItems.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className={GROUPED}
+                      aria-label="더 보기"
+                    />
+                  }
+                >
+                  <Ellipsis aria-hidden />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {editable ? (
+                    <DropdownMenuItem
+                      render={<Link to={pageHref(page.title, "move")} />}
+                    >
+                      이동
+                    </DropdownMenuItem>
+                  ) : null}
+                  {menuItems.map((item) => (
+                    <DropdownMenuItem
+                      key={item.label}
+                      variant={item.destructive ? "destructive" : "default"}
+                      onClick={item.onSelect}
+                    >
+                      {item.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : null}
           </div>
-          {headerActions}
         </div>
       </header>
 

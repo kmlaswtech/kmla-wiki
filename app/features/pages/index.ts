@@ -1,7 +1,7 @@
 export { AddAliasButton } from "./components/add-alias-dialog";
 export { DiffView } from "./components/diff-view";
 export { MissingArticle } from "./components/missing-article";
-export { PageArticle } from "./components/page-article";
+export { PageArticle, type PageMenuItem } from "./components/page-article";
 export { RecentChangesPanel } from "./components/recent-changes-panel";
 export { useRecentChangesPanel } from "./components/use-recent-changes-panel";
 export { RevertDialog } from "./components/revert-dialog";

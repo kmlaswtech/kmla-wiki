@@ -33,6 +33,8 @@ export default [
     route("random", "routes/wiki/random.tsx"),
     route("special", "routes/wiki/special.tsx"),
     route("me", "routes/wiki/me.tsx"),
+    route("notifications", "routes/wiki/notifications.tsx"),
+    route("favorites", "routes/wiki/favorites.tsx"),
     // 차단 내역과 관리 기록은 모든 회원에게 공개한다.
     route("bans", "routes/wiki/bans.tsx"),
     route("log", "routes/wiki/log.tsx"),

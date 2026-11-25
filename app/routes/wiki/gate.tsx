@@ -10,6 +10,7 @@ import type { Route } from "./+types/gate";
 import { useOpenReportCount } from "~/features/admin";
 import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
 import { pageHref } from "~/features/markup";
+import { useUnreadNotificationCount } from "~/features/notifications";
 import { RecentChangesPanel, useRecentChangesPanel } from "~/features/pages";
 import {
   SHELL_WIDTH,
@@ -63,7 +64,7 @@ export function shouldRevalidate() {
 export interface WikiShellHandle {
   /** 글을 쓰는 화면이다. */
   editor?: boolean;
-  /** 문서를 읽는 화면이다. 포커스가 없을 때 Tab이 검색창으로 간다. */
+  /** 문서를 읽거나 찾는 화면이다. 포커스가 없을 때 Tab이 검색창으로 간다. */
   reading?: boolean;
 }
 
@@ -79,6 +80,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
 
   const recentChanges = useRecentChangesPanel(RECENT_PANEL_PATH);
   const openReports = useOpenReportCount(loaderData.isAdmin);
+  const notifications = useUnreadNotificationCount();
   const idle = useAfterIdle();
 
   return (
@@ -91,6 +93,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
       <SiteHeader
         status={loaderData}
         openReports={openReports}
+        notifications={notifications}
         stickyOnNarrow={!editing}
         tabToSearch={reading}
       />

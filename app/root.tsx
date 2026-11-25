@@ -9,6 +9,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { LinkButton } from "~/shared/components/link-button";
 import { useReloadOnNewVersion } from "~/shared/hooks/use-reload-on-new-version";
 import { isNetworkError } from "~/shared/lib/network-error";
 import { Button } from "~/shared/ui/button";
@@ -90,7 +91,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           ? "인터넷 연결을 확인하고 다시 시도해 주세요."
           : "잠시 뒤에 다시 시도해 주세요."}
       </p>
-      <Button onClick={() => window.location.reload()}>다시 시도</Button>
+      <div className="flex gap-2">
+        {/* 오류가 난 앱 상태를 남기지 않게 문서를 새로 읽는다. */}
+        <LinkButton to="/" reloadDocument variant="outline">
+          홈 화면으로
+        </LinkButton>
+        <Button onClick={() => window.location.reload()}>다시 시도</Button>
+      </div>
       {import.meta.env.DEV && error instanceof Error ? (
         <pre className="mt-4 max-w-full overflow-auto rounded-md bg-muted p-3 text-left text-xs">
           {error.stack}

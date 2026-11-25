@@ -70,6 +70,8 @@ interface RawPageView {
   children?: string[];
   members?: string[];
   open_discussions?: number;
+  watched?: boolean;
+  watchers?: number;
 }
 
 function toResolved(raw: RawResolved): ResolvedBody {
@@ -163,6 +165,8 @@ export async function getPageView(
     children: raw.children ?? [],
     members: raw.members ?? [],
     openDiscussions: raw.open_discussions ?? 0,
+    watched: raw.watched ?? false,
+    watchers: raw.watchers ?? 0,
     ...viewer,
   };
 }

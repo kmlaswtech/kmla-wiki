@@ -903,6 +903,9 @@ begin
     'backlinks', public.page_backlinks(v_page.title_key),
     -- 문서의 토론 단추에 붙이는 수(`80-discussions`).
     'open_discussions', public.count_open_discussions(v_page.id),
+    -- 문서의 별표(`90-notifications`).
+    'watched', public.is_page_watched(v_page.id),
+    'watchers', public.count_page_watchers(v_page.id),
     'children', coalesce((
       select jsonb_agg(child.title order by child.title)
       from public.pages as child

@@ -440,7 +440,7 @@ test("관리자가 훼손에 대응한다: 다른 편집 보기, 차단, 판 숨
 
   // 문서 보호.
   await page.goto(path("관리 둘"));
-  await page.getByRole("button", { name: "문서 관리" }).click();
+  await page.getByRole("button", { name: "더 보기" }).click();
   await page.getByRole("menuitem", { name: "문서 보호" }).click();
   await page.getByLabel(/^사유/).fill("E2E 보호");
   await page.getByRole("button", { name: "보호", exact: true }).click();

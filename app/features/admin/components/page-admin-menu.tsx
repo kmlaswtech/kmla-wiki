@@ -1,17 +1,9 @@
-import { ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { deletePage, restorePage, setProtection } from "../data/mutations";
 import { ReasonDialog } from "./reason-dialog";
-import { Button } from "~/shared/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "~/shared/ui/dropdown-menu";
 
-interface PageAdminMenuProps {
+interface PageAdminActionsOptions {
   page: {
     id: number;
     title: string;
@@ -23,45 +15,42 @@ interface PageAdminMenuProps {
   onDone: () => void;
 }
 
-/** 문서에 붙는 관리 메뉴: 보호와 삭제·복구. */
-export function PageAdminMenu({
+/** 문서 머리의 `⋯` 메뉴에 넣는 항목 하나. */
+export interface PageAdminAction {
+  label: string;
+  onSelect: () => void;
+  destructive?: boolean;
+}
+
+/**
+ * 문서 관리(보호와 삭제·복구). `items`는 문서 머리의 `⋯` 메뉴에 넣고, `dialogs`는 메뉴 바깥에 그린다.
+ * 메뉴 안에 두면 메뉴가 닫힐 때 대화상자도 사라지기 때문이다.
+ */
+export function usePageAdminActions({
   page,
   aliasCount = 0,
   onDone,
-}: PageAdminMenuProps) {
+}: PageAdminActionsOptions): { items: PageAdminAction[]; dialogs: ReactNode } {
   const [open, setOpen] = useState<"protect" | "delete" | null>(null);
   const close = (next: boolean) =>
     setOpen((current) => (next ? current : null));
   const isProtected = page.protection === "admin";
   const deleted = page.deletedAt !== null;
 
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              aria-label="문서 관리"
-            />
-          }
-        >
-          <ShieldAlert />
-          {/* 좁은 화면에서는 아이콘만 둔다(이름은 `aria-label`). */}
-          <span className="max-sm:hidden">관리</span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setOpen("protect")}>
-            {isProtected ? "보호 해제" : "문서 보호"}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setOpen("delete")}>
-            {deleted ? "문서 복구" : "문서 삭제"}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+  const items: PageAdminAction[] = [
+    {
+      label: isProtected ? "보호 해제" : "문서 보호",
+      onSelect: () => setOpen("protect"),
+    },
+    {
+      label: deleted ? "문서 복구" : "문서 삭제",
+      onSelect: () => setOpen("delete"),
+      destructive: !deleted,
+    },
+  ];
 
+  const dialogs = (
+    <>
       <ReasonDialog
         open={open === "protect"}
         onOpenChange={close}
@@ -100,4 +89,6 @@ export function PageAdminMenu({
       />
     </>
   );
+
+  return { items, dialogs };
 }

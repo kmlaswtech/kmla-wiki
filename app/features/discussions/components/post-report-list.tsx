@@ -3,7 +3,7 @@ import { Link } from "react-router";
 
 import { resolvePostReports, setPostHidden } from "../data/mutations";
 import { describeDiscussionError } from "../model/errors";
-import { topicHref } from "../model/rules";
+import { postHref } from "../model/rules";
 import type { OpenPostReport } from "../model/types";
 import { PostText } from "./post-text";
 import { ReasonDialog, useResolveReport } from "~/features/admin";
@@ -69,7 +69,7 @@ function PostReportItem({
           <span className="font-medium">{title}</span>
         ) : (
           <Link
-            to={`${topicHref(report.discussionId)}#post-${report.postId}`}
+            to={postHref(report.discussionId, report.postId)}
             className="font-medium text-primary hover:underline"
           >
             {title}

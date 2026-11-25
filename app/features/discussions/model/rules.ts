@@ -23,6 +23,16 @@ export function topicHref(id: number): string {
   return `/topic/${id}`;
 }
 
+/** 토론 글 하나의 주소. 글 카드의 `id`(`post-<번호>`)로 간다. */
+export function postHref(discussionId: number, postId: number): string {
+  return `${topicHref(discussionId)}#${postAnchor(postId)}`;
+}
+
+/** 토론 화면에서 글 카드의 `id`. */
+export function postAnchor(postId: number): string {
+  return `post-${postId}`;
+}
+
 export type CloseState =
   | { kind: "allowed" }
   /** 24시간이 지나지 않았다. 관리자는 '관리자로' 일찍 닫을 수 있다. */
