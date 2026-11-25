@@ -106,9 +106,9 @@ export function describeAdminLog(entry: AdminLogEntry): string {
       return `${who}의 편집 일괄 되돌림${note}`;
     // 토론은 번호로만 적는다. 토론 제목은 지우거나 숨길 대상일 수 있어서 기록에 남기지 않는다.
     case "hide_discussion_post":
-      return `‘${page}’ 토론 #${entry.discussionId}에서 ${who}의 글 숨김`;
+      return `‘${page}’ 토론 #${entry.discussionId}에서 ${entry.pseudonym ?? ""}의 글 숨김`;
     case "unhide_discussion_post":
-      return `‘${page}’ 토론 #${entry.discussionId}에서 ${who}의 글 숨김 해제`;
+      return `‘${page}’ 토론 #${entry.discussionId}에서 ${entry.pseudonym ?? ""}의 글 숨김 해제`;
     case "delete_discussion":
       return `‘${page}’ 토론 #${entry.discussionId} 지움`;
     case "restore_discussion":
