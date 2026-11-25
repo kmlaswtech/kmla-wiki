@@ -219,8 +219,6 @@ export type Database = {
           author_pseudonym: string
           body: NonNullable<Json>
           body_text: string | null
-          byte_delta: number
-          byte_size: number
           created_at: string
           hidden_at: string | null
           id: number
@@ -228,14 +226,15 @@ export type Database = {
           page_id: number
           parent_revision_id: number | null
           summary: string
+          text_added: number
+          text_removed: number
+          text_size: number
         }
         ComputedFields: never
         Insert: {
           author_pseudonym: string
           body: NonNullable<Json>
           body_text?: never
-          byte_delta: number
-          byte_size: number
           created_at?: string
           hidden_at?: string | null
           id?: never
@@ -243,13 +242,14 @@ export type Database = {
           page_id: number
           parent_revision_id?: number | null
           summary?: string
+          text_added: number
+          text_removed: number
+          text_size: number
         }
         Update: {
           author_pseudonym?: string
           body?: NonNullable<Json>
           body_text?: never
-          byte_delta?: number
-          byte_size?: number
           created_at?: string
           hidden_at?: string | null
           id?: never
@@ -257,6 +257,9 @@ export type Database = {
           page_id?: number
           parent_revision_id?: number | null
           summary?: string
+          text_added?: number
+          text_removed?: number
+          text_size?: number
         }
         Relationships: [
           {
@@ -368,7 +371,6 @@ export type Database = {
           p_lookup_id: string
         }
         Returns: {
-          byte_delta: number
           created_at: string
           hidden_at: string
           is_current: boolean
@@ -380,6 +382,8 @@ export type Database = {
           pseudonym: string
           revision_id: number
           summary: string
+          text_added: number
+          text_removed: number
         }[]
       }
       list_my_author_lookups: {
@@ -442,7 +446,7 @@ export type Database = {
           p_offset?: number
         }
         Returns: {
-          byte_size: number
+          text_size: number
           title: string
         }[]
       }

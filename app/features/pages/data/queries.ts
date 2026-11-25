@@ -177,7 +177,7 @@ export async function resolveBody(body: WikiDoc): Promise<ResolvedBody> {
 
 // 목록에는 본문을 싣지 않는다. 판마다 본문 전체가 들어 있어 목록에서 읽으면 전송량이 커진다.
 const SUMMARY_COLUMNS =
-  "id, parent_revision_id, kind, summary, author_pseudonym, byte_size, byte_delta, created_at, hidden_at";
+  "id, parent_revision_id, kind, summary, author_pseudonym, text_added, text_removed, created_at, hidden_at";
 
 interface RawRevision {
   id: number;
@@ -185,8 +185,8 @@ interface RawRevision {
   kind: string;
   summary: string;
   author_pseudonym: string;
-  byte_size: number;
-  byte_delta: number;
+  text_added: number;
+  text_removed: number;
   created_at: string;
   hidden_at: string | null;
 }
@@ -198,8 +198,8 @@ function toSummary(row: RawRevision): RevisionSummary {
     kind: row.kind as RevisionSummary["kind"],
     summary: row.summary,
     authorPseudonym: row.author_pseudonym,
-    byteSize: row.byte_size,
-    byteDelta: row.byte_delta,
+    textAdded: row.text_added,
+    textRemoved: row.text_removed,
     createdAt: row.created_at,
     hiddenAt: row.hidden_at,
   };
@@ -399,7 +399,7 @@ export async function listPagesBySize(
   namespace: Namespace,
   longest: boolean,
   offset = 0,
-): Promise<{ title: string; byteSize: number }[]> {
+): Promise<{ title: string; textSize: number }[]> {
   const rows = unwrap(
     await getSupabase().rpc("page_sizes", {
       p_namespace: namespace,
@@ -408,7 +408,7 @@ export async function listPagesBySize(
       p_limit: SPECIAL_PAGE_SIZE,
     }),
   );
-  return rows.map((row) => ({ title: row.title, byteSize: row.byte_size }));
+  return rows.map((row) => ({ title: row.title, textSize: row.text_size }));
 }
 
 /** 손볼 넘겨주기. `next`가 `null`이면 대상이 없거나 삭제됐고, 있으면 대상도 넘겨주기다. */

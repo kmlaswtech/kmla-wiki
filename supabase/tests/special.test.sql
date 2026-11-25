@@ -62,8 +62,8 @@ select set_eq(
   'page sizes list main pages without redirects or deleted pages'
 );
 select ok(
-  (select bool_and(byte_size > 0) from public.page_sizes()),
-  'page sizes come with the byte size'
+  (select bool_and(text_size > 0) from public.page_sizes()),
+  'page sizes come with the character count'
 );
 select results_eq(
   $$select title from public.page_sizes('main', false, 1, 2)$$,

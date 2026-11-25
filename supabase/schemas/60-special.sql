@@ -36,7 +36,7 @@ GRANT EXECUTE ON FUNCTION "public"."list_all_pages"(text, text, integer) TO "pos
 
 REVOKE ALL ON FUNCTION "public"."list_all_pages"(text, text, integer) FROM PUBLIC, "anon";
 
--- 짧은 문서·긴 문서. 현재 판의 바이트 크기(`revisions.byte_size`, 보이는 글자 `doc_text` 기준) 순이다. 크기가
+-- 짧은 문서·긴 문서. 현재 판의 글자 수(`revisions.text_size`) 순이다. 크기가
 -- 같은 문서가 많아 제목 이어 받기가 어려우므로 offset으로 넘긴다. 위키가 작아 문서 표 전체를
 -- 정렬해도 된다.
 CREATE OR REPLACE FUNCTION public.page_sizes (
@@ -47,20 +47,20 @@ CREATE OR REPLACE FUNCTION public.page_sizes (
 )
   RETURNS TABLE (
     title     text,
-    byte_size integer
+    text_size integer
   )
   LANGUAGE sql
   STABLE
   SET search_path TO ''
   AS $function$
-  select page.title, revision.byte_size
+  select page.title, revision.text_size
   from public.pages as page
   join public.revisions as revision on revision.id = page.current_revision_id
   where page.namespace = p_namespace
     and page.redirect_key is null
     and page.deleted_at is null
   order by
-    case when p_longest then -revision.byte_size else revision.byte_size end,
+    case when p_longest then -revision.text_size else revision.text_size end,
     page.title_key
   offset greatest(coalesce(p_offset, 0), 0)
   limit least(greatest(coalesce(p_limit, 100), 1), 500);

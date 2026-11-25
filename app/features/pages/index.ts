@@ -6,6 +6,7 @@ export { RecentChangesPanel } from "./components/recent-changes-panel";
 export { useRecentChangesPanel } from "./components/use-recent-changes-panel";
 export { RevertDialog } from "./components/revert-dialog";
 export { RevisionList } from "./components/revision-list";
+export { TextChange } from "./components/text-change";
 export { movePage, revertPage, saveRevision } from "./data/mutations";
 export {
   findExactTitle,

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-import { ByteDelta } from "./byte-delta";
+import { TextChange } from "./text-change";
 import { revisionKindLabel } from "../model/errors";
 import type { RevisionSummary } from "../model/types";
 import { pageHref } from "~/features/markup";
@@ -76,7 +76,7 @@ export function RevisionList<Row extends RevisionSummary>({
               </Link>
             )}
 
-            <ByteDelta delta={revision.byteDelta} />
+            <TextChange revision={revision} />
 
             <span className="font-mono text-xs text-muted-foreground">
               {revision.authorPseudonym}

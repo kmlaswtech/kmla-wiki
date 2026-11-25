@@ -4,7 +4,12 @@ import type { Route } from "./+types/diff";
 import { positiveInt, titleFromParams } from "./title-param";
 import { withVerifiedMember } from "~/features/auth";
 import { docToText, pageHref } from "~/features/markup";
-import { DiffView, getPageView, getRevisionBodies } from "~/features/pages";
+import {
+  DiffView,
+  getPageView,
+  getRevisionBodies,
+  TextChange,
+} from "~/features/pages";
 import { RelativeTime } from "~/shared/components/relative-time";
 
 export async function clientLoader({
@@ -80,6 +85,14 @@ export default function DiffRoute({ loaderData }: Route.ComponentProps) {
                   </span>{" "}
                   · <RelativeTime value={revision.createdAt} />
                   {revision.summary ? ` · ${revision.summary}` : ""}
+                  {/* 판에 저장한 변화량은 바로 앞 판과의 것이다. 떨어진 두 판을 비교하면 보이지 않는다. */}
+                  {revision === after &&
+                  after.parentRevisionId === before.id ? (
+                    <>
+                      {" · "}
+                      <TextChange revision={after} />
+                    </>
+                  ) : null}
                 </dd>
               </div>
             ))}

@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import { ByteDelta } from "./byte-delta";
+import { TextChange } from "./text-change";
 import type { RecentChange } from "../model/types";
 import { pageHref } from "~/features/markup";
 import { RelativeTime } from "~/shared/components/relative-time";
@@ -60,10 +60,7 @@ export function RecentChangesPanel({
               >
                 {change.pageTitle}
               </Link>
-              <ByteDelta
-                delta={change.byteDelta}
-                className="shrink-0 text-xs"
-              />
+              <TextChange revision={change} className="shrink-0 text-xs" />
               <span className="shrink-0 text-xs text-muted-foreground">
                 <RelativeTime value={change.createdAt} />
               </span>

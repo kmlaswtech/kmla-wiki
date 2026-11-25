@@ -67,11 +67,31 @@ select is(
   'the same member keeps the same pseudonym on the same page'
 );
 select results_eq(
-  format($$select parent_revision_id, byte_delta from public.revisions where id = %s$$, :r3),
-  -- 크기는 보이는 글자로 잰다. 분류는 글자가 아니다.
-  format($$select %s::bigint, octet_length('셋째 판 신성 ') - octet_length('둘째 판')$$, :r2),
-  'a revision records its parent and size change'
+  format($$select parent_revision_id, text_size, text_added - text_removed from public.revisions where id = %s$$, :r3),
+  -- 크기는 보이는 글자 수로 잰다. 분류는 글자가 아니다.
+  format($$select %s::bigint, char_length('셋째 판 신성 '), char_length('셋째 판 신성 ') - char_length('둘째 판')$$, :r2),
+  'a revision records its parent, size and change'
 );
+
+-- ── 더한 글자·뺀 글자 ────────────────────────────────────────────────────────
+-- 내부 함수라 회원은 부를 수 없다. 관리 권한으로 직접 시험한다.
+select logout();
+select results_eq(
+  $$select change.added, change.removed from (values
+      (1, null, E'가나다\n라마'),
+      (2, E'가나다\n라마', E'가나다\n\n\n라마'),
+      (3, E'가나다라마바', E'가나X라마바'),
+      (4, E'첫째\n둘째\n셋째', E'셋째\n첫째\n둘째'),
+      (5, E'문단 하나입니다\n문단 둘', E'새 문단\n문단 하나였습니다\n문단 둘'),
+      (6, E'가나다\n라마', ''),
+      -- 한 줄 안의 두 곳: 판 비교의 낱말 표시처럼 "더한"→"고친", "입"→"이었습"만 센다.
+      (7, '새로 더한 문단입니다.', '새로 고친 문단이었습니다.')
+    ) as sample (n, old, new), private.text_change(sample.old, sample.new) as change
+    order by sample.n$$,
+  $$values (5, 0), (0, 0), (1, 1), (0, 0), (6, 1), (0, 5), (5, 3)$$,
+  'text change counts the characters added and removed, not line breaks or moved paragraphs'
+);
+select login(:alice);
 
 -- 다른 문서에서는 다른 가명이다. 문서 사이를 잇는 단서가 화면 데이터에 없어야 한다.
 select page_id as p2, revision_id as r4 from public.save_revision('신성', null, wiki('신성 시간은…')) \gset
@@ -354,8 +374,8 @@ select logout();
 
 -- ── 저장 빈도 상한 ───────────────────────────────────────────────────────────
 with written as (
-  insert into public.revisions (page_id, body, author_pseudonym, kind, byte_size, byte_delta)
-  select :p1, wiki('x'), '익명#000000', 'edit', 1, 0 from generate_series(1, 60)
+  insert into public.revisions (page_id, body, author_pseudonym, kind, text_size, text_added, text_removed)
+  select :p1, wiki('x'), '익명#000000', 'edit', 1, 0, 0 from generate_series(1, 60)
   returning id
 )
 insert into private.revision_authors (revision_id, member_id)

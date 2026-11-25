@@ -295,6 +295,200 @@ GRANT EXECUTE ON FUNCTION "private"."doc_text"(jsonb) TO "authenticated";
 
 REVOKE ALL ON FUNCTION "private"."doc_text"(jsonb) FROM PUBLIC;
 
+-- ── 글자 양과 변화량 ────────────────────────────────────────────────────────
+-- 판의 글자 양과 앞 판과의 변화량은 보이는 글자(`private.doc_text`)를 글자 단위(바이트가 아님)로 센다.
+-- 블록 사이의 줄바꿈은 세지 않는다. 그래서 빈 문단·빈 표·캡션 없는 이미지는 0자다.
+CREATE OR REPLACE FUNCTION private.text_length (
+  p_text text
+)
+  RETURNS integer
+  LANGUAGE sql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+  select char_length(replace(coalesce(p_text, ''), E'\n', ''));
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."text_length"(text) FROM PUBLIC;
+
+-- 두 글의 같은 머리 길이. 이분 탐색이라 긴 줄도 글자마다 돌지 않는다.
+CREATE OR REPLACE FUNCTION private.common_prefix_length (
+  p_a text,
+  p_b text
+)
+  RETURNS integer
+  LANGUAGE plpgsql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+declare
+  v_low integer := 0;
+  v_high integer := least(char_length(p_a), char_length(p_b));
+  v_mid integer;
+begin
+  while v_low < v_high loop
+    v_mid := (v_low + v_high + 1) / 2;
+    if left(p_a, v_mid) collate "C" = left(p_b, v_mid) collate "C" then
+      v_low := v_mid;
+    else
+      v_high := v_mid - 1;
+    end if;
+  end loop;
+  return v_low;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."common_prefix_length"(text, text) FROM PUBLIC;
+
+-- 두 글의 같은 머리와 꼬리 길이(합). 꼬리는 머리를 뺀 나머지를 뒤집어 머리로 잰다. 그래서 겹치지 않는다.
+-- plpgsql로 둔다. `set search_path`가 있는 SQL 함수는 인라인되지 않아 부를 때마다 더 비싸다.
+CREATE OR REPLACE FUNCTION private.common_affix_length (
+  p_a text,
+  p_b text
+)
+  RETURNS integer
+  LANGUAGE plpgsql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+declare
+  v_prefix integer := private.common_prefix_length(p_a, p_b);
+begin
+  return v_prefix + private.common_prefix_length(
+    reverse(substr(p_a, v_prefix + 1)), reverse(substr(p_b, v_prefix + 1))
+  );
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."common_affix_length"(text, text) FROM PUBLIC;
+
+-- 조각(줄이나 낱말) 목록 사이에서 더한 글자 수와 뺀 글자 수. `private.text_change`가 줄로, 짝지은 줄 안에서는
+-- 낱말로(`p_by_word`) 부른다. 낱말 조각은 뒤의 띄어쓰기를 품으므로 조각 길이의 합이 줄 길이와 같다.
+--   1. 두 쪽에 똑같이 있는 조각은 바뀌지 않은 것으로 본다. 옮기기만 한 문단이나 낱말도 그렇다.
+--   2. 남은 조각은 앞 조각마다, 같은 머리·꼬리가 가장 긴 새 조각과 짝짓는다. 견줄 것이 아주 많으면(통째로 바꾼
+--      글, 긴 문단 여럿) 모든 쌍을 견주지 않고 순서대로 짝짓고, 3을 건너뛴다. 큰 글을 저장하는 시간을 짧게 둔다.
+--   3. 짝지은 줄은 낱말로 나눠 1부터 다시 센다. 짝지은 낱말은 같은 머리·꼬리 사이만 바뀐 것이다.
+--   4. 짝이 없는 조각은 통째로 더하거나 뺀 것이다.
+-- 판 비교 화면의 낱말 표시와 대체로 맞는다. 정확한 글자 diff는 아니다(한 낱말 안의 떨어진 두 곳을 고치면 그
+-- 사이도 센다).
+CREATE OR REPLACE FUNCTION private.pieces_change (
+  p_old     text[],
+  p_new     text[],
+  p_by_word boolean,
+  OUT added   integer,
+  OUT removed integer
+)
+  LANGUAGE plpgsql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+declare
+  v_old text[];
+  v_new text[];
+  v_used boolean[];
+  v_best integer;
+  v_best_affix integer;
+  v_affix integer;
+  v_ordered boolean;
+  v_pairs bigint;
+  v_inner record;
+begin
+  added := 0;
+  removed := 0;
+  -- 꾸밈만 바꾼 편집처럼 글자가 같으면 견줄 것이 없다.
+  if p_old = p_new then
+    return;
+  end if;
+
+  -- 같은 조각은 개수까지 맞춘다(`nth`: 같은 조각 가운데 몇 번째). full join은 해시·병합 조인으로만 돈다.
+  -- `not exists`는 계획에 따라 중첩 반복(조각 수의 제곱)이 된다. 두 쪽 번호 매기기를 함수로 빼면 인라인되지
+  -- 않아 느려지므로 질의 안에 둔다.
+  select
+    coalesce(array_agg(o.piece order by o.pos) filter (where n.piece is null), '{}'),
+    coalesce(array_agg(n.piece order by n.pos) filter (where o.piece is null), '{}')
+  into v_old, v_new
+  from (
+    select part.piece, part.pos, row_number() over (partition by part.piece order by part.pos) as nth
+    from unnest(p_old) with ordinality as part (piece, pos) where part.piece <> ''
+  ) as o
+  full join (
+    select part.piece, part.pos, row_number() over (partition by part.piece order by part.pos) as nth
+    from unnest(p_new) with ordinality as part (piece, pos) where part.piece <> ''
+  ) as n on n.piece = o.piece and n.nth = o.nth;
+
+  v_used := array_fill(false, array[cardinality(v_new)]);
+  -- 한 쌍을 견주는 값은 조각 길이에 비례한다. 쌍 수와 견줄 글자 양(쌍 수 × 평균 길이)에 한도를 둔다.
+  -- 짧은 조각은 많이, 긴 줄은 적게 모두 견준다.
+  v_pairs := cardinality(v_old)::bigint * cardinality(v_new);
+  v_ordered := v_pairs > 10000 or v_pairs * (
+    select coalesce(avg(char_length(piece)), 0) from unnest(v_old || v_new) as piece
+  ) > 5000000;
+  for i in 1 .. cardinality(v_old) loop
+    v_best := null;
+    v_best_affix := 0;
+    if v_ordered then
+      if i <= cardinality(v_new) then
+        v_best := i;
+        v_best_affix := private.common_affix_length(v_old[i], v_new[i]);
+      end if;
+    else
+      for j in 1 .. cardinality(v_new) loop
+        continue when v_used[j];
+        v_affix := private.common_affix_length(v_old[i], v_new[j]);
+        if v_affix > v_best_affix then
+          v_best := j;
+          v_best_affix := v_affix;
+        end if;
+      end loop;
+    end if;
+
+    if v_best is null then
+      removed := removed + char_length(v_old[i]);
+      continue;
+    end if;
+    v_used[v_best] := true;
+    if p_by_word and not v_ordered then
+      -- 띄어쓰기 뒤에서 나눈다(띄어쓰기는 앞 낱말에 붙는다).
+      v_inner := private.pieces_change(
+        regexp_split_to_array(v_old[i], '(?<= )'), regexp_split_to_array(v_new[v_best], '(?<= )'), false
+      );
+      added := added + v_inner.added;
+      removed := removed + v_inner.removed;
+    else
+      removed := removed + char_length(v_old[i]) - v_best_affix;
+      added := added + char_length(v_new[v_best]) - v_best_affix;
+    end if;
+  end loop;
+  for j in 1 .. cardinality(v_new) loop
+    if not v_used[j] then
+      added := added + char_length(v_new[j]);
+    end if;
+  end loop;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."pieces_change"(text[], text[], boolean) FROM PUBLIC;
+
+-- 앞 판 글자(`p_old`)에서 새 판 글자(`p_new`)로 더한 글자 수와 뺀 글자 수. 줄(블록·표 칸·줄바꿈)로 나눠
+-- `private.pieces_change`로 센다. `added - removed`는 두 판의 `text_length` 차이와 언제나 같다.
+CREATE OR REPLACE FUNCTION private.text_change (
+  p_old text,
+  p_new text,
+  OUT added   integer,
+  OUT removed integer
+)
+  LANGUAGE sql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+  select change.added, change.removed
+  from private.pieces_change(
+    string_to_array(coalesce(p_old, ''), E'\n'), string_to_array(coalesce(p_new, ''), E'\n'), true
+  ) as change;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."text_change"(text, text) FROM PUBLIC;
+
 -- ── 본문 다루기 ──────────────────────────────────────────────────────────────
 -- 빈 문서. 본문이 없는 판(삭제된 문서 등)을 읽을 때 쓴다.
 CREATE OR REPLACE FUNCTION private.empty_doc()
@@ -552,18 +746,20 @@ CREATE OR REPLACE FUNCTION private.write_revision (
   AS $function$
 declare
   v_parent_id bigint;
-  v_parent_size integer;
+  v_parent_text text;
   v_revision_id bigint;
-  v_size integer := octet_length(private.doc_text(p_body));
+  v_text text := private.doc_text(p_body);
+  v_change record;
 begin
-  select page.current_revision_id, revision.byte_size
-  into v_parent_id, v_parent_size
+  select page.current_revision_id, revision.body_text
+  into v_parent_id, v_parent_text
   from public.pages as page
   left join public.revisions as revision on revision.id = page.current_revision_id
   where page.id = p_page_id;
+  v_change := private.text_change(v_parent_text, v_text);
 
   insert into public.revisions (
-    page_id, parent_revision_id, body, summary, author_pseudonym, kind, byte_size, byte_delta
+    page_id, parent_revision_id, body, summary, author_pseudonym, kind, text_size, text_added, text_removed
   )
   values (
     p_page_id,
@@ -572,8 +768,9 @@ begin
     coalesce(btrim(p_summary), ''),
     case when p_as_admin then '관리자' else private.pseudonym_for(p_page_id, p_member_id) end,
     p_kind,
-    v_size,
-    v_size - coalesce(v_parent_size, 0)
+    private.text_length(v_text),
+    v_change.added,
+    v_change.removed
   )
   returning id into v_revision_id;
 
@@ -1339,9 +1536,11 @@ CREATE TABLE "public"."revisions" (
   -- **이 문서에서의** 가명. 쓰는 순간 확정하고, 읽는 쪽은 실제 작성자를 참조하지 않는다.
   "author_pseudonym"   text                     NOT NULL,
   "kind"               text                     NOT NULL,
-  -- 보이는 글자(`private.doc_text`)의 바이트 수. 꾸밈만 바꾼 편집은 0이다.
-  "byte_size"          integer                  NOT NULL,
-  "byte_delta"         integer                  NOT NULL,
+  -- 보이는 글자의 글자 수와, 앞 판에서 더하고 뺀 글자 수(`private.text_length`, `private.text_change`).
+  -- 꾸밈·구조·분류만 바꾼 편집은 더하고 뺀 것이 모두 0이다.
+  "text_size"          integer                  NOT NULL,
+  "text_added"         integer                  NOT NULL,
+  "text_removed"       integer                  NOT NULL,
   "created_at"         timestamp with time zone NOT NULL DEFAULT now(),
   -- 관리자가 숨긴 판. 일반 사용자에게는 행 자체가 보이지 않는다.
   "hidden_at"          timestamp with time zone,
