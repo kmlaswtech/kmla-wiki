@@ -152,4 +152,9 @@ describe("postLength", () => {
   it("counts like the server: trimmed, CRLF as one break", () => {
     expect(postLength("  가\r\n나  ")).toBe(3);
   });
+
+  it("keeps spaces the server keeps", () => {
+    expect(postLength("가　")).toBe(2);
+    expect(postLength("　")).toBe(1);
+  });
 });

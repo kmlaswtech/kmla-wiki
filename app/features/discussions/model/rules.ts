@@ -8,9 +8,14 @@ export const DISCUSSION_LIMIT = {
   conclusion: 10,
 } as const;
 
-/** 서버처럼 줄바꿈을 맞추고 앞뒤 공백을 뺀 글자 수. */
+/**
+ * 서버(`check_discussion_body`)처럼 줄바꿈을 맞추고 앞뒤의 공백·탭·줄바꿈만 뺀 글자 수. `trim()`은
+ * 전각 공백 같은 다른 공백도 빼서 서버와 수가 달라진다.
+ */
 export function postLength(body: string): number {
-  return [...body.replace(/\r\n/g, "\n").trim()].length;
+  return [
+    ...body.replace(/\r\n/g, "\n").replace(/^[ \t\n\r]+|[ \t\n\r]+$/g, ""),
+  ].length;
 }
 
 /** 토론 주소. 제목에 `/`가 들어갈 수 있어 문서 제목이 아니라 번호로 가리킨다. */
