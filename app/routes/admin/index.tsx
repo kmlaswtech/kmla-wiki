@@ -110,8 +110,7 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
         <h2 className="mb-2 text-lg font-semibold">관리자 {admins.length}명</h2>
         <p className="mb-3 text-sm text-muted-foreground">
           아래 이름과 별명은 관리자에게만 표시되며 문서의 가명과 연결되지
-          않습니다. 일반 회원에게는 관리자 수만 공개됩니다. 별명은 서로를
-          알아보도록 각자 정하고, 공개 기록에는 남지 않습니다.
+          않습니다. 일반 회원에게는 관리자 수만 공개됩니다.
         </p>
         <ul className="divide-y rounded-md border text-sm">
           {admins.map((admin) => (
