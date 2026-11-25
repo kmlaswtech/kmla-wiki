@@ -160,7 +160,7 @@ export function DiscussionComposer({
             <DialogTitle>관리자로 일찍 닫기</DialogTitle>
             <DialogDescription>
               토론이 열린 지 24시간이 지나지 않았습니다. 관리자로 닫으면 공개
-              관리 기록에 남고, 결론 글의 앞부분이 사유로 적힙니다.
+              관리 기록에 남습니다.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

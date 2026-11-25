@@ -54,7 +54,9 @@ export default function LogRoute({ loaderData }: Route.ComponentProps) {
                   <RelativeTime value={entry.createdAt} />
                 </span>
                 {describeAdminLog(entry)}
-                {entry.discussionId !== null ? (
+                {/* 지운 토론은 회원이 열 수 없다. */}
+                {entry.discussionId !== null &&
+                entry.action !== "delete_discussion" ? (
                   <>
                     {" "}
                     <Link

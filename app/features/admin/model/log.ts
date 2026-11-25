@@ -104,17 +104,17 @@ export function describeAdminLog(entry: AdminLogEntry): string {
       return `${who}의 다른 편집 조회`;
     case "bulk_revert":
       return `${who}의 편집 일괄 되돌림${note}`;
-    // 토론 동작의 `note`는 토론 제목이다.
+    // 토론은 번호로만 적는다. 토론 제목은 지우거나 숨길 대상일 수 있어서 기록에 남기지 않는다.
     case "hide_discussion_post":
-      return `‘${page}’ 토론 ‘${entry.note ?? ""}’에서 ${who}의 글 숨김`;
+      return `‘${page}’ 토론 #${entry.discussionId}에서 ${who}의 글 숨김`;
     case "unhide_discussion_post":
-      return `‘${page}’ 토론 ‘${entry.note ?? ""}’에서 ${who}의 글 숨김 해제`;
+      return `‘${page}’ 토론 #${entry.discussionId}에서 ${who}의 글 숨김 해제`;
     case "delete_discussion":
-      return `‘${page}’ 토론 ‘${entry.note ?? ""}’ 지움`;
+      return `‘${page}’ 토론 #${entry.discussionId} 지움`;
     case "restore_discussion":
-      return `‘${page}’ 토론 ‘${entry.note ?? ""}’ 되살림`;
+      return `‘${page}’ 토론 #${entry.discussionId} 되살림`;
     case "close_discussion_early":
-      return `‘${page}’ 토론 ‘${entry.note ?? ""}’ 24시간 전에 닫음`;
+      return `‘${page}’ 토론 #${entry.discussionId} 24시간 전에 닫음`;
   }
 }
 

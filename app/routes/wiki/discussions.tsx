@@ -72,10 +72,13 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return [{ title: `${loaderData?.title ?? ""} 토론 - 큼온 위키` }];
 }
 
-export default function DiscussionsRoute({
-  loaderData,
-  actionData,
-}: Route.ComponentProps) {
+export default function DiscussionsRoute(props: Route.ComponentProps) {
+  // 다른 문서의 토론 목록으로 가면(뒤로 가기 등) 같은 컴포넌트가 다시 쓰인다. 문서마다 새로 만들어
+  // 앞 문서에 쓰던 새 토론 초안이 다른 문서에 남지 않게 한다.
+  return <DiscussionsPage key={props.loaderData.pageId} {...props} />;
+}
+
+function DiscussionsPage({ loaderData, actionData }: Route.ComponentProps) {
   const { title, canWrite, isAdmin, discussions, revisionId } = loaderData;
   const pending = useNavigation().state === "submitting";
   const [showNew, setShowNew] = useState(loaderData.showNew);
