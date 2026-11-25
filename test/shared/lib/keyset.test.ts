@@ -3,25 +3,38 @@ import { describe, expect, it } from "vitest";
 import {
   keysetHrefs,
   keysetPage,
-  keysetRange,
+  keysetQuery,
   readPageCursor,
   type PageCursor,
 } from "~/shared/lib/keyset";
 
-/** 번호 1..total의 행에서 커서가 읽는 행. DB의 `keysetRange` 조회를 흉내 낸다. */
-function fetch(total: number, cursor: PageCursor, size: number): number[] {
-  const range = keysetRange(cursor, size);
+interface FakeQuery {
+  order(column: "id", options: { ascending: boolean }): FakeQuery;
+  limit(count: number): FakeQuery;
+  lt(column: "id", value: number): FakeQuery;
+  gt(column: "id", value: number): FakeQuery;
+}
+
+/** 번호 1..total의 행에서 `keysetQuery`가 읽는 행. 조건을 모았다가 PostgREST처럼 거르고 자른다. */
+function fetch(total: number, cursor: PageCursor, size: number) {
+  const spec = { ascending: true, limit: total, lt: Infinity, gt: 0 };
+  const query: FakeQuery = {
+    order: (_, { ascending }) => ((spec.ascending = ascending), query),
+    limit: (count) => ((spec.limit = count), query),
+    lt: (_, value) => ((spec.lt = value), query),
+    gt: (_, value) => ((spec.gt = value), query),
+  };
+  keysetQuery(query, cursor, size);
   const ids = Array.from({ length: total }, (_, index) => index + 1).filter(
-    (id) =>
-      (range.lt === undefined || id < range.lt) &&
-      (range.gt === undefined || id > range.gt),
+    (id) => id > spec.gt && id < spec.lt,
   );
-  if (!range.ascending) ids.reverse();
-  return ids.slice(0, range.limit);
+  if (!spec.ascending) ids.reverse();
+  return ids.slice(0, spec.limit).map((id) => ({ id }));
 }
 
 function page(total: number, cursor: PageCursor, size = 3) {
-  return keysetPage(fetch(total, cursor, size), cursor, size, (id) => id);
+  const result = keysetPage(fetch(total, cursor, size), cursor, size);
+  return { ...result, items: result.items.map((row) => row.id) };
 }
 
 describe("readPageCursor", () => {
@@ -46,27 +59,37 @@ describe("keysetPage", () => {
       items: [7, 6, 5],
       newer: null,
       older: 5,
+      atStart: true,
     });
   });
 
   it("has no older page when the rows end", () => {
-    expect(page(3, { kind: "first" })).toEqual({
+    expect(page(3, { kind: "first" })).toMatchObject({
       items: [3, 2, 1],
-      newer: null,
       older: null,
     });
     expect(page(7, { kind: "before", id: 2 })).toEqual({
       items: [1],
       newer: 1,
       older: null,
+      atStart: false,
     });
   });
 
   it("goes back to the same page it came from", () => {
     const second = page(7, { kind: "before", id: 5 });
-    expect(second).toEqual({ items: [4, 3, 2], newer: 4, older: 2 });
-    const back = page(7, { kind: "after", id: second.newer! });
-    expect(back).toEqual({ items: [7, 6, 5], newer: null, older: 5 });
+    expect(second).toEqual({
+      items: [4, 3, 2],
+      newer: 4,
+      older: 2,
+      atStart: false,
+    });
+    expect(page(7, { kind: "after", id: second.newer! })).toEqual({
+      items: [7, 6, 5],
+      newer: null,
+      older: 5,
+      atStart: true,
+    });
   });
 
   it("shows a newer page when there are more rows after the cursor", () => {
@@ -74,32 +97,36 @@ describe("keysetPage", () => {
       items: [5, 4, 3],
       newer: 5,
       older: 3,
+      atStart: false,
     });
   });
 
-  it("links back next to the cursor when a page is empty", () => {
-    expect(page(7, { kind: "before", id: 1 })).toEqual({
-      items: [],
-      newer: 0,
-      older: null,
-    });
-    expect(page(7, { kind: "after", id: 7 })).toEqual({
-      items: [],
-      newer: null,
-      older: 8,
-    });
+  it("only goes back to the start from an empty page", () => {
+    for (const cursor of [
+      { kind: "before", id: 1 },
+      { kind: "after", id: 7 },
+    ] as const) {
+      expect(page(7, cursor)).toEqual({
+        items: [],
+        newer: null,
+        older: null,
+        atStart: false,
+      });
+    }
   });
 });
 
 describe("keysetHrefs", () => {
-  it("builds both links and drops a cursor that cannot exist", () => {
-    expect(keysetHrefs("/recent", { newer: 4, older: 2 })).toEqual({
-      newer: "/recent?after=4",
-      older: "/recent?before=2",
+  it("links each side and the start only when there is one", () => {
+    expect(
+      keysetHrefs("/recent", { newer: 4, older: 2, atStart: false }),
+    ).toEqual({
+      first: "/recent",
+      prev: "/recent?after=4",
+      next: "/recent?before=2",
     });
-    expect(keysetHrefs("/recent", { newer: 0, older: null })).toEqual({
-      newer: null,
-      older: null,
-    });
+    expect(
+      keysetHrefs("/recent", { newer: null, older: null, atStart: true }),
+    ).toEqual({ first: null, prev: null, next: null });
   });
 });

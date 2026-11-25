@@ -23,7 +23,8 @@ import {
 import { toImageMap, type RawImage } from "~/features/images";
 import {
   keysetPage,
-  keysetRange,
+  keysetQuery,
+  takePage,
   type KeysetPage,
   type PageCursor,
 } from "~/shared/lib/keyset";
@@ -224,39 +225,37 @@ export async function listHistory(
   pageId: number,
   cursor: PageCursor,
 ): Promise<KeysetPage<RevisionSummary>> {
-  const range = keysetRange(cursor, HISTORY_PAGE_SIZE);
-  let query = getSupabase()
-    .from("revisions")
-    .select(SUMMARY_COLUMNS)
-    .eq("page_id", pageId)
-    .order("id", { ascending: range.ascending })
-    .limit(range.limit);
-  if (range.lt !== undefined) query = query.lt("id", range.lt);
-  if (range.gt !== undefined) query = query.gt("id", range.gt);
+  const query = keysetQuery(
+    getSupabase()
+      .from("revisions")
+      .select(SUMMARY_COLUMNS)
+      .eq("page_id", pageId),
+    cursor,
+    HISTORY_PAGE_SIZE,
+  );
 
   const rows = unwrap(await query).map(toSummary);
-  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE, (row) => row.id);
+  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE);
 }
 
 /** 모든 문서의 최근 변경 한 쪽, 최신순. */
 export async function listRecentChanges(
   cursor: PageCursor,
 ): Promise<KeysetPage<RecentChange>> {
-  const range = keysetRange(cursor, HISTORY_PAGE_SIZE);
-  let query = getSupabase()
-    .from("revisions")
-    // pages와 revisions 사이에 외래 키가 둘이라(page_id, current_revision_id) 어느 쪽인지 적는다.
-    .select(`${SUMMARY_COLUMNS}, page:pages!revisions_page_id_fkey(title)`)
-    .order("id", { ascending: range.ascending })
-    .limit(range.limit);
-  if (range.lt !== undefined) query = query.lt("id", range.lt);
-  if (range.gt !== undefined) query = query.gt("id", range.gt);
+  const query = keysetQuery(
+    getSupabase()
+      .from("revisions")
+      // pages와 revisions 사이에 외래 키가 둘이라(page_id, current_revision_id) 어느 쪽인지 적는다.
+      .select(`${SUMMARY_COLUMNS}, page:pages!revisions_page_id_fkey(title)`),
+    cursor,
+    HISTORY_PAGE_SIZE,
+  );
 
   const rows = unwrap(await query).map((row) => ({
     ...toSummary(row),
     pageTitle: row.page.title,
   }));
-  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE, (row) => row.id);
+  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE);
 }
 
 /**
@@ -384,16 +383,9 @@ export async function listWantedPages(): Promise<
 }
 
 /** 특수 문서 목록 한 쪽. 한 개 더 읽어서(`SPECIAL_PAGE_SIZE + 1`) 다음 쪽이 있는지 안다. */
-export interface SpecialPage<T> {
+interface SpecialPage<T> {
   rows: T[];
   more: boolean;
-}
-
-function specialPage<T>(rows: T[]): SpecialPage<T> {
-  return {
-    rows: rows.slice(0, SPECIAL_PAGE_SIZE),
-    more: rows.length > SPECIAL_PAGE_SIZE,
-  };
 }
 
 /** 어디서도 링크하지 않는 일반 문서. `after` 제목 다음부터. */
@@ -406,7 +398,10 @@ export async function listOrphanPages(
       p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return specialPage(rows.map((row) => row.title));
+  return takePage(
+    rows.map((row) => row.title),
+    SPECIAL_PAGE_SIZE,
+  );
 }
 
 /** 이름공간의 모든 문서, 가나다순. `after` 제목 다음부터. */
@@ -421,7 +416,10 @@ export async function listAllPages(
       p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return specialPage(rows.map((row) => row.title));
+  return takePage(
+    rows.map((row) => row.title),
+    SPECIAL_PAGE_SIZE,
+  );
 }
 
 /**
@@ -441,8 +439,9 @@ export async function listPagesBySize(
       p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return specialPage(
+  return takePage(
     rows.map((row) => ({ title: row.title, textSize: row.text_size })),
+    SPECIAL_PAGE_SIZE,
   );
 }
 

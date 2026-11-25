@@ -1,14 +1,13 @@
 import type { Route } from "./+types/recent";
 import { withVerifiedMember } from "~/features/auth";
 import { listRecentChanges, RevisionList } from "~/features/pages";
-import { PageNav } from "~/shared/components/page-nav";
-import { keysetHrefs, readPageCursor } from "~/shared/lib/keyset";
+import { KeysetNav } from "~/shared/components/page-nav";
+import { readPageCursor } from "~/shared/lib/keyset";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const cursor = readPageCursor(new URL(request.url).searchParams);
   return {
     page: await withVerifiedMember(request, () => listRecentChanges(cursor)),
-    isFirst: cursor.kind === "first",
   };
 }
 
@@ -17,8 +16,7 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export default function RecentRoute({ loaderData }: Route.ComponentProps) {
-  const { page, isFirst } = loaderData;
-  const hrefs = keysetHrefs("/recent", page);
+  const { page } = loaderData;
 
   return (
     <div>
@@ -28,11 +26,7 @@ export default function RecentRoute({ loaderData }: Route.ComponentProps) {
         pageTitle={(change) => change.pageTitle}
         showPage
       />
-      <PageNav
-        first={isFirst ? null : "/recent"}
-        prev={hrefs.newer}
-        next={hrefs.older}
-      />
+      <KeysetNav path="/recent" page={page} />
     </div>
   );
 }

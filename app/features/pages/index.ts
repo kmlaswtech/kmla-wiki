@@ -45,7 +45,10 @@ export {
   readSpecialTab,
   sizeListOffset,
   SPECIAL_PAGE_SIZE,
+  sizeListNav,
   specialHref,
+  titleListNav,
+  type SpecialNav,
   SPECIAL_TABS,
 } from "./model/special";
 export { canAddAlias, canEditPage, redirectsHere } from "./model/view";

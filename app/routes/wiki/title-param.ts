@@ -2,6 +2,8 @@ import { data } from "react-router";
 
 import { parseTitle } from "~/features/markup";
 
+export { positiveInt } from "~/shared/lib/query-param";
+
 /**
  * 주소의 `*` 부분을 문서 제목으로 읽는다. 제목으로 쓸 수 없으면 404다.
  *
@@ -24,11 +26,4 @@ export function nonNegativeInt(value: string | null): number | null {
   if (value === null || !/^\d+$/.test(value)) return null;
   const number = Number(value);
   return Number.isSafeInteger(number) ? number : null;
-}
-
-/** 양의 정수 쿼리 값. 없거나 이상하면 `undefined`. */
-export function positiveInt(value: string | null): number | undefined {
-  if (value === null || !/^\d+$/.test(value)) return undefined;
-  const number = Number(value);
-  return Number.isSafeInteger(number) && number > 0 ? number : undefined;
 }

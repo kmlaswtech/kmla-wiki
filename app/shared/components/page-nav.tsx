@@ -2,7 +2,19 @@ import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { LinkButton } from "~/shared/components/link-button";
+import { keysetHrefs, type KeysetPage } from "~/shared/lib/keyset";
 import { Button } from "~/shared/ui/button";
+
+/** 번호로 끊어 읽은 목록(`KeysetPage`)의 쪽 넘기기. 주소는 `path?before=N`, `path?after=N`이다. */
+export function KeysetNav({
+  path,
+  page,
+}: {
+  path: string;
+  page: Omit<KeysetPage<unknown>, "items">;
+}) {
+  return <PageNav {...keysetHrefs(path, page)} />;
+}
 
 /**
  * 목록의 쪽 넘기기. 주소로 쪽을 나타내서 공유와 뒤로 가기가 된다(무한 스크롤을 쓰지 않는다).

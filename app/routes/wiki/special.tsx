@@ -15,9 +15,11 @@ import {
   SPECIAL_NAMESPACES,
   readSpecialNamespace,
   readSpecialTab,
+  sizeListNav,
   sizeListOffset,
-  SPECIAL_PAGE_SIZE,
   specialHref,
+  titleListNav,
+  type SpecialNav,
   SPECIAL_TABS,
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
@@ -31,14 +33,14 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const after = params.get("after") || undefined;
 
   const offset = sizeListOffset(nonNegativeInt(params.get("offset")));
+  const noNav: SpecialNav | null = null;
   const empty = {
     wanted: [],
     redirects: [],
     titles: [],
     sized: [],
     offset,
-    paged: after !== undefined,
-    more: false,
+    nav: noNav,
   };
 
   return withVerifiedMember(request, async () => {
@@ -52,7 +54,13 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     }
     if (tab === "short" || tab === "long") {
       const sized = await listPagesBySize(namespace, tab === "long", offset);
-      return { ...empty, tab, namespace, sized: sized.rows, more: sized.more };
+      return {
+        ...empty,
+        tab,
+        namespace,
+        sized: sized.rows,
+        nav: sizeListNav(tab, namespace, offset, sized.more),
+      };
     }
     const titles =
       tab === "orphan"
@@ -63,7 +71,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
       tab,
       namespace,
       titles: titles.rows,
-      more: titles.more,
+      nav: titleListNav(tab, namespace, after, titles.rows.at(-1), titles.more),
     };
   });
 }
@@ -73,47 +81,10 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
-  const {
-    tab,
-    namespace,
-    wanted,
-    redirects,
-    titles,
-    sized,
-    offset,
-    paged,
-    more,
-  } = loaderData;
+  const { tab, namespace, wanted, redirects, titles, sized, offset, nav } =
+    loaderData;
   const current = SPECIAL_TABS.find((item) => item.key === tab)!;
-  const last = titles.at(-1);
   const sizedTab = tab === "short" || tab === "long";
-  const titleTab = tab === "orphan" || tab === "all";
-  const nsParam: Record<string, string> =
-    tab === "orphan" ? {} : { ns: namespace };
-  // 쪽 넘기기. 크기 순 목록은 건너뛸 개수로 앞뒤로 간다. 제목 순 목록은 마지막 제목 다음부터만
-  // 이어 읽으므로(`after`) 앞 쪽으로 가는 단추가 없다.
-  const firstHref =
-    (sizedTab && offset > 0) || (titleTab && paged)
-      ? specialHref(tab, nsParam)
-      : null;
-  const prevHref =
-    sizedTab && offset > 0
-      ? specialHref(
-          tab,
-          offset > SPECIAL_PAGE_SIZE
-            ? { ...nsParam, offset: String(offset - SPECIAL_PAGE_SIZE) }
-            : nsParam,
-        )
-      : null;
-  const nextHref =
-    sizedTab && more
-      ? specialHref(tab, {
-          ...nsParam,
-          offset: String(offset + SPECIAL_PAGE_SIZE),
-        })
-      : titleTab && more && last
-        ? specialHref(tab, { ...nsParam, after: last })
-        : null;
 
   return (
     <div>
@@ -223,9 +194,7 @@ export default function SpecialRoute({ loaderData }: Route.ComponentProps) {
         </ul>
       )}
 
-      {sizedTab || titleTab ? (
-        <PageNav first={firstHref} prev={prevHref} next={nextHref} />
-      ) : null}
+      {nav ? <PageNav {...nav} /> : null}
     </div>
   );
 }

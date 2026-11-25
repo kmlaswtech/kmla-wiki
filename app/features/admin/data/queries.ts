@@ -9,7 +9,7 @@ import type { RecentChange } from "~/features/pages";
 import { toReportNotes, type ReportNote } from "~/features/reports";
 import {
   keysetPage,
-  keysetRange,
+  keysetQuery,
   type KeysetPage,
   type PageCursor,
 } from "~/shared/lib/keyset";
@@ -25,16 +25,15 @@ export const AUTHOR_EDITS_PAGE_SIZE = 50;
 export async function listAdminLog(
   cursor: PageCursor,
 ): Promise<KeysetPage<AdminLogEntry>> {
-  const range = keysetRange(cursor, PAGE_SIZE);
-  let query = getSupabase()
-    .from("admin_log")
-    .select(
-      "id, action, page_title, revision_id, pseudonym, reason, note, discussion_id, created_at",
-    )
-    .order("id", { ascending: range.ascending })
-    .limit(range.limit);
-  if (range.lt !== undefined) query = query.lt("id", range.lt);
-  if (range.gt !== undefined) query = query.gt("id", range.gt);
+  const query = keysetQuery(
+    getSupabase()
+      .from("admin_log")
+      .select(
+        "id, action, page_title, revision_id, pseudonym, reason, note, discussion_id, created_at",
+      ),
+    cursor,
+    PAGE_SIZE,
+  );
 
   const rows = unwrap(await query).map((row): AdminLogEntry => ({
     id: row.id,
@@ -47,23 +46,22 @@ export async function listAdminLog(
     discussionId: row.discussion_id,
     createdAt: row.created_at,
   }));
-  return keysetPage(rows, cursor, PAGE_SIZE, (row) => row.id);
+  return keysetPage(rows, cursor, PAGE_SIZE);
 }
 
 /** 공개 차단 내역 한 쪽, 최신순. */
 export async function listBans(
   cursor: PageCursor,
 ): Promise<KeysetPage<BanEntry>> {
-  const range = keysetRange(cursor, PAGE_SIZE);
-  let query = getSupabase()
-    .from("ban_log")
-    .select(
-      "id, pseudonym, page_title, revision_id, starts_at, ends_at, reason, lifted_at",
-    )
-    .order("id", { ascending: range.ascending })
-    .limit(range.limit);
-  if (range.lt !== undefined) query = query.lt("id", range.lt);
-  if (range.gt !== undefined) query = query.gt("id", range.gt);
+  const query = keysetQuery(
+    getSupabase()
+      .from("ban_log")
+      .select(
+        "id, pseudonym, page_title, revision_id, starts_at, ends_at, reason, lifted_at",
+      ),
+    cursor,
+    PAGE_SIZE,
+  );
 
   const rows = unwrap(await query).map((row): BanEntry => ({
     id: row.id,
@@ -75,7 +73,7 @@ export async function listBans(
     reason: row.reason,
     liftedAt: row.lifted_at,
   }));
-  return keysetPage(rows, cursor, PAGE_SIZE, (row) => row.id);
+  return keysetPage(rows, cursor, PAGE_SIZE);
 }
 
 export interface AuthorEdit extends RecentChange {

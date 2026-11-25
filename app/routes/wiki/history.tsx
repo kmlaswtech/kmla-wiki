@@ -26,8 +26,8 @@ import {
   RevisionList,
 } from "~/features/pages";
 import { ReportButton } from "~/features/reports";
-import { PageNav } from "~/shared/components/page-nav";
-import { keysetHrefs, readPageCursor } from "~/shared/lib/keyset";
+import { KeysetNav } from "~/shared/components/page-nav";
+import { readPageCursor } from "~/shared/lib/keyset";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
@@ -57,9 +57,11 @@ export async function clientLoader({
       // 판에 토론을 붙여 열 수 있는가. 차단된 회원과 삭제된 문서는 안 된다.
       canDiscuss: view.canEdit && view.page.deletedAt === null,
       revisions: history.items,
-      newer: history.newer,
-      older: history.older,
-      isFirst: cursor.kind === "first",
+      nav: {
+        newer: history.newer,
+        older: history.older,
+        atStart: history.atStart,
+      },
       myPseudonym,
       discussionCounts,
     };
@@ -112,18 +114,16 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
     canDiscuss,
     discussionCounts,
     currentRevisionId,
-    newer,
-    older,
-    isFirst,
+    nav,
   } = loaderData;
   const discussionHref = pageHref(title, "discussion");
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   const historyHref = pageHref(title, "history");
-  const hrefs = keysetHrefs(historyHref, { newer, older });
 
-  // 비교할 두 판. 처음에는 이 쪽의 첫 판과 그 앞 판이다. 쪽을 넘기면(같은 화면이 그대로 남는다) 새
-  // 쪽에 맞춰 다시 고른다. 그러지 않으면 보이지 않는 판끼리 비교하게 된다.
+  // 비교할 두 판. 처음에는 이 쪽의 첫 판과 그 앞 판이다. 쪽을 넘기면 화면이 그대로 남으므로 새 쪽에
+  // 맞춰 다시 고른다. 그러지 않으면 보이지 않는 판끼리 비교하게 된다. 화면을 key로 다시 그리는 방법은
+  // 쓰지 않는다. 감싸는 컴포넌트를 두면 React Router가 `clientAction`을 따로 떼지 못해 빌드가 깨진다.
   const shownPage = revisions[0]?.id ?? null;
   const [comparePage, setComparePage] = useState(shownPage);
   const [compareFrom, setCompareFrom] = useState(revisions[1]?.id ?? null);
@@ -257,11 +257,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
         )}
       />
 
-      <PageNav
-        first={isFirst ? null : historyHref}
-        prev={hrefs.newer}
-        next={hrefs.older}
-      />
+      <KeysetNav path={historyHref} page={nav} />
 
       <RevertDialog
         key={revertTarget ?? "closed"}
