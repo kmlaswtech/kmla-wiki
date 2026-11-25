@@ -10,12 +10,10 @@ import {
   OpenLookupList,
   OpenReportList,
   ReasonDialog,
-  restoreRevokedAdmin,
   revokeAdmin,
-  type RestorableRevocation,
+  RestorableRevocationList,
 } from "~/features/admin";
 import { loadMemberStatus, withVerifiedMember } from "~/features/auth";
-import { formatDateTime } from "~/shared/lib/time";
 import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
@@ -46,7 +44,6 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
   const { admins, revocations, lookups, reports } = loaderData;
   const revalidator = useRevalidator();
   const [revoking, setRevoking] = useState<string | null>(null);
-  const [restoring, setRestoring] = useState<RestorableRevocation | null>(null);
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -148,34 +145,10 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
             이름으로 다시 관리자가 됩니다. 7일이 지나면 판 기록에서 다시
             지정해야 합니다.
           </p>
-          <ul className="divide-y rounded-md border text-sm">
-            {revocations.map((revocation) => (
-              <li
-                key={revocation.logId}
-                className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2"
-              >
-                <span className="text-muted-foreground tabular-nums">
-                  #{revocation.logId}
-                </span>
-                <span className="font-medium">{revocation.handle}</span>
-                <span className="min-w-0 truncate text-muted-foreground">
-                  {revocation.reason}
-                </span>
-                <span className="ml-auto flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {formatDateTime(revocation.restorableUntil)}까지
-                  </span>
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => setRestoring(revocation)}
-                  >
-                    되돌리기
-                  </Button>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <RestorableRevocationList
+            revocations={revocations}
+            onChanged={() => void revalidator.revalidate()}
+          />
         </section>
       ) : null}
 
@@ -187,18 +160,6 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
         confirmLabel="해제"
         destructive
         onConfirm={(reason) => revokeAdmin(revoking ?? "", reason)}
-        onDone={() => void revalidator.revalidate()}
-      />
-
-      <ReasonDialog
-        open={restoring !== null}
-        onOpenChange={(open) => !open && setRestoring(null)}
-        title="관리자 해제 되돌리기"
-        description={`‘${restoring?.handle ?? ""}’의 해제를 되돌려 같은 사람에게 관리자 권한을 다시 줍니다. 공개 기록에는 어느 해제를 되돌렸는지만 표시됩니다.`}
-        confirmLabel="되돌리기"
-        onConfirm={async (reason) => {
-          if (restoring) await restoreRevokedAdmin(restoring.logId, reason);
-        }}
         onDone={() => void revalidator.revalidate()}
       />
     </div>

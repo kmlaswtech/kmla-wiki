@@ -420,7 +420,6 @@ export type Database = {
           admin_log_id: number
           reason: string
           restorable_until: string
-          revoked_at: string
         }[]
       }
       mark_image_deleted: { Args: { p_image_id: string }; Returns: undefined }
@@ -519,7 +518,7 @@ export type Database = {
       }
       restore_revoked_admin: {
         Args: { p_admin_log_id: number; p_reason: string }
-        Returns: string
+        Returns: undefined
       }
       revert_and_hide_revision: {
         Args: { p_reason: string; p_revision_id: number }

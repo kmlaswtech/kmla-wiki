@@ -35,7 +35,6 @@ export interface RestorableRevocation {
   logId: number;
   handle: string;
   reason: string;
-  revokedAt: string;
   restorableUntil: string;
 }
 

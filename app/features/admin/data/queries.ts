@@ -263,7 +263,6 @@ export async function listRestorableRevocations(): Promise<
     logId: row.admin_log_id,
     handle: row.admin_handle,
     reason: row.reason,
-    revokedAt: row.revoked_at,
     restorableUntil: row.restorable_until,
   }));
 }
