@@ -251,6 +251,8 @@ begin
   if v_target.member_id is null then
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
+  -- 관리자 지정·해제 되돌리기와 같은 행을 잠근다. 확인과 차단 사이에 관리자가 되지 않게 한다.
+  perform 1 from private.members where id = v_target.member_id for update;
   if exists (select 1 from private.members where id = v_target.member_id and is_admin) then
     raise exception 'target is an admin' using errcode = 'WK010';
   end if;
@@ -387,6 +389,11 @@ begin
   if v_target.member_id is null then
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
+
+  -- 잠금 순서는 관리자 행 전체 → 대상 행이다(해제 되돌리기와 같다). 같은 이름을 동시에 고르지
+  -- 않고, 확인한 뒤에 차단되지 않는다(`ban_editor`도 대상 행을 잠근다).
+  perform 1 from private.members where is_admin for update;
+  perform 1 from private.members where id = v_target.member_id for update;
   if exists (select 1 from private.members where id = v_target.member_id and is_admin) then
     raise exception 'already an admin' using errcode = 'WK011';
   end if;
@@ -394,11 +401,13 @@ begin
     raise exception 'target is banned' using errcode = 'WK002';
   end if;
 
-  -- 해제 되돌리기와 같은 잠금이다. 동시에 같은 이름을 고르지 않게 한다.
-  perform 1 from private.members where is_admin for update;
   update private.members
      set is_admin = true, admin_handle = private.next_admin_handle()
    where id = v_target.member_id;
+  -- 다시 지정했으니 남은 해제는 더 되돌릴 것이 없다. 예전 이름도 비워 둘 필요가 없다.
+  update private.admin_revocations
+     set restored_at = now()
+   where member_id = v_target.member_id and restored_at is null;
 
   -- 누구를 지정했는지는 공개하지 않는다. 가명과 문서를 남기면 그 가명이 관리자라는 것이 드러난다.
   perform private.log_admin_action('grant_admin', v_reason);
@@ -1127,12 +1136,15 @@ begin
   perform private.require_admin();
   v_reason := private.require_reason(p_reason);
 
+  -- 잠금 순서는 관리자 행 전체 → 대상 행이다(`grant_admin`과 같다). 확인은 잠근 뒤에 한다.
+  perform 1 from private.members where is_admin for update;
   select * into v_revocation from private.admin_revocations
   where admin_log_id = p_admin_log_id
   for update;
   if v_revocation.admin_log_id is null then
     raise exception 'revocation not found' using errcode = 'WK006';
   end if;
+  perform 1 from private.members where id = v_revocation.member_id for update;
   if v_revocation.restored_at is not null
      or exists (select 1 from private.members where id = v_revocation.member_id and is_admin) then
     raise exception 'already restored' using errcode = 'WK011';
@@ -1144,8 +1156,7 @@ begin
     raise exception 'target is banned' using errcode = 'WK002';
   end if;
 
-  -- 이름은 기간 동안 비워 두었다. 그래도 겹치면(최초 지정처럼 SQL로 직접 바꾼 경우) 새 이름을 준다.
-  perform 1 from private.members where is_admin for update;
+  -- 이름은 기간 동안 비워 두었다. 그래도 겹치면(SQL로 직접 바꾼 경우, 번호 이름) 새 이름을 준다.
   v_handle := case
     when exists (select 1 from private.members where admin_handle = v_revocation.admin_handle)
       then private.next_admin_handle()

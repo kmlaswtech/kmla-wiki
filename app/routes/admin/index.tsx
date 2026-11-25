@@ -144,7 +144,7 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
         <section>
           <h2 className="mb-2 text-lg font-semibold">최근 해제</h2>
           <p className="mb-3 text-sm text-muted-foreground">
-            잘못 해제했다면 7일 안에 되돌릴 수 있습니다. 같은 사람이 같은
+            잘못 해제했다면 7일 안에 되돌릴 수 있습니다. 같은 사람이 되도록 같은
             이름으로 다시 관리자가 됩니다. 7일이 지나면 판 기록에서 다시
             지정해야 합니다.
           </p>
