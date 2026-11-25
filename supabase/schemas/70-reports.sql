@@ -204,7 +204,8 @@ GRANT EXECUTE ON FUNCTION "public"."count_open_reports"() TO "postgres";
 REVOKE ALL ON FUNCTION "public"."count_open_reports"() FROM PUBLIC, "anon";
 
 -- 처리되지 않은 신고를 판별로 묶는다(관리자 전용). 신고자는 돌려주지 않는다. 오래된 신고부터. 판이
--- 지워지면 신고도 지워진다(on delete cascade). 토론 글 신고는 `list_open_post_reports`가 준다.
+-- 지워지면 신고도 지워진다(on delete cascade). 열린 신고의 판은 숨겨지지 않았고 문서도 삭제되지
+-- 않았다(트리거). 토론 글 신고는 `list_open_post_reports`가 준다.
 -- `dismissed_count`는 같은 판에서 전에 기각한 신고 수다. 관리자가 앞의 판단을 참고한다.
 CREATE OR REPLACE FUNCTION public.list_open_reports()
   RETURNS TABLE (
@@ -214,9 +215,7 @@ CREATE OR REPLACE FUNCTION public.list_open_reports()
     pseudonym           text,
     parent_revision_id  bigint,
     revision_created_at timestamp with time zone,
-    hidden_at           timestamp with time zone,
     is_current          boolean,
-    page_deleted        boolean,
     first_reported_at   timestamp with time zone,
     reports             jsonb,
     dismissed_count     integer
@@ -231,8 +230,8 @@ begin
   return query
   select
     revision.id, page.id, page.title, revision.author_pseudonym, revision.parent_revision_id,
-    revision.created_at, revision.hidden_at, revision.id = page.current_revision_id,
-    page.deleted_at is not null, grouped.first_reported_at, grouped.reports,
+    revision.created_at, revision.id = page.current_revision_id,
+    grouped.first_reported_at, grouped.reports,
     (
       select count(*)::integer from private.reports as earlier
       where earlier.revision_id = grouped.revision_id and earlier.resolution = 'dismissed'

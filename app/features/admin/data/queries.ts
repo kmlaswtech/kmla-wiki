@@ -205,9 +205,7 @@ export interface OpenReport {
   authorPseudonym: string;
   parentRevisionId: number | null;
   revisionCreatedAt: string;
-  hiddenAt: string | null;
   isCurrent: boolean;
-  pageDeleted: boolean;
   reports: ReportNote[];
   /** 같은 판에서 전에 기각한 신고 수. */
   dismissedCount: number;
@@ -223,9 +221,7 @@ export async function listOpenReports(): Promise<OpenReport[]> {
     authorPseudonym: row.pseudonym,
     parentRevisionId: row.parent_revision_id,
     revisionCreatedAt: row.revision_created_at,
-    hiddenAt: row.hidden_at,
     isCurrent: row.is_current,
-    pageDeleted: row.page_deleted,
     reports: toReportNotes(row.reports),
     dismissedCount: row.dismissed_count,
   }));

@@ -105,6 +105,10 @@ select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :
 select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post3), 'WK006', null,
   'a post in a deleted discussion cannot be reported');
 select logout();
+select login(:admin);
+select throws_ok(format($$select public.report_discussion_post(%s, 'abuse')$$, :post3), 'WK006', null,
+  'an admin who can still see a deleted discussion cannot report its posts either');
+select logout();
 
 select login(:bob);
 select public.open_discussion(:p1, '글 거둘 토론', '글 거둘 토론의 첫 글') as d5 \gset

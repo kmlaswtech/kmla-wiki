@@ -1107,8 +1107,9 @@ REVOKE ALL ON FUNCTION "private"."close_deleted_page_post_reports"() FROM PUBLIC
 CREATE TRIGGER close_post_reports_on_delete AFTER UPDATE OF deleted_at ON public.pages FOR EACH ROW WHEN (((old.deleted_at IS NULL) AND (new.deleted_at IS NOT NULL))) EXECUTE FUNCTION private.close_deleted_page_post_reports();
 
 -- 토론 글 하나를 신고한다. 토론을 신고하려면 첫 글을 신고한다. 규칙은 판 신고(`report_revision`)와
--- 같다. 내 글, 내가 볼 수 없는 토론의 글, 숨기거나 거둔 글, 닫기·다시 열기·제목 바꾸기 글은 없는 글과
--- 같은 오류다. 닫기·다시 열기 글은 토론의 상태를, 제목 바꾸기 글은 관리 기록을 겸한다.
+-- 같다. 내 글, 회원에게 보이지 않는 토론(관리자만 보는 지운 토론 포함)의 글, 숨기거나 거둔 글,
+-- 닫기·다시 열기·제목 바꾸기 글은 없는 글과 같은 오류다. 보이지 않는 글의 신고는 트리거가 닫으므로
+-- 받지 않는다. 닫기·다시 열기 글은 토론의 상태를, 제목 바꾸기 글은 관리 기록을 겸한다.
 CREATE OR REPLACE FUNCTION public.report_discussion_post (
   p_post_id  bigint,
   p_category text,
@@ -1137,7 +1138,7 @@ begin
      and post.hidden_at is null
      and post.withdrawn_at is null
      and post.member_id <> v_member_id
-     and private.can_see_discussion(discussion)
+     and private.discussion_is_public(discussion)
      for share of post;
   if not found then
     raise exception 'post not found' using errcode = 'WK006';
@@ -1157,7 +1158,7 @@ GRANT EXECUTE ON FUNCTION "public"."report_discussion_post"(bigint, text, text) 
 REVOKE ALL ON FUNCTION "public"."report_discussion_post"(bigint, text, text) FROM PUBLIC, "anon";
 
 -- 처리되지 않은 토론 글 신고를 글별로 묶는다(관리자 전용). 신고자는 돌려주지 않는다. 오래된 신고부터.
--- 글 본문은 상태(숨김, 거둠)와 관계없이 준다. 관리자가 판단해야 하기 때문이다.
+-- 열린 신고의 글은 회원에게 보인다(트리거). 숨기거나 거둔 글, 지우거나 거둔 토론의 글은 없다.
 CREATE OR REPLACE FUNCTION public.list_open_post_reports()
   RETURNS TABLE (
     post_id              bigint,
@@ -1168,10 +1169,6 @@ CREATE OR REPLACE FUNCTION public.list_open_post_reports()
     kind                 text,
     body                 text,
     post_created_at      timestamp with time zone,
-    hidden_at            timestamp with time zone,
-    withdrawn_at         timestamp with time zone,
-    discussion_withdrawn boolean,
-    discussion_deleted   boolean,
     first_reported_at    timestamp with time zone,
     reports              jsonb,
     dismissed_count      integer
@@ -1186,9 +1183,7 @@ begin
   return query
   select
     post.id, discussion.id, discussion.title, page.title, post.author_name, post.kind,
-    post.body, post.created_at, post.hidden_at, post.withdrawn_at, discussion.withdrawn_at is not null,
-    discussion.deleted_at is not null or page.deleted_at is not null,
-    grouped.first_reported_at, grouped.reports,
+    post.body, post.created_at, grouped.first_reported_at, grouped.reports,
     (
       select count(*)::integer from private.reports as earlier
       where earlier.post_id = grouped.post_id and earlier.resolution = 'dismissed'

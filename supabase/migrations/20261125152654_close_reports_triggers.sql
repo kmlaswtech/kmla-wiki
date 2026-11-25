@@ -2,6 +2,10 @@ SET local check_function_bodies = off;
 
 DROP FUNCTION "private"."close_page_discussion_reports"(bigint);
 
+DROP FUNCTION "public"."list_open_post_reports"();
+
+DROP FUNCTION "public"."list_open_reports"();
+
 CREATE OR REPLACE FUNCTION private.close_deleted_page_post_reports()
   RETURNS TRIGGER
   LANGUAGE plpgsql
@@ -111,6 +115,144 @@ CREATE OR REPLACE FUNCTION private.delete_page_as_admin (
 begin
   perform private.write_revision(p_page_id, p_admin_id, p_body, p_summary, 'delete', true);
   update public.pages set deleted_at = now() where id = p_page_id;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.list_open_post_reports()
+  RETURNS TABLE (
+    post_id           bigint,
+    discussion_id     bigint,
+    discussion_title  text,
+    page_title        text,
+    author_name       text,
+    kind              text,
+    body              text,
+    post_created_at   timestamp with time zone,
+    first_reported_at timestamp with time zone,
+    reports           jsonb,
+    dismissed_count   integer
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.require_admin();
+  return query
+  select
+    post.id, discussion.id, discussion.title, page.title, post.author_name, post.kind,
+    post.body, post.created_at, grouped.first_reported_at, grouped.reports,
+    (
+      select count(*)::integer from private.reports as earlier
+      where earlier.post_id = grouped.post_id and earlier.resolution = 'dismissed'
+    )
+  from (
+    select
+      report.post_id,
+      min(report.created_at) as first_reported_at,
+      jsonb_agg(
+        jsonb_build_object('category', report.category, 'note', report.note, 'created_at', report.created_at)
+        order by report.created_at
+      ) as reports
+    from private.reports as report
+    where report.resolved_at is null and report.post_id is not null
+    group by report.post_id
+  ) as grouped
+  join private.discussion_posts as post on post.id = grouped.post_id
+  join private.discussions as discussion on discussion.id = post.discussion_id
+  join public.pages as page on page.id = discussion.page_id
+  -- 자르지 않는다. 머리띠의 수(`count_open_reports`)에 든 글을 모두 보여야 닫을 수 있다.
+  order by grouped.first_reported_at;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "public"."list_open_post_reports"() FROM PUBLIC, "anon";
+
+CREATE OR REPLACE FUNCTION public.list_open_reports()
+  RETURNS TABLE (
+    revision_id         bigint,
+    page_id             bigint,
+    page_title          text,
+    pseudonym           text,
+    parent_revision_id  bigint,
+    revision_created_at timestamp with time zone,
+    is_current          boolean,
+    first_reported_at   timestamp with time zone,
+    reports             jsonb,
+    dismissed_count     integer
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  perform private.require_admin();
+  return query
+  select
+    revision.id, page.id, page.title, revision.author_pseudonym, revision.parent_revision_id,
+    revision.created_at, revision.id = page.current_revision_id,
+    grouped.first_reported_at, grouped.reports,
+    (
+      select count(*)::integer from private.reports as earlier
+      where earlier.revision_id = grouped.revision_id and earlier.resolution = 'dismissed'
+    )
+  from (
+    select
+      report.revision_id,
+      min(report.created_at) as first_reported_at,
+      jsonb_agg(
+        jsonb_build_object('category', report.category, 'note', report.note, 'created_at', report.created_at)
+        order by report.created_at
+      ) as reports
+    from private.reports as report
+    where report.resolved_at is null and report.revision_id is not null
+    group by report.revision_id
+  ) as grouped
+  join public.revisions as revision on revision.id = grouped.revision_id
+  join public.pages as page on page.id = revision.page_id
+  -- 자르지 않는다. 머리띠의 수(`count_open_reports`)에 든 판을 모두 보여야 닫을 수 있다.
+  order by grouped.first_reported_at;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "public"."list_open_reports"() FROM PUBLIC, "anon";
+
+CREATE OR REPLACE FUNCTION public.report_discussion_post (
+  p_post_id  bigint,
+  p_category text,
+  p_note     text   DEFAULT ''::text
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint := private.require_editor();
+  v_note text := private.check_report_note(p_category, p_note);
+begin
+  -- 글과 토론을 잠근다. 관리자가 같은 때 숨기거나 지우면 그 일이 끝난 뒤 다시 보고 거절한다. 그러지
+  -- 않으면 숨긴 뒤에 들어온 신고가 닫히지 않고 남는다. 다른 토론 쓰기(`lock_discussion`)처럼 토론을
+  -- 먼저 잠가, 같은 글을 거두는 일과 서로 기다리지 않게 한다.
+  perform 1 from private.discussions
+   where id = (select discussion_id from private.discussion_posts where id = p_post_id)
+     for share;
+  perform 1
+    from private.discussion_posts as post
+    join private.discussions as discussion on discussion.id = post.discussion_id
+   where post.id = p_post_id
+     and post.kind in ('open', 'post')
+     and post.hidden_at is null
+     and post.withdrawn_at is null
+     and post.member_id <> v_member_id
+     and private.discussion_is_public(discussion)
+     for share of post;
+  if not found then
+    raise exception 'post not found' using errcode = 'WK006';
+  end if;
+  perform private.insert_report(v_member_id, null, p_post_id, p_category, v_note);
 end;
 $function$;
 
@@ -280,6 +422,22 @@ REVOKE ALL ON FUNCTION "private"."close_hidden_discussion_reports"() FROM PUBLIC
 REVOKE ALL ON FUNCTION "private"."close_hidden_post_reports"() FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION "private"."close_hidden_revision_reports"() FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "authenticated";
+
+REVOKE ALL ON FUNCTION "public"."list_open_post_reports"() FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_post_reports"() TO "service_role";
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_reports"() TO "authenticated";
+
+REVOKE ALL ON FUNCTION "public"."list_open_reports"() FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_reports"() TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_open_reports"() TO "service_role";
 
 -- 백필. 트리거 전에 보이지 않게 된 대상(숨긴 판, 삭제된 문서, 숨기거나 거둔 글, 지우거나 거둔 토론)에
 -- 열려 있는 신고를 닫는다. 그때까지 거두기는 신고를 닫지 않았다. 처리자는 없다.
