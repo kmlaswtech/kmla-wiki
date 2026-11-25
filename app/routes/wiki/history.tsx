@@ -11,6 +11,7 @@ import type { Route } from "./+types/history";
 import { formText, positiveInt, titleFromParams } from "./title-param";
 import { RevisionAdminMenu } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
+import { getRevisionDiscussionCounts } from "~/features/discussions";
 import { pageHref } from "~/features/markup";
 import {
   canEditPage,
@@ -27,6 +28,7 @@ import {
 } from "~/features/pages";
 import { ReportButton } from "~/features/reports";
 import { LinkButton } from "~/shared/components/link-button";
+import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
 
 export async function clientLoader({
@@ -40,9 +42,10 @@ export async function clientLoader({
     const view = await getPageView(title, { followRedirect: false });
     if (!view.found) throw data(null, { status: 404 });
 
-    const [revisions, myPseudonym] = await Promise.all([
+    const [revisions, myPseudonym, discussionCounts] = await Promise.all([
       listHistory(view.page.id, before),
       getMyPseudonym(view.page.id),
+      getRevisionDiscussionCounts(view.page.id),
     ]);
     return {
       title: view.page.title,
@@ -51,8 +54,11 @@ export async function clientLoader({
       // 관리자는 방패 메뉴로 직접 조치한다. 차단된 사람은 신고도 할 수 없다(서버도 막는다).
       canReport: view.canEdit && !view.isAdmin,
       isAdmin: view.isAdmin,
+      // 판에 토론을 붙여 열 수 있는가. 차단된 회원과 삭제된 문서는 안 된다.
+      canDiscuss: view.canEdit && view.page.deletedAt === null,
       revisions,
       myPseudonym,
+      discussionCounts,
     };
   });
 }
@@ -100,8 +106,11 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
     canRevert,
     canReport,
     isAdmin,
+    canDiscuss,
+    discussionCounts,
     currentRevisionId,
   } = loaderData;
+  const discussionHref = pageHref(title, "discussion");
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   const oldest = revisions.at(-1);
@@ -183,8 +192,27 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
               }
             : undefined
         }
+        afterAuthor={(revision) => {
+          const count = discussionCounts.get(revision.id);
+          return count ? (
+            <Badge
+              variant="outline"
+              render={<Link to={`${discussionHref}?rev=${revision.id}`} />}
+            >
+              토론 {count}
+            </Badge>
+          ) : null;
+        }}
         actions={(revision) => (
           <>
+            {canDiscuss && !revision.hiddenAt ? (
+              <Link
+                to={`${discussionHref}?rev=${revision.id}&new`}
+                className="rounded px-1.5 py-0.5 text-primary hover:bg-muted"
+              >
+                토론
+              </Link>
+            ) : null}
             {canRevert &&
             revision.id !== currentRevisionId &&
             !revision.hiddenAt ? (

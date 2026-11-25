@@ -155,23 +155,44 @@ export function PageArticle({
               <span className="sm:hidden">편집</span>
             </LinkButton>
           )}
-          <LinkButton
-            size="sm"
-            variant="outline"
-            to={pageHref(page.title, "history")}
-            prefetch="intent"
-          >
-            기록
-          </LinkButton>
-          {editable ? (
+          {/* 기록·토론·이동은 문서를 둘러싼 화면이라 한 묶음으로 붙인다. 편집은 따로 둔다. */}
+          <div role="group" aria-label="문서 화면" className="flex">
             <LinkButton
               size="sm"
               variant="outline"
-              to={pageHref(page.title, "move")}
+              className={GROUPED}
+              to={pageHref(page.title, "history")}
+              prefetch="intent"
             >
-              이동
+              기록
             </LinkButton>
-          ) : null}
+            <LinkButton
+              size="sm"
+              variant="outline"
+              className={GROUPED}
+              to={pageHref(page.title, "discussion")}
+              aria-label={
+                view.openDiscussions > 0
+                  ? `토론, 열린 토론 ${view.openDiscussions}개`
+                  : "토론"
+              }
+            >
+              토론
+              {view.openDiscussions > 0 ? (
+                <Badge className="tabular-nums">{view.openDiscussions}</Badge>
+              ) : null}
+            </LinkButton>
+            {editable ? (
+              <LinkButton
+                size="sm"
+                variant="outline"
+                className={GROUPED}
+                to={pageHref(page.title, "move")}
+              >
+                이동
+              </LinkButton>
+            ) : null}
+          </div>
           {headerActions}
         </div>
       </header>
@@ -329,6 +350,10 @@ export function PageArticle({
     </article>
   );
 }
+
+/** 붙인 단추 묶음의 한 칸. 이웃과 테두리를 겹치고 바깥 모서리만 둥글게 한다. */
+const GROUPED =
+  "rounded-none not-first:-ml-px first:rounded-l-md last:rounded-r-md focus-visible:z-10";
 
 /** 정보가 빨리 낡는 위키라, 언제 고친 글인지를 제목 바로 아래에서 보여 준다. */
 function UpdatedAt({ value }: { value: string }) {

@@ -19,7 +19,7 @@ export async function listAdminLog(before?: number): Promise<AdminLogEntry[]> {
   let query = getSupabase()
     .from("admin_log")
     .select(
-      "id, action, page_title, revision_id, pseudonym, reason, note, created_at",
+      "id, action, page_title, revision_id, pseudonym, reason, note, discussion_id, created_at",
     )
     .order("id", { ascending: false })
     .limit(PAGE_SIZE);
@@ -33,6 +33,7 @@ export async function listAdminLog(before?: number): Promise<AdminLogEntry[]> {
     pseudonym: row.pseudonym,
     reason: row.reason,
     note: row.note,
+    discussionId: row.discussion_id,
     createdAt: row.created_at,
   }));
 }

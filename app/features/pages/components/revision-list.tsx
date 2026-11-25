@@ -17,6 +17,8 @@ interface RevisionListProps<Row extends RevisionSummary> {
   showPage?: boolean;
   /** 이 문서에서의 내 가명. 내가 쓴 판에 "나"를 붙인다. */
   myPseudonym?: string | null;
+  /** 가명 오른쪽에 붙일 것(판 기록의 판별 토론 수). */
+  afterAuthor?: (revision: Row) => ReactNode;
   /** 줄 끝에 붙일 버튼들(되돌리기, 관리 메뉴). */
   actions?: (revision: Row) => ReactNode;
   /** 줄 맨 앞에 붙일 것(판 기록의 비교할 판 고르기). */
@@ -31,6 +33,7 @@ export function RevisionList<Row extends RevisionSummary>({
   pageTitle,
   showPage = false,
   myPseudonym,
+  afterAuthor,
   actions,
   leading,
   detail,
@@ -86,6 +89,7 @@ export function RevisionList<Row extends RevisionSummary>({
                 </Badge>
               ) : null}
             </span>
+            {afterAuthor?.(revision)}
 
             {kind ? <Badge variant="outline">{kind}</Badge> : null}
             {revision.hiddenAt ? <Badge variant="outline">숨김</Badge> : null}

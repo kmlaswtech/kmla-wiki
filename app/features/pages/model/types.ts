@@ -75,6 +75,8 @@ export interface FoundPage extends Viewer {
   children: string[];
   /** 분류 문서면 속한 문서, 틀 문서면 쓰는 문서. */
   members: string[];
+  /** 열린 토론 수. 토론 단추에 붙인다. */
+  openDiscussions: number;
 }
 
 export interface MissingPage extends Viewer {

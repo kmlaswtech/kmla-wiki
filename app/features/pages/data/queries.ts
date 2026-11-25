@@ -69,6 +69,7 @@ interface RawPageView {
   backlinks: RawBacklink[];
   children?: string[];
   members?: string[];
+  open_discussions?: number;
 }
 
 function toResolved(raw: RawResolved): ResolvedBody {
@@ -161,6 +162,7 @@ export async function getPageView(
     backlinks: backlinks.filter((link) => !isAlias(link)),
     children: raw.children ?? [],
     members: raw.members ?? [],
+    openDiscussions: raw.open_discussions ?? 0,
     ...viewer,
   };
 }
