@@ -216,6 +216,7 @@ select logout();
 -- ── 읽기 ─────────────────────────────────────────────────────────────────────
 select login(:bob);
 select is(public.count_open_discussions(:p1), 1, 'the open count leaves out closed and withdrawn discussions');
+select is((public.get_page_view('토론 문서') ->> 'open_discussions')::integer, 1, 'the page view carries the open count');
 select results_eq(
   format($$select id from public.list_page_discussions(%s)$$, :p1),
   format($$values (%s::bigint), (%s::bigint)$$, :d3, :d1),
