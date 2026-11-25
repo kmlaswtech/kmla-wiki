@@ -306,6 +306,14 @@ select throws_ok(format($$select public.set_admin_nickname(%L)$$, repeat('가', 
   'a nickname is at most 20 characters');
 select throws_ok($$select public.set_admin_nickname('줄' || chr(10) || '바꿈')$$, 'WK021', null,
   'a nickname has no control characters');
+select throws_ok($$select public.set_admin_nickname(chr(12288))$$, 'WK021', null,
+  'a nickname cannot look blank with a non-ASCII space');
+select throws_ok($$select public.set_admin_nickname('운영' || chr(8203))$$, 'WK021', null,
+  'a nickname has no invisible characters');
+select throws_ok($$select public.set_admin_nickname('관리자 A')$$, 'WK021', null,
+  'a nickname cannot look like an admin handle');
+select lives_ok(format($$select public.set_admin_nickname(%L)$$, repeat('😀', 20)),
+  'a nickname counts characters, not bytes');
 select lives_ok($$select public.set_admin_nickname('운영 담당')$$, 'nicknames may be the same');
 select lives_ok($$select public.set_admin_nickname('   ')$$, 'a blank nickname clears it');
 select results_eq(

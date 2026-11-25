@@ -517,7 +517,7 @@ declare
   v_member_id bigint := private.require_admin();
   v_nickname text := nullif(btrim(p_nickname), '');
 begin
-  if char_length(v_nickname) > 20 or v_nickname ~ '[[:cntrl:]]' then
+  if not private.is_valid_admin_nickname(v_nickname) then
     raise exception 'invalid admin nickname' using errcode = 'WK021';
   end if;
 

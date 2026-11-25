@@ -1,5 +1,5 @@
 -- 관리자 전용 별명(set_admin_nickname). 관리자 목록(list_admins)에만 보이고 공개 기록에는 남기지 않는다.
--- 해제(revoke_admin)하면 지운다. 새 오류 코드 WK021(별명 형식이 틀림).
+-- 해제(revoke_admin)하면 지운다. 형식은 private.is_valid_admin_nickname이 정한다. 새 오류 코드 WK021(별명 형식이 틀림).
 
 SET local check_function_bodies = off;
 
@@ -7,6 +7,20 @@ DROP FUNCTION "public"."list_admins"();
 
 ALTER TABLE "private"."members"
   ADD COLUMN "admin_nickname" text;
+
+CREATE OR REPLACE FUNCTION private.is_valid_admin_nickname (
+  p_nickname text
+)
+  RETURNS boolean
+  LANGUAGE sql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+  select p_nickname = btrim(p_nickname)
+     and char_length(p_nickname) between 1 and 20
+     and p_nickname !~ '[[:cntrl:]\u00A0\u00AD\u115F\u1160\u1680\u180E\u2000-\u200F\u2028-\u202F\u205F-\u206F\u3000\u3164\uFE00-\uFE0F\uFEFF\uFFA0]'
+     and p_nickname !~ '^관리자 [A-Z]$';
+$function$;
 
 CREATE OR REPLACE FUNCTION public.list_admins()
   RETURNS TABLE (
@@ -80,7 +94,7 @@ declare
   v_member_id bigint := private.require_admin();
   v_nickname text := nullif(btrim(p_nickname), '');
 begin
-  if char_length(v_nickname) > 20 or v_nickname ~ '[[:cntrl:]]' then
+  if not private.is_valid_admin_nickname(v_nickname) then
     raise exception 'invalid admin nickname' using errcode = 'WK021';
   end if;
 
@@ -92,11 +106,7 @@ $function$;
 
 REVOKE ALL ON FUNCTION "public"."set_admin_nickname"(text) FROM PUBLIC, "anon";
 
-ALTER TABLE "private"."members"
-  ADD CONSTRAINT "members_admin_nickname_shape"
-    CHECK
-    (((admin_nickname IS NULL) OR (is_admin AND (admin_nickname = btrim(admin_nickname)) AND ((char_length(admin_nickname) >= 1) AND (char_length(admin_nickname) <= 20)) AND
-    (admin_nickname !~ '[[:cntrl:]]'::text))));
+REVOKE ALL ON FUNCTION "private"."is_valid_admin_nickname"(text) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION "public"."list_admins"() TO "authenticated";
 
@@ -113,3 +123,6 @@ REVOKE ALL ON FUNCTION "public"."set_admin_nickname"(text) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."set_admin_nickname"(text) TO "postgres";
 
 GRANT EXECUTE ON FUNCTION "public"."set_admin_nickname"(text) TO "service_role";
+
+ALTER TABLE "private"."members"
+  ADD CONSTRAINT "members_admin_nickname_shape" CHECK (((admin_nickname IS NULL) OR (is_admin AND private.is_valid_admin_nickname(admin_nickname))));

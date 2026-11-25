@@ -154,6 +154,25 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."member_is_banned"(bigint) FROM PUBLIC;
 
+-- 관리자 별명으로 쓸 수 있는가. 앞뒤 공백 없이 1~20자. 관리자 목록에서 다른 관리자로 보이거나
+-- 비어 보이지 않게, 제어 문자·보이지 않는 문자·방향 바꿈 문자·ASCII 밖 공백과 관리자 이름 꼴
+-- (`관리자 A`)을 막는다. 회원 테이블의 별명 제약과 `set_admin_nickname`이 함께 쓴다.
+CREATE OR REPLACE FUNCTION private.is_valid_admin_nickname (
+  p_nickname text
+)
+  RETURNS boolean
+  LANGUAGE sql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+  select p_nickname = btrim(p_nickname)
+     and char_length(p_nickname) between 1 and 20
+     and p_nickname !~ '[[:cntrl:]\u00A0\u00AD\u115F\u1160\u1680\u180E\u2000-\u200F\u2028-\u202F\u205F-\u206F\u3000\u3164\uFE00-\uFE0F\uFEFF\uFFA0]'
+     and p_nickname !~ '^관리자 [A-Z]$';
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."is_valid_admin_nickname"(text) FROM PUBLIC;
+
 -- ── 내 상태 ──────────────────────────────────────────────────────────────────
 -- 게이트와 `/me`가 쓴다. 회원 확인이 지난 사용자도 "지났다"는 사실은 알아야 하므로 `can_read()`를
 -- 요구하지 않는다. 로그인한 사용자에게 항상 1행을 돌려준다.
@@ -305,7 +324,7 @@ CREATE TABLE "private"."members" (
   "created_at"      timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT "members_admin_handle_key" UNIQUE (admin_handle),
   CONSTRAINT "members_admin_handle_shape" CHECK ((is_admin = (admin_handle IS NOT NULL))),
-  CONSTRAINT "members_admin_nickname_shape" CHECK (((admin_nickname IS NULL) OR (is_admin AND (admin_nickname = btrim(admin_nickname)) AND ((char_length(admin_nickname) >= 1) AND (char_length(admin_nickname) <= 20)) AND (admin_nickname !~ '[[:cntrl:]]'::text)))),
+  CONSTRAINT "members_admin_nickname_shape" CHECK (((admin_nickname IS NULL) OR (is_admin AND private.is_valid_admin_nickname(admin_nickname)))),
   CONSTRAINT "members_auth_user_id_fkey" FOREIGN KEY (auth_user_id) REFERENCES auth.users(id) ON DELETE SET NULL,
   CONSTRAINT "members_auth_user_id_key" UNIQUE (auth_user_id),
   CONSTRAINT "members_kmla_profile_id_key" UNIQUE (kmla_profile_id),
