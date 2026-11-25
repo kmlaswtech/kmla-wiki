@@ -199,6 +199,8 @@ select lives_ok(format($$select public.set_discussion_post_hidden(%s, false, '�
 select lives_ok(format($$select public.set_discussion_deleted(%s, true, '도배')$$, :d3), 'the admin can delete a discussion');
 select is((select deleted from public.list_page_discussions(:p1) where id = :d3), true,
   'the admin sees a deleted discussion in the list');
+select is((select count(*)::integer from public.list_recent_discussions() where id = :d3), 0,
+  'recent discussions leave out a deleted discussion, even for the admin');
 select logout();
 
 select login(:bob);
@@ -222,6 +224,12 @@ select results_eq(
   format($$select id from public.list_page_discussions(%s)$$, :p1),
   format($$values (%s::bigint), (%s::bigint)$$, :d3, :d1),
   'the list is in order of recent activity');
+select is((select id from public.list_recent_discussions() limit 1), :d3::bigint,
+  'recent discussions start with the most recent activity');
+select is(
+  (select array_agg(distinct page_title order by page_title) from public.list_recent_discussions()),
+  array['다른 문서', '토론 문서'],
+  'recent discussions cover every page and carry the page title');
 select is(
   (select row(is_open, post_count) from public.list_page_discussions(:p1) where id = :d1),
   row(false, 9),

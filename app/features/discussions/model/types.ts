@@ -1,7 +1,9 @@
-/** 문서의 토론 목록 한 줄(`list_page_discussions`). */
+/** 토론 목록 한 줄(`list_page_discussions`, `list_recent_discussions`). */
 export interface DiscussionSummary {
   id: number;
   title: string;
+  /** 토론이 있는 문서. 최근 토론 목록에만 있다. */
+  pageTitle?: string;
   /** 토론을 붙인 판. */
   revisionId: number | null;
   isOpen: boolean;

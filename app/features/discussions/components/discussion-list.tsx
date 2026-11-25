@@ -4,11 +4,12 @@ import { Link } from "react-router";
 
 import { topicHref } from "../model/rules";
 import type { DiscussionSummary } from "../model/types";
+import { pageHref } from "~/features/markup";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { cn } from "~/shared/lib/utils";
 import { Badge } from "~/shared/ui/badge";
 
-type DiscussionFilter = "all" | "open" | "closed";
+export type DiscussionFilter = "all" | "open" | "closed";
 
 const FILTERS: { value: DiscussionFilter; label: string }[] = [
   { value: "all", label: "모두" },
@@ -27,16 +28,21 @@ function matches(row: DiscussionSummary, filter: DiscussionFilter): boolean {
   return row.isOpen === (filter === "open");
 }
 
-/** 문서의 토론 목록(서버가 준 최근 활동순)과 모두·열린·닫힌 거르개. 처음에는 열린 토론만 보인다. */
+/**
+ * 토론 목록(서버가 준 최근 활동순)과 모두·열린·닫힌 거르개. 줄에 `pageTitle`이 있으면 문서 이름도
+ * 보인다(최근 토론).
+ */
 export function DiscussionList({
   discussions,
   revisionHref,
+  defaultFilter = "open",
 }: {
   discussions: readonly DiscussionSummary[];
-  /** 붙인 판을 여는 주소. */
-  revisionHref: (revisionId: number) => string;
+  /** 붙인 판을 여는 주소. 없으면 판을 보이지 않는다. */
+  revisionHref?: (revisionId: number) => string;
+  defaultFilter?: DiscussionFilter;
 }) {
-  const [filter, setFilter] = useState<DiscussionFilter>("open");
+  const [filter, setFilter] = useState(defaultFilter);
 
   const rows = discussions.filter((row) => matches(row, filter));
 
@@ -91,7 +97,15 @@ export function DiscussionList({
               </Link>
               {row.deleted ? <Badge variant="outline">지움</Badge> : null}
               <span className="flex shrink-0 flex-wrap items-center gap-x-3 text-muted-foreground">
-                {row.revisionId !== null ? (
+                {row.pageTitle !== undefined ? (
+                  <Link
+                    to={pageHref(row.pageTitle)}
+                    className="break-words hover:underline"
+                  >
+                    {row.pageTitle}
+                  </Link>
+                ) : null}
+                {row.revisionId !== null && revisionHref ? (
                   <Link
                     to={revisionHref(row.revisionId)}
                     className="tabular-nums hover:underline"

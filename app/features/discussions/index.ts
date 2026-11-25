@@ -13,6 +13,7 @@ export {
   findDiscussion,
   getRevisionDiscussionCounts,
   listPageDiscussions,
+  listRecentDiscussions,
 } from "./data/queries";
 export { describeDiscussionError } from "./model/errors";
 export {

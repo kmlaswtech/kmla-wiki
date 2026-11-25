@@ -27,6 +27,22 @@ export async function listPageDiscussions(
   }));
 }
 
+/** 위키 전체의 최근 토론 100개, 최근 활동순. 지운 토론은 관리자에게도 오지 않는다. */
+export async function listRecentDiscussions(): Promise<DiscussionSummary[]> {
+  const rows = unwrap(await getSupabase().rpc("list_recent_discussions"));
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    pageTitle: row.page_title,
+    revisionId: null,
+    isOpen: row.is_open,
+    openerName: row.opener_name,
+    postCount: row.post_count,
+    lastPostAt: row.last_post_at,
+    deleted: false,
+  }));
+}
+
 /** 판 id → 그 판에 붙은 토론 수. 기록 화면이 쓴다. */
 export async function getRevisionDiscussionCounts(
   pageId: number,

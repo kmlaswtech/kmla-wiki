@@ -44,6 +44,9 @@ CREATE INDEX discussions_page_idx ON private.discussions USING btree (page_id, l
 CREATE INDEX discussions_revision_idx ON private.discussions USING btree (revision_id)
   WHERE (revision_id IS NOT NULL);
 
+-- 최근 토론(`list_recent_discussions`). 위키 전체의 토론을 최근 활동순으로 읽는다.
+CREATE INDEX discussions_recent_idx ON private.discussions USING btree (last_post_at DESC);
+
 -- 한 사람이 1시간에 연 토론 수.
 CREATE INDEX discussions_created_by_idx ON private.discussions USING btree (created_by_member_id, created_at DESC);
 
@@ -234,6 +237,24 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."insert_discussion_post"(private.discussions, bigint, text, text, boolean) FROM PUBLIC;
 
+-- 모든 회원에게 보이는 토론인가. 거두지 않았고, 지우지 않았고, 문서가 삭제되지 않았다. 최근 토론 목록은
+-- 관리자에게도 이것만 보인다.
+CREATE OR REPLACE FUNCTION private.discussion_is_public (
+  p_discussion private.discussions
+)
+  RETURNS boolean
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select p_discussion.withdrawn_at is null
+    and p_discussion.deleted_at is null
+    and exists (select 1 from public.pages where id = p_discussion.page_id and deleted_at is null);
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."discussion_is_public"(private.discussions) FROM PUBLIC;
+
 -- 지금 사용자가 이 토론을 볼 수 있는가. 거둔 토론은 아무도, 지운 토론과 삭제된 문서의 토론은
 -- 관리자만 본다.
 CREATE OR REPLACE FUNCTION private.can_see_discussion (
@@ -245,14 +266,8 @@ CREATE OR REPLACE FUNCTION private.can_see_discussion (
   SECURITY DEFINER
   SET search_path TO ''
   AS $function$
-  select p_discussion.withdrawn_at is null
-    and (
-      private.is_admin()
-      or (
-        p_discussion.deleted_at is null
-        and exists (select 1 from public.pages where id = p_discussion.page_id and deleted_at is null)
-      )
-    );
+  select private.discussion_is_public(p_discussion)
+    or (p_discussion.withdrawn_at is null and private.is_admin());
 $function$;
 
 REVOKE ALL ON FUNCTION "private"."can_see_discussion"(private.discussions) FROM PUBLIC;
@@ -647,7 +662,7 @@ REVOKE ALL ON FUNCTION "public"."set_discussion_deleted"(bigint, boolean, text) 
 
 -- ── 읽기 ─────────────────────────────────────────────────────────────────────
 
--- 문서의 토론 목록. 최근 활동순이다. 정렬 바꾸기와 "열린 것만"은 화면이 한다. 지운 토론은 관리자에게만
+-- 문서의 토론 목록. 최근 활동순이다. 열린·닫힌 거르기는 화면이 한다. 지운 토론은 관리자에게만
 -- 나온다(`deleted`). `post_count`는 거두지 않은 글 수(첫 글 포함)다.
 CREATE OR REPLACE FUNCTION public.list_page_discussions (
   p_page_id bigint
@@ -695,6 +710,53 @@ REVOKE ALL ON FUNCTION "public"."list_page_discussions"(bigint) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."list_page_discussions"(bigint) TO "postgres";
 
 REVOKE ALL ON FUNCTION "public"."list_page_discussions"(bigint) FROM PUBLIC, "anon";
+
+-- 위키 전체의 최근 토론 100개, 최근 활동순. 최근 토론 화면이 쓴다. 지운 토론은 관리자에게도 나오지 않는다.
+-- 열 뜻은 `list_page_discussions`와 같다.
+CREATE OR REPLACE FUNCTION public.list_recent_discussions()
+  RETURNS TABLE (
+    id           bigint,
+    title        text,
+    page_title   text,
+    is_open      boolean,
+    opener_name  text,
+    post_count   integer,
+    last_post_at timestamp with time zone
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  if not private.can_read() then
+    raise exception 'membership verification required' using errcode = '42501';
+  end if;
+  return query
+  select
+    discussion.id, discussion.title, page.title, discussion.closed_at is null,
+    (select post.author_name from private.discussion_posts as post
+      where post.discussion_id = discussion.id and post.kind = 'open'),
+    (select count(*)::integer from private.discussion_posts as post
+      where post.discussion_id = discussion.id and post.withdrawn_at is null),
+    discussion.last_post_at
+  from private.discussions as discussion
+  join public.pages as page on page.id = discussion.page_id
+  where private.discussion_is_public(discussion)
+  order by discussion.last_post_at desc, discussion.id desc
+  limit 100;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."list_recent_discussions"() TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."list_recent_discussions"() TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."list_recent_discussions"() FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_recent_discussions"() TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."list_recent_discussions"() FROM PUBLIC, "anon";
 
 -- 문서의 열린 토론 수. 문서의 토론 단추가 쓴다. 지운 토론은 관리자에게도 세지 않는다.
 CREATE OR REPLACE FUNCTION public.count_open_discussions (

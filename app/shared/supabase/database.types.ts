@@ -441,6 +441,18 @@ export type Database = {
           title: string
         }[]
       }
+      list_recent_discussions: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: number
+          is_open: boolean
+          last_post_at: string
+          opener_name: string
+          page_title: string
+          post_count: number
+          title: string
+        }[]
+      }
       list_restorable_revocations: {
         Args: Record<PropertyKey, never>
         Returns: {

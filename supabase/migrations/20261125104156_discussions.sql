@@ -63,14 +63,8 @@ CREATE OR REPLACE FUNCTION private.can_see_discussion (
   SECURITY DEFINER
   SET search_path TO ''
   AS $function$
-  select p_discussion.withdrawn_at is null
-    and (
-      private.is_admin()
-      or (
-        p_discussion.deleted_at is null
-        and exists (select 1 from public.pages where id = p_discussion.page_id and deleted_at is null)
-      )
-    );
+  select private.discussion_is_public(p_discussion)
+    or (p_discussion.withdrawn_at is null and private.is_admin());
 $function$;
 
 CREATE OR REPLACE FUNCTION private.check_discussion_body (
@@ -155,6 +149,20 @@ CREATE OR REPLACE FUNCTION private.discussion_close_delay()
   SET search_path TO ''
   AS $function$
   select interval '24 hours';
+$function$;
+
+CREATE OR REPLACE FUNCTION private.discussion_is_public (
+  p_discussion private.discussions
+)
+  RETURNS boolean
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select p_discussion.withdrawn_at is null
+    and p_discussion.deleted_at is null
+    and exists (select 1 from public.pages where id = p_discussion.page_id and deleted_at is null);
 $function$;
 
 CREATE OR REPLACE FUNCTION private.insert_discussion_post (
@@ -558,6 +566,43 @@ $function$;
 
 REVOKE ALL ON FUNCTION "public"."list_page_discussions"(bigint) FROM PUBLIC, "anon";
 
+CREATE OR REPLACE FUNCTION public.list_recent_discussions()
+  RETURNS TABLE (
+    id           bigint,
+    title        text,
+    page_title   text,
+    is_open      boolean,
+    opener_name  text,
+    post_count   integer,
+    last_post_at timestamp with time zone
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+begin
+  if not private.can_read() then
+    raise exception 'membership verification required' using errcode = '42501';
+  end if;
+  return query
+  select
+    discussion.id, discussion.title, page.title, discussion.closed_at is null,
+    (select post.author_name from private.discussion_posts as post
+      where post.discussion_id = discussion.id and post.kind = 'open'),
+    (select count(*)::integer from private.discussion_posts as post
+      where post.discussion_id = discussion.id and post.withdrawn_at is null),
+    discussion.last_post_at
+  from private.discussions as discussion
+  join public.pages as page on page.id = discussion.page_id
+  where private.discussion_is_public(discussion)
+  order by discussion.last_post_at desc, discussion.id desc
+  limit 100;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION "public"."list_recent_discussions"() FROM PUBLIC, "anon";
+
 CREATE OR REPLACE FUNCTION public.open_discussion (
   p_page_id     bigint,
   p_title       text,
@@ -859,6 +904,8 @@ CREATE INDEX discussions_created_by_idx ON private.discussions USING btree (crea
 
 CREATE INDEX discussions_page_idx ON private.discussions USING btree (page_id, last_post_at DESC);
 
+CREATE INDEX discussions_recent_idx ON private.discussions USING btree (last_post_at DESC);
+
 CREATE INDEX discussions_revision_idx ON private.discussions USING btree (revision_id)
   WHERE (revision_id IS NOT NULL);
 
@@ -871,6 +918,8 @@ REVOKE ALL ON FUNCTION "private"."check_discussion_rate"(bigint, boolean) FROM P
 REVOKE ALL ON FUNCTION "private"."discussion_author_name"(bigint, bigint, boolean) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION "private"."discussion_close_delay"() FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION "private"."discussion_is_public"(private.discussions) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION "private"."insert_discussion_post"(private.discussions, bigint, text, text, boolean) FROM PUBLIC;
 
@@ -917,6 +966,14 @@ REVOKE ALL ON FUNCTION "public"."list_page_discussions"(bigint) FROM "postgres";
 GRANT EXECUTE ON FUNCTION "public"."list_page_discussions"(bigint) TO "postgres";
 
 GRANT EXECUTE ON FUNCTION "public"."list_page_discussions"(bigint) TO "service_role";
+
+GRANT EXECUTE ON FUNCTION "public"."list_recent_discussions"() TO "authenticated";
+
+REVOKE ALL ON FUNCTION "public"."list_recent_discussions"() FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_recent_discussions"() TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."list_recent_discussions"() TO "service_role";
 
 GRANT EXECUTE ON FUNCTION "public"."open_discussion"(bigint, text, text, bigint, boolean) TO "authenticated";
 
