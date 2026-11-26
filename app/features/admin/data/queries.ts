@@ -1,3 +1,4 @@
+import type { BanHistory } from "../model/ban-history";
 import type { BulkRevertRow, BulkRevertStatus } from "../model/bulk-revert";
 import type {
   AdminAction,
@@ -273,4 +274,13 @@ export async function listRestorableRevocations(): Promise<
 
 export async function getAdminCount(): Promise<number> {
   return unwrap(await getSupabase().rpc("admin_count")) ?? 0;
+}
+
+/** 판 작성자의 이전 차단 수(관리자 전용). */
+export async function getBanHistory(revisionId: number): Promise<BanHistory> {
+  return unwrap(
+    await getSupabase()
+      .rpc("ban_history", { p_revision_id: revisionId })
+      .single(),
+  );
 }
