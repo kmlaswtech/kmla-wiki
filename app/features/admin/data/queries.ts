@@ -276,15 +276,19 @@ export async function getAdminCount(): Promise<number> {
 }
 
 /**
- * 판 작성자가 지금까지 받은 차단 수(관리자 전용). 문서가 달라도 같은 사람으로 센다. `lifted`는 그중
- * 해제한 차단 수다.
+ * 판 작성자가 전에 받은 차단 수(관리자 전용). 문서가 달라도 같은 사람으로 센다. `total`은 끝났거나
+ * 해제한 차단, `lifted`는 그중 해제한 차단이다. `active`는 지금 차단 중인지다.
  */
 export async function getBanHistory(
   revisionId: number,
-): Promise<{ total: number; lifted: number }> {
+): Promise<{ total: number; lifted: number; active: boolean }> {
   const rows = unwrap(
     await getSupabase().rpc("ban_history", { p_revision_id: revisionId }),
   );
   const row = rows[0];
-  return { total: row?.total ?? 0, lifted: row?.lifted ?? 0 };
+  return {
+    total: row?.total ?? 0,
+    lifted: row?.lifted ?? 0,
+    active: row?.active ?? false,
+  };
 }

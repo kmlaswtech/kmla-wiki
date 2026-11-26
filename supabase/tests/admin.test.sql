@@ -138,6 +138,11 @@ select login(:admin);
 select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '')$$, :b1), 'WK014', null,
   'a ban requires a reason');
 select ban_editor as ban1 from public.ban_editor(:b1, interval '7 days', '여러 문서 훼손') \gset
+select results_eq(
+  format($$select total, lifted, active from public.ban_history(%s)$$, :b1),
+  $$values (0, 0, true)$$,
+  'a ban in progress is not counted as a previous ban'
+);
 select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '또 차단')$$, :b2), 'WK011', null,
   'an already banned author cannot be banned again');
 select results_eq(
@@ -186,17 +191,26 @@ select login(:admin);
 select lives_ok(format($$select public.lift_ban(%s, '오해였음')$$, :ban1), 'an admin lifts the ban');
 select throws_ok(format($$select public.lift_ban(%s, '또 해제')$$, :ban1), 'WK011', null,
   'a lifted ban cannot be lifted again');
-select ban_editor as ban2 from public.ban_editor(:b2, interval '1 day', '다시 훼손') \gset
-select lives_ok(format($$select public.lift_ban(%s, '테스트 정리')$$, :ban2), 'an admin lifts the second ban');
--- 둘 다 해제했다. 첫 차단은 다른 문서의 판에서 걸었지만 같은 사람으로 센다.
+-- 첫 차단은 다른 문서의 판에서 걸었지만 같은 사람으로 센다.
 select results_eq(
-  format($$select total, lifted from public.ban_history(%s)$$, :b2),
-  $$values (2, 2)$$,
+  format($$select total, lifted, active from public.ban_history(%s)$$, :b2),
+  $$values (1, 1, false)$$,
   'ban counts follow the person across pages and count lifted bans apart'
 );
+select ban_editor as ban2 from public.ban_editor(:b2, interval '1 day', '다시 훼손') \gset
+select logout();
+-- 두 번째 차단은 해제하지 않고 기한이 끝난 것으로 만든다.
+update private.bans set starts_at = now() - interval '2 days', ends_at = now() - interval '1 day'
+ where ban_log_id = :ban2;
+select login(:admin);
 select results_eq(
-  format($$select total, lifted from public.ban_history(%s)$$, :a1),
-  $$values (0, 0)$$,
+  format($$select total, lifted, active from public.ban_history(%s)$$, :b2),
+  $$values (2, 1, false)$$,
+  'an expired ban counts as previous but not as lifted'
+);
+select results_eq(
+  format($$select total, lifted, active from public.ban_history(%s)$$, :a1),
+  $$values (0, 0, false)$$,
   'a member with no bans has a zero count'
 );
 select throws_ok($$select * from public.ban_history(0)$$, 'WK006', null,

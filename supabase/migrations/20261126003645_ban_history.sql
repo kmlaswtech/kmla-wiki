@@ -5,7 +5,8 @@ CREATE OR REPLACE FUNCTION public.ban_history (
 )
   RETURNS TABLE (
     total  integer,
-    lifted integer
+    lifted integer,
+    active boolean
   )
   LANGUAGE plpgsql
   STABLE
@@ -21,7 +22,10 @@ begin
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
   return query
-    select count(*)::integer, (count(*) filter (where ban.lifted_at is not null))::integer
+    select
+      (count(*) filter (where ban.lifted_at is not null or ban.ends_at <= now()))::integer,
+      (count(*) filter (where ban.lifted_at is not null))::integer,
+      private.member_is_banned(v_member_id)
     from private.bans as ban
     where ban.member_id = v_member_id;
 end;

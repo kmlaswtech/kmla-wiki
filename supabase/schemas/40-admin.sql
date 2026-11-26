@@ -315,15 +315,17 @@ GRANT EXECUTE ON FUNCTION "public"."ban_editor"(bigint, interval, text) TO "post
 
 REVOKE ALL ON FUNCTION "public"."ban_editor"(bigint, interval, text) FROM PUBLIC, "anon";
 
--- 판 작성자가 지금까지 받은 차단 수(관리자 전용). 차단 창이 기간을 정하는 데 쓴다. 해제한 차단은
--- 잘못 건 것일 수 있어 따로 센다. 횟수만 돌려주고 가명·문서는 돌려주지 않는다. 같은 사람 편집 조회보다
--- 적게 드러내므로 관리 기록에 남기지 않는다.
+-- 판 작성자가 전에 받은 차단 수(관리자 전용). 차단 창이 기간을 정하는 데 쓴다. `total`은 끝났거나
+-- 해제한 차단이고, 진행 중인 차단은 `active`로 따로 알린다. 해제한 차단은 잘못 건 것일 수 있어
+-- `lifted`로 따로 센다. 횟수만 돌려주고 가명·문서는 돌려주지 않는다. 같은 사람 편집 조회보다 적게
+-- 드러내므로 관리 기록에 남기지 않는다.
 CREATE OR REPLACE FUNCTION public.ban_history (
   p_revision_id bigint
 )
   RETURNS TABLE (
     total  integer,
-    lifted integer
+    lifted integer,
+    active boolean
   )
   LANGUAGE plpgsql
   STABLE
@@ -339,7 +341,10 @@ begin
     raise exception 'revision not found' using errcode = 'WK006';
   end if;
   return query
-    select count(*)::integer, (count(*) filter (where ban.lifted_at is not null))::integer
+    select
+      (count(*) filter (where ban.lifted_at is not null or ban.ends_at <= now()))::integer,
+      (count(*) filter (where ban.lifted_at is not null))::integer,
+      private.member_is_banned(v_member_id)
     from private.bans as ban
     where ban.member_id = v_member_id;
 end;

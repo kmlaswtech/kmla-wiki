@@ -298,6 +298,7 @@ export type Database = {
       ban_history: {
         Args: { p_revision_id: number }
         Returns: {
+          active: boolean
           lifted: number
           total: number
         }[]
