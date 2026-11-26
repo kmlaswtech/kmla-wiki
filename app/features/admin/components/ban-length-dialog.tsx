@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { banEditor } from "../data/mutations";
 import { getBanHistory } from "../data/queries";
+import { describeBanHistory } from "../model/ban-history";
 import {
   BAN_PRESETS,
   BAN_UNITS,
@@ -21,6 +22,8 @@ import { NativeSelect, NativeSelectOption } from "~/shared/ui/native-select";
 interface BanLengthDialogProps extends ActionDialogProps {
   /** 조치를 실행한다. `length`는 Postgres interval 글이고, `null`이면 기한 없음. */
   onConfirm: (length: string | null, reason: string) => Promise<void>;
+  /** 기간 입력 위에 둘 참고(차단 창의 이전 차단 수). */
+  children?: ReactNode;
 }
 
 /**
@@ -45,43 +48,22 @@ export function BanEditorDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="편집 차단"
-      description={
-        <>
-          {`대상 · ${target}. 선택한 판의 작성자는 모든 문서에서 편집이 차단됩니다. 문서는 계속 읽을 수 있습니다.`}
-          <BanHistoryNote key={revisionId} revisionId={revisionId} />
-        </>
-      }
+      description={`대상 · ${target}. 선택한 판의 작성자는 모든 문서에서 편집이 차단됩니다. 문서는 계속 읽을 수 있습니다.`}
       confirmLabel="차단"
       destructive
       onConfirm={(length, reason) => banEditor(revisionId, length, reason)}
       onDone={onDone}
-    />
+    >
+      <BanHistoryNote key={revisionId} revisionId={revisionId} />
+    </BanLengthDialog>
   );
 }
 
 /**
- * 그 사람이 전에 받은 차단 수. 여러 번 차단된 사람에게 더 긴 기간을 고를 수 있게 한다. 대화상자를 열
- * 때 마운트되어 한 번 읽는다. 읽지 못해도 차단은 할 수 있으므로 오류는 짧게만 알린다. 부르는 쪽이
- * `key`를 판 ID로 주어, 대상이 바뀌면 앞 사람의 횟수를 남기지 않고 새로 시작한다.
+ * 그 사람의 이전 차단 수. 여러 번 차단된 사람에게 더 긴 기간을 고를 수 있게 한다. 대화상자를 열 때
+ * 마운트되어 한 번 읽는다. 읽지 못해도 차단은 할 수 있으므로 오류는 짧게만 알린다. 부르는 쪽이 `key`를
+ * 판 ID로 주어, 대상이 바뀌면 앞 사람의 횟수를 남기지 않고 새로 시작한다.
  */
-function describeBanHistory({
-  total,
-  lifted,
-  active,
-}: {
-  total: number;
-  lifted: number;
-  active: boolean;
-}): string {
-  const previous =
-    total === 0
-      ? "이전 차단 없음"
-      : lifted === 0
-        ? `이전 차단 ${total}회`
-        : `이전 차단 ${total}회 (그중 해제 ${lifted}회)`;
-  return active ? `지금 차단 중 · ${previous}` : previous;
-}
-
 function BanHistoryNote({ revisionId }: { revisionId: number }) {
   const [text, setText] = useState("이전 차단 기록을 확인하는 중");
 
@@ -101,9 +83,9 @@ function BanHistoryNote({ revisionId }: { revisionId: number }) {
   }, [revisionId]);
 
   return (
-    <span className="mt-1 block font-medium text-foreground" aria-live="polite">
+    <p className="text-sm font-medium" aria-live="polite">
       {text}
-    </span>
+    </p>
   );
 }
 
@@ -124,6 +106,7 @@ export function BanLengthDialog({ open, ...form }: BanLengthDialogProps) {
 /** 대화상자 안에 있어서 닫힐 때 내려가고, 열 때마다 기본 길이로 시작한다. */
 function BanLengthForm({
   onConfirm,
+  children,
   ...form
 }: Omit<BanLengthDialogProps, "open">) {
   const [input, setInput] = useState(DEFAULT_BAN_INPUT);
@@ -142,6 +125,7 @@ function BanLengthForm({
           : onConfirm(banInterval(length), reason)
       }
     >
+      {children}
       <div className="grid gap-1.5">
         <Label htmlFor="ban-length">기간</Label>
         <div className="flex flex-wrap items-center gap-2">
