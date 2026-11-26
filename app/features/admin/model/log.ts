@@ -68,7 +68,28 @@ export function isBanActive(ban: BanEntry, now: number): boolean {
 }
 
 /**
- * 기록을 한 문장으로. 대상은 "가명 (문서)"로 적는다. 가명은 그 문서 안에서만 뜻이 있어서 문서
+ * 이름 끝소리에 받침이 있는가(조사 고르기). 관리자 이름은 `관리자 B`, `관리자 27`처럼 영문자나 숫자로
+ * 끝난다. 영문자는 읽는 소리로 본다(엘·엠·엔만 받침). 숫자는 끝 자리로 보고, 0은 십·백처럼 받침이 있다.
+ */
+function endsWithFinal(name: string): boolean {
+  const last = name.at(-1) ?? "";
+  if (/[a-z]/i.test(last)) return /[lmn]/i.test(last);
+  if (/\d/.test(last)) return "013678".includes(last);
+  const code = last.charCodeAt(0) - 0xac00;
+  return code >= 0 && code < 11172 && code % 28 !== 0;
+}
+
+/** 이름에 조사를 붙인다. `withFinal`은 받침 뒤(이·을), `withoutFinal`은 받침 없을 때(가·를). */
+export function withParticle(
+  name: string,
+  withFinal: string,
+  withoutFinal: string,
+): string {
+  return name + (endsWithFinal(name) ? withFinal : withoutFinal);
+}
+
+/**
+ * 기록을 한 문장으로. 행위자(`관리자 A가`)는 화면이 앞에 붙인다. 대상은 "가명 (문서)"로 적는다. 가명은 그 문서 안에서만 뜻이 있어서 문서
  * 이름을 함께 보여야 한다.
  */
 export function describeAdminLog(entry: AdminLogEntry): string {
@@ -89,15 +110,15 @@ export function describeAdminLog(entry: AdminLogEntry): string {
     // 대상은 관리자 이름으로만 적는다. 근거 판의 가명은 남기지 않는다.
     case "grant_admin":
       return entry.targetHandle
-        ? `${entry.targetHandle} 지정`
+        ? `${withParticle(entry.targetHandle, "을", "를")} 관리자로 지정`
         : "관리자 1명 지정";
     case "revoke_admin":
       return entry.targetHandle
-        ? `${entry.targetHandle} 권한 해제`
+        ? `${entry.targetHandle}의 관리자 권한 해제`
         : "관리자 권한 1건 해제";
     case "restore_admin":
       return entry.targetHandle
-        ? `${entry.targetHandle} 권한 해제 되돌림${note}`
+        ? `${entry.targetHandle}의 관리자 권한 해제 되돌림${note}`
         : `관리자 권한 해제 되돌림${note}`;
     case "protect":
       return `‘${page}’ 문서 보호`;

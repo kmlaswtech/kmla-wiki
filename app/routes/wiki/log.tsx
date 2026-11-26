@@ -5,6 +5,7 @@ import {
   describeAdminLog,
   getAdminCount,
   listAdminLog,
+  withParticle,
 } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
 import { topicHref } from "~/features/discussions";
@@ -57,12 +58,11 @@ export default function LogRoute({ loaderData }: Route.ComponentProps) {
                 <span className="mr-2 text-muted-foreground">
                   <RelativeTime value={entry.createdAt} />
                 </span>
-                {/* 이름을 공개하기 전의 기록에는 행위자가 없다. 지정·해제는 대상도 관리자
-                    이름이라, 행위자 뒤에 구분을 둔다. */}
+                {/* 누가 했는지를 문장의 주어로 둔다(`관리자 A가 관리자 B의 …`). 이름을 공개하기
+                    전의 기록에는 행위자가 없다. */}
                 {entry.actorHandle ? (
-                  <span className="font-medium">
-                    {entry.actorHandle}
-                    <span className="mx-1.5 text-muted-foreground">·</span>
+                  <span className="mr-1 font-medium">
+                    {withParticle(entry.actorHandle, "이", "가")}
                   </span>
                 ) : null}
                 {describeAdminLog(entry)}

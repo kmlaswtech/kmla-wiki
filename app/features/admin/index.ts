@@ -37,6 +37,7 @@ export {
   describeAdminLog,
   isBanActive,
   isLookupExpired,
+  withParticle,
   type AdminLogEntry,
   type BanEntry,
 } from "./model/log";
