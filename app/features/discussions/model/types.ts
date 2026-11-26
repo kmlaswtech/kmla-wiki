@@ -9,7 +9,7 @@ export interface DiscussionSummary {
   /** 토론을 붙인 판. */
   revisionId: number | null;
   isOpen: boolean;
-  /** 연 사람의 이름(그 문서의 가명 또는 '관리자'). */
+  /** 연 사람의 이름(그 문서의 가명 또는 관리자 이름 `관리자 B`). */
   openerName: string;
   /** 거두지 않은 글 수(첫 글 포함). */
   postCount: number;

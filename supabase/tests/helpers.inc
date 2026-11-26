@@ -14,6 +14,8 @@ create extension if not exists pgtap with schema extensions;
 -- 파일은 트랜잭션 안에서 돌고 끝에 rollback하므로 seed는 그대로 남는다.
 truncate public.pages, public.admin_log, public.ban_log cascade;
 delete from private.members;
+-- 이름 기록도 지운다. 회원을 지워도 이름은 남아 seed의 `관리자 A`를 다시 줄 수 없게 된다.
+delete from private.admin_handles;
 delete from auth.users where email like '%@wiki.test';
 
 insert into auth.users (id, email)
@@ -28,8 +30,10 @@ insert into private.members (auth_user_id, kmla_profile_id, verified_until, is_a
 values
   (:alice, 9001, now() + interval '7 days', false, null),
   (:bob, 9002, now() + interval '7 days', false, null),
-  (:admin, 9003, now() + interval '7 days', true, '관리자 A'),
+  (:admin, 9003, now() + interval '7 days', false, null),
   (:expired, 9004, now() - interval '1 day', false, null);
+-- 관리자 이름은 `promote_member`만 준다(`관리자 A`).
+select private.promote_member(id) from private.members where auth_user_id = :admin;
 
 -- 로그인 흉내. PostgREST가 하는 것과 같게 역할과 JWT 클레임을 건다.
 -- 사용: `select login(:alice);` … `select logout();`

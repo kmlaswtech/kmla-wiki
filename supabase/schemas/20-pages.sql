@@ -731,6 +731,7 @@ GRANT EXECUTE ON FUNCTION "private"."title_key"(text) TO "authenticated";
 
 REVOKE ALL ON FUNCTION "private"."title_key"(text) FROM PUBLIC;
 
+-- 판 하나를 쓴다. `p_as_admin`이면 작성자 이름이 문서 가명 대신 그 관리자의 이름(`관리자 B`)이다.
 CREATE OR REPLACE FUNCTION private.write_revision (
   p_page_id   bigint,
   p_member_id bigint,
@@ -766,7 +767,7 @@ begin
     v_parent_id,
     p_body,
     coalesce(btrim(p_summary), ''),
-    case when p_as_admin then '관리자' else private.pseudonym_for(p_page_id, p_member_id) end,
+    case when p_as_admin then private.admin_handle_of(p_member_id) else private.pseudonym_for(p_page_id, p_member_id) end,
     p_kind,
     private.text_length(v_text),
     v_change.added,

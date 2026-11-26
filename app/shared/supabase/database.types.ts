@@ -37,6 +37,7 @@ export type Database = {
       admin_log: {
         Row: {
           action: string
+          actor_handle: string | null
           created_at: string
           discussion_id: number | null
           id: number
@@ -45,10 +46,12 @@ export type Database = {
           pseudonym: string | null
           reason: string
           revision_id: number | null
+          target_handle: string | null
         }
         ComputedFields: never
         Insert: {
           action: string
+          actor_handle?: string | null
           created_at?: string
           discussion_id?: number | null
           id?: never
@@ -57,9 +60,11 @@ export type Database = {
           pseudonym?: string | null
           reason: string
           revision_id?: number | null
+          target_handle?: string | null
         }
         Update: {
           action?: string
+          actor_handle?: string | null
           created_at?: string
           discussion_id?: number | null
           id?: never
@@ -68,6 +73,7 @@ export type Database = {
           pseudonym?: string | null
           reason?: string
           revision_id?: number | null
+          target_handle?: string | null
         }
         Relationships: []
       }

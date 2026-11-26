@@ -122,8 +122,9 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
       <section>
         <h2 className="mb-2 text-lg font-semibold">관리자 {admins.length}명</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          아래 이름과 별명은 관리자에게만 표시되며 문서의 가명과 연결되지
-          않습니다. 일반 회원에게는 관리자 수만 공개됩니다.
+          관리자 이름은 관리자로 한 일(판, 토론 글, 관리 기록)에 공개로 남지만
+          문서의 가명과 연결되지 않습니다. 별명은 관리자에게만 표시됩니다. 한 번
+          받은 이름은 다른 사람에게 주지 않습니다.
         </p>
         <ul className="divide-y rounded-md border text-sm">
           {admins.map((admin) => (
@@ -166,9 +167,9 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
         <section>
           <h2 className="mb-2 text-lg font-semibold">최근 해제</h2>
           <p className="mb-3 text-sm text-muted-foreground">
-            잘못 해제했다면 7일 안에 되돌릴 수 있습니다. 같은 사람이 되도록 같은
+            잘못 해제했다면 7일 안에 되돌릴 수 있습니다. 같은 사람이 같은
             이름으로 다시 관리자가 됩니다. 7일이 지나면 판 기록에서 다시
-            지정해야 합니다.
+            지정해야 합니다. 그때도 같은 이름을 받습니다.
           </p>
           <RestorableRevocationList
             revocations={revocations}
@@ -181,7 +182,7 @@ export default function AdminRoute({ loaderData }: Route.ComponentProps) {
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
         title="관리자 권한 해제"
-        description={`‘${revoking ?? ""}’의 관리자 권한을 해제합니다. 공개 기록에는 해제된 관리자의 이름이 표시되지 않습니다. 별명은 지워집니다. 잘못 해제했다면 7일 안에 이 화면에서 되돌릴 수 있습니다.`}
+        description={`‘${revoking ?? ""}’의 관리자 권한을 해제합니다. 공개 기록에는 해제한 관리자와 해제된 관리자의 이름이 표시됩니다. 별명은 지워집니다. 잘못 해제했다면 7일 안에 이 화면에서 되돌릴 수 있습니다.`}
         confirmLabel="해제"
         destructive
         onConfirm={(reason) => revokeAdmin(revoking ?? "", reason)}

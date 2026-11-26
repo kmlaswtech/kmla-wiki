@@ -30,7 +30,7 @@ export async function listAdminLog(
     getSupabase()
       .from("admin_log")
       .select(
-        "id, action, page_title, revision_id, pseudonym, reason, note, discussion_id, created_at",
+        "id, action, page_title, revision_id, pseudonym, reason, note, discussion_id, actor_handle, target_handle, created_at",
       ),
     cursor,
     PAGE_SIZE,
@@ -45,6 +45,8 @@ export async function listAdminLog(
     reason: row.reason,
     note: row.note,
     discussionId: row.discussion_id,
+    actorHandle: row.actor_handle,
+    targetHandle: row.target_handle,
     createdAt: row.created_at,
   }));
   return keysetPage(rows, cursor, PAGE_SIZE);
@@ -247,7 +249,7 @@ export async function countOpenReports(): Promise<number> {
   return unwrap(await getSupabase().rpc("count_open_reports")) ?? 0;
 }
 
-/** 관리자 목록(관리자 전용). 관리자 전용 이름만 온다. */
+/** 관리자 목록(관리자 전용). 관리자 이름과 별명만 온다. */
 export async function listAdmins(): Promise<
   { handle: string; nickname: string | null; isMe: boolean }[]
 > {
@@ -259,7 +261,7 @@ export async function listAdmins(): Promise<
   }));
 }
 
-/** 되돌릴 수 있는 관리자 해제(관리자 전용). 해제된 사람은 관리자 전용 이름으로만 온다. */
+/** 되돌릴 수 있는 관리자 해제(관리자 전용). 해제된 사람은 관리자 이름으로만 온다. */
 export async function listRestorableRevocations(): Promise<
   RestorableRevocation[]
 > {

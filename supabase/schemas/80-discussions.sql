@@ -2,7 +2,7 @@
 --
 -- 토론. 문서마다 회원이 이야기하는 곳이다. 편집자는 문서마다 다른 가명이라 위키 밖에서 다툼을 풀 수
 -- 없으므로, 문서 안에서 이야기하고 결론을 남긴다. 글은 평문이고 고칠 수 없다. 작성자 이름은 그 문서의
--- 가명이거나, 관리자가 "관리자로" 고르면 '관리자'다.
+-- 가명이거나, 관리자가 "관리자로" 고르면 그 관리자의 이름(`관리자 B`)이다.
 --
 -- 표는 모두 private이고 읽기와 쓰기는 RPC로만 한다. 실제 작성자(member_id)를 돌려주지 않기 위해서다.
 
@@ -57,7 +57,7 @@ CREATE TABLE "private"."discussion_posts" (
   "discussion_id" bigint                   NOT NULL,
   "kind"          text                     NOT NULL,
   "member_id"     bigint,
-  -- 쓰는 순간 정한 이름. 그 문서의 가명이거나 '관리자'다.
+  -- 쓰는 순간 정한 이름. 그 문서의 가명이거나 관리자 이름(`관리자 B`)이다.
   "author_name"   text                     NOT NULL,
   "as_admin"      boolean                  NOT NULL DEFAULT false,
   "body"          text                     NOT NULL,
@@ -121,7 +121,7 @@ $function$;
 
 REVOKE ALL ON FUNCTION "private"."check_discussion_body"(text, integer) FROM PUBLIC;
 
--- 글쓴이 이름. "관리자로"는 관리자만 고를 수 있다.
+-- 글쓴이 이름. "관리자로"는 관리자만 고를 수 있고, 그 관리자의 이름이 된다.
 CREATE OR REPLACE FUNCTION private.discussion_author_name (
   p_page_id   bigint,
   p_member_id bigint,
@@ -137,7 +137,7 @@ begin
     if not private.is_admin() then
       raise exception 'admin only' using errcode = '42501';
     end if;
-    return '관리자';
+    return private.admin_handle_of(p_member_id);
   end if;
   return private.pseudonym_for(p_page_id, p_member_id);
 end;
@@ -602,7 +602,7 @@ REVOKE ALL ON FUNCTION "public"."withdraw_discussion"(bigint) FROM PUBLIC, "anon
 
 -- ── 관리자 ───────────────────────────────────────────────────────────────────
 
--- 글 하나를 숨기거나 되살린다(관리자 전용). 늘 '관리자' 이름이고 사유와 함께 관리 기록에 남는다.
+-- 글 하나를 숨기거나 되살린다(관리자 전용). 사유와 함께 관리 기록에 그 관리자의 이름으로 남는다.
 -- 관리 기록에는 문서 제목과 토론 번호(`discussion_id`)만 남긴다. 토론 제목과 글은 숨기거나 지울 대상일 수
 -- 있어서 적지 않는다. 숨기면 트리거가 그 글의 신고를 닫는다.
 CREATE OR REPLACE FUNCTION public.set_discussion_post_hidden (
@@ -701,7 +701,7 @@ GRANT EXECUTE ON FUNCTION "public"."set_discussion_deleted"(bigint, boolean, tex
 
 REVOKE ALL ON FUNCTION "public"."set_discussion_deleted"(bigint, boolean, text) FROM PUBLIC, "anon";
 
--- 관리자가 토론 제목을 바꾼다. 닫힌 토론도 된다. 관리 기록 대신 토론에 '관리자' 이름의 `rename` 글을
+-- 관리자가 토론 제목을 바꾼다. 닫힌 토론도 된다. 관리 기록 대신 토론에 그 관리자 이름의 `rename` 글을
 -- 남긴다. 글에는 앞 제목과 새 제목이 들어 있다.
 CREATE OR REPLACE FUNCTION public.rename_discussion (
   p_discussion_id bigint,

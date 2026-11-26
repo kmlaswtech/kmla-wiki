@@ -138,7 +138,7 @@ select results_eq(
   format($$select revision.body, revision.author_pseudonym, revision.kind, revision.summary
            from public.pages as page join public.revisions as revision on revision.id = page.current_revision_id
            where page.id = %s$$, :pa),
-  format($$select wiki('가 원래'), '관리자'::text, 'revert'::text, 'r%s 판으로 되돌림: 일괄 되돌리기'::text$$, :a0),
+  format($$select wiki('가 원래'), '관리자 A'::text, 'revert'::text, 'r%s 판으로 되돌림: 일괄 되돌리기'::text$$, :a0),
   'a reverted page gets the old body back as an admin revision'
 );
 select is(

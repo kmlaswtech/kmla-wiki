@@ -5,6 +5,7 @@ import {
   describeAdminLog,
   getAdminCount,
   listAdminLog,
+  withParticle,
 } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
 import { topicHref } from "~/features/discussions";
@@ -27,8 +28,8 @@ export const meta: Route.MetaFunction = () => [
 /**
  * 공개 관리 기록. 관리자가 한 모든 조치가 사유와 함께 남는다.
  *
- * 누가 했는지는 "관리자"로만 보인다. 관리자가 문서별 가명을 넘어 한 사람의 편집을 모아 본 것도
- * 여기에 남는다.
+ * 누가 했는지는 관리자 이름(`관리자 B`)으로 보인다. 한 관리자의 잘못을 모든 관리자의 잘못으로 보지
+ * 않게 하려는 것이다. 관리자가 문서별 가명을 넘어 한 사람의 편집을 모아 본 것도 여기에 남는다.
  */
 export default function LogRoute({ loaderData }: Route.ComponentProps) {
   const { page, adminCount } = loaderData;
@@ -57,6 +58,13 @@ export default function LogRoute({ loaderData }: Route.ComponentProps) {
                 <span className="mr-2 text-muted-foreground">
                   <RelativeTime value={entry.createdAt} />
                 </span>
+                {/* 누가 했는지를 문장의 주어로 둔다(`관리자 A가 관리자 B의 …`). 이름을 공개하기
+                    전의 기록에는 행위자가 없다. */}
+                {entry.actorHandle ? (
+                  <span className="mr-1 font-medium">
+                    {withParticle(entry.actorHandle, "이", "가")}
+                  </span>
+                ) : null}
                 {describeAdminLog(entry)}
                 {/* 지운 토론은 회원이 열 수 없다. */}
                 {entry.discussionId !== null &&

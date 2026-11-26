@@ -121,8 +121,9 @@ select throws_ok(
   'an expired lookup cannot be read');
 select logout();
 
--- 다른 관리자의 허가는 쓸 수 없다. 앨리스를 잠시 관리자로 만들어 확인한다.
-update private.members set is_admin = true, admin_handle = '관리자 Z' where auth_user_id = :alice;
+-- 다른 관리자의 허가는 쓸 수 없다. 앨리스를 잠시 관리자로 만들어 확인한다. 이 이름은 앨리스 것으로
+-- 남아, 뒤에서 앨리스를 지정하면 다시 받는다.
+select private.promote_member(id) from private.members where auth_user_id = :alice;
 select login(:admin);
 select open_author_lookup as lookup2 from public.open_author_lookup(:b1, '다시 확인') \gset
 select logout();
@@ -231,8 +232,8 @@ select lives_ok(format($$select public.delete_page(%s, '사람 문서')$$, :p2),
 select results_eq(
   format($$select kind, author_pseudonym, summary from public.revisions
            where page_id = %s order by id desc limit 1$$, :p2),
-  $$values ('delete'::text, '관리자'::text, '사람 문서'::text)$$,
-  'deletion is recorded in the page history as an admin action, not under a pseudonym'
+  $$values ('delete'::text, '관리자 A'::text, '사람 문서'::text)$$,
+  'deletion is recorded in the page history under the admin''s handle, not a pseudonym'
 );
 select logout();
 
@@ -277,9 +278,9 @@ select set_eq(
   'admins are listed by handle only'
 );
 select results_eq(
-  $$select page_title, pseudonym from public.admin_log where action = 'grant_admin'$$,
-  $$values (null::text, null::text)$$,
-  'the grant is public but does not reveal which pseudonym became an admin'
+  $$select page_title, pseudonym, actor_handle, target_handle from public.admin_log where action = 'grant_admin'$$,
+  $$values (null::text, null::text, '관리자 A'::text, '관리자 B'::text)$$,
+  'the grant names both admins but not which pseudonym became an admin'
 );
 select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '관리자 차단')$$, :a1), 'WK010', null,
   'an admin cannot be banned');
@@ -290,6 +291,11 @@ select is(private.is_admin(), true, 'the granted member is now an admin');
 select lives_ok($$select public.revoke_admin('관리자 A', '교대')$$, 'one admin can revoke another');
 select throws_ok($$select public.revoke_admin('관리자 B', '나까지')$$, 'WK013', null,
   'but not themselves when they are the last one');
+select results_eq(
+  $$select actor_handle, target_handle from public.admin_log where action = 'revoke_admin'$$,
+  $$values ('관리자 B'::text, '관리자 A'::text)$$,
+  'the revocation names who revoked whom'
+);
 select logout();
 
 -- ── 해제 되돌리기 ────────────────────────────────────────────────────────────
@@ -308,7 +314,7 @@ select results_eq(
   'an admin sees the recent revocation by handle and public log id'
 );
 select logout();
-select is(private.next_admin_handle(), '관리자 C', 'a restorable handle is not given to a new admin');
+select is(private.next_admin_handle(), '관리자 C', 'a revoked handle is not given to a new admin');
 select login(:alice);
 select lives_ok(format($$select public.restore_revoked_admin(%s, '실수로 해제')$$, :revoke_log),
   'an admin restores a recent revocation');
@@ -322,9 +328,11 @@ select throws_ok(format($$select public.restore_revoked_admin(%s, '다시')$$, :
 select is_empty($$select 1 from public.list_restorable_revocations()$$,
   'a restored revocation leaves the list');
 select results_eq(
-  $$select page_title, revision_id, pseudonym, note from public.admin_log where action = 'restore_admin'$$,
-  format($$values (null::text, null::bigint, null::text, '기록 #%s'::text)$$, :revoke_log),
-  'the restore is public but names only the revocation, not the member'
+  $$select page_title, revision_id, pseudonym, note, actor_handle, target_handle
+    from public.admin_log where action = 'restore_admin'$$,
+  format($$values (null::text, null::bigint, null::text, '기록 #%s'::text, '관리자 B'::text, '관리자 A'::text)$$,
+    :revoke_log),
+  'the restore names the revocation and the handles, not a pseudonym'
 );
 select logout();
 
@@ -368,15 +376,26 @@ select throws_ok(format($$select public.restore_revoked_admin(%s, '늦게')$$, :
 select is_empty($$select 1 from public.list_restorable_revocations()$$,
   'an expired revocation leaves the list');
 select logout();
-select is(private.next_admin_handle(), '관리자 A', 'an expired revocation frees its handle');
+select is(private.next_admin_handle(), '관리자 C', 'an expired revocation still keeps its handle');
+select throws_ok(
+  format($$update private.members set is_admin = true, admin_handle = '관리자 A' where auth_user_id = %L$$, :bob),
+  '23503', null, 'a handle once given cannot be set for someone else, even by SQL');
+select throws_ok(
+  format($$update private.members set is_admin = true, admin_handle = '관리자 Y' where auth_user_id = %L$$, :admin),
+  '23503', null, 'a handle not given by promote_member cannot be set by SQL');
+select is(
+  (select private.promote_member(id) from private.members where auth_user_id = :admin),
+  '관리자 A', 'a former admin gets the same handle back after the restore window');
 
--- ── 기록에는 행위자가 없다 ───────────────────────────────────────────────────
+-- ── 기록의 행위자 ────────────────────────────────────────────────────────────
 select is_empty(
   $$select 1 from information_schema.columns
     where table_schema = 'public' and table_name in ('admin_log', 'ban_log')
-      and column_name ~ '(actor|admin|member|created_by)'$$,
-  'the public logs have no column that identifies who acted'
+      and column_name ~ '(member|created_by)'$$,
+  'the public logs name admins only by handle, never by member'
 );
+select is_empty($$select 1 from public.admin_log where actor_handle is null$$,
+  'every admin action in the public log names the admin who acted');
 select is(
   (select count(*) from private.admin_actions where actor_member_id is not null),
   (select count(*) from public.admin_log),
