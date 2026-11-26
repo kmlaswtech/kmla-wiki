@@ -3,7 +3,6 @@ import {
   data,
   Link,
   redirect,
-  useFetcher,
   useNavigate,
   useRevalidator,
 } from "react-router";
@@ -12,53 +11,59 @@ import type { Route } from "./+types/history";
 import { formText, positiveInt, titleFromParams } from "./title-param";
 import { RevisionAdminMenu } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
+import { getRevisionDiscussionCounts } from "~/features/discussions";
 import { pageHref } from "~/features/markup";
 import {
   canEditPage,
   describeWriteError,
   getMyPseudonym,
   getPageView,
-  HISTORY_PAGE_SIZE,
   listHistory,
+  REVERT_FIELD,
   revertPage,
+  RevertDialog,
+  type RevertActionError,
   RevisionList,
 } from "~/features/pages";
-import { LinkButton } from "~/shared/components/link-button";
+import { ReportButton } from "~/features/reports";
+import { KeysetNav } from "~/shared/components/page-nav";
+import { readPageCursor } from "~/shared/lib/keyset";
+import { Badge } from "~/shared/ui/badge";
 import { Button } from "~/shared/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "~/shared/ui/dialog";
-import { Input } from "~/shared/ui/input";
-import { Label } from "~/shared/ui/label";
-import { Spinner } from "~/shared/ui/spinner";
 
 export async function clientLoader({
   request,
   params,
 }: Route.ClientLoaderArgs) {
   const title = titleFromParams(params);
-  const before = positiveInt(new URL(request.url).searchParams.get("before"));
+  const cursor = readPageCursor(new URL(request.url).searchParams);
 
   return withVerifiedMember(request, async () => {
     const view = await getPageView(title, { followRedirect: false });
     if (!view.found) throw data(null, { status: 404 });
 
-    const [revisions, myPseudonym] = await Promise.all([
-      listHistory(view.page.id, before),
+    const [history, myPseudonym, discussionCounts] = await Promise.all([
+      listHistory(view.page.id, cursor),
       getMyPseudonym(view.page.id),
+      getRevisionDiscussionCounts(view.page.id),
     ]);
     return {
       title: view.page.title,
       currentRevisionId: view.page.currentRevisionId,
       canRevert: canEditPage(view),
+      // 관리자는 방패 메뉴로 직접 조치한다. 차단된 사람은 신고도 할 수 없다(서버도 막는다).
+      canReport: view.canEdit && !view.isAdmin,
       isAdmin: view.isAdmin,
-      revisions,
+      // 판에 토론을 붙여 열 수 있는가. 차단된 회원과 삭제된 문서는 안 된다.
+      canDiscuss: view.canEdit && view.page.deletedAt === null,
+      revisions: history.items,
+      nav: {
+        newer: history.newer,
+        older: history.older,
+        atStart: history.atStart,
+      },
       myPseudonym,
+      discussionCounts,
     };
   });
 }
@@ -73,17 +78,23 @@ export async function clientAction({
   params,
 }: Route.ClientActionArgs) {
   const form = await request.formData();
-  const revisionId = positiveInt(formText(form, "revisionId"));
+  const revisionId = positiveInt(formText(form, REVERT_FIELD.revisionId));
   if (!revisionId)
-    return data({ error: "되돌릴 판을 찾을 수 없습니다." }, { status: 400 });
+    return data(
+      { error: "되돌릴 판을 찾을 수 없습니다." } satisfies RevertActionError,
+      { status: 400 },
+    );
 
   try {
     await withVerifiedMember(request, () =>
-      revertPage(revisionId, formText(form, "summary").trim()),
+      revertPage(revisionId, formText(form, REVERT_FIELD.summary).trim()),
     );
   } catch (error) {
     if (error instanceof Response) throw error;
-    return data({ error: describeWriteError(error) }, { status: 400 });
+    return data(
+      { error: describeWriteError(error) } satisfies RevertActionError,
+      { status: 400 },
+    );
   }
   return redirect(pageHref(titleFromParams(params)));
 }
@@ -98,16 +109,30 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
     revisions,
     myPseudonym,
     canRevert,
+    canReport,
     isAdmin,
+    canDiscuss,
+    discussionCounts,
     currentRevisionId,
+    nav,
   } = loaderData;
+  const discussionHref = pageHref(title, "discussion");
   const revalidator = useRevalidator();
   const navigate = useNavigate();
-  const oldest = revisions.at(-1);
+  const historyHref = pageHref(title, "history");
 
-  // 비교할 두 판. 처음에는 최신 판과 그 앞 판이다.
+  // 비교할 두 판. 처음에는 이 쪽의 첫 판과 그 앞 판이다. 쪽을 넘기면 화면이 그대로 남으므로 새 쪽에
+  // 맞춰 다시 고른다. 그러지 않으면 보이지 않는 판끼리 비교하게 된다. 화면을 key로 다시 그리는 방법은
+  // 쓰지 않는다. 감싸는 컴포넌트를 두면 React Router가 `clientAction`을 따로 떼지 못해 빌드가 깨진다.
+  const shownPage = revisions[0]?.id ?? null;
+  const [comparePage, setComparePage] = useState(shownPage);
   const [compareFrom, setCompareFrom] = useState(revisions[1]?.id ?? null);
   const [compareTo, setCompareTo] = useState(revisions[0]?.id ?? null);
+  if (comparePage !== shownPage) {
+    setComparePage(shownPage);
+    setCompareFrom(revisions[1]?.id ?? null);
+    setCompareTo(revisions[0]?.id ?? null);
+  }
   const [revertTarget, setRevertTarget] = useState<number | null>(null);
 
   const canCompare =
@@ -123,8 +148,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
           <span className="font-normal text-muted-foreground">기록</span>
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          편집자는 이 문서에서만 쓰이는 가명으로 표시됩니다. 같은 사람도 다른
-          문서에서는 다른 가명입니다.
+          편집자 가명은 문서마다 다릅니다.
         </p>
       </header>
 
@@ -143,9 +167,9 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
               void navigate(`${pageHref(title, "diff")}?from=${from}&to=${to}`);
             }}
           >
-            고른 두 판 비교
+            선택한 두 판 비교
           </Button>
-          <span>왼쪽 칸에서 이전 판, 오른쪽 칸에서 이후 판을 고릅니다.</span>
+          <span>왼쪽은 이전 판, 오른쪽은 이후 판을 선택합니다.</span>
         </div>
       ) : null}
 
@@ -167,7 +191,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
                       checked={compareFrom === revision.id}
                       disabled={disabled}
                       onChange={() => setCompareFrom(revision.id)}
-                      className="size-4 accent-primary"
+                      className="size-4 accent-primary coarse:size-5"
                     />
                     <input
                       type="radio"
@@ -176,15 +200,34 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
                       checked={compareTo === revision.id}
                       disabled={disabled}
                       onChange={() => setCompareTo(revision.id)}
-                      className="size-4 accent-primary"
+                      className="size-4 accent-primary coarse:size-5"
                     />
                   </span>
                 );
               }
             : undefined
         }
+        afterAuthor={(revision) => {
+          const count = discussionCounts.get(revision.id);
+          return count ? (
+            <Badge
+              variant="outline"
+              render={<Link to={`${discussionHref}?rev=${revision.id}`} />}
+            >
+              토론 {count}
+            </Badge>
+          ) : null;
+        }}
         actions={(revision) => (
           <>
+            {canDiscuss && !revision.hiddenAt ? (
+              <Link
+                to={`${discussionHref}?rev=${revision.id}&new`}
+                className="rounded px-1.5 py-0.5 text-primary hover:bg-muted"
+              >
+                토론
+              </Link>
+            ) : null}
             {canRevert &&
             revision.id !== currentRevisionId &&
             !revision.hiddenAt ? (
@@ -196,6 +239,11 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
               >
                 이 판으로 되돌리기
               </Button>
+            ) : null}
+            {canReport && !revision.hiddenAt ? (
+              <ReportButton
+                target={{ kind: "revision", id: revision.id, pageTitle: title }}
+              />
             ) : null}
             {isAdmin ? (
               <RevisionAdminMenu
@@ -209,16 +257,7 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
         )}
       />
 
-      {revisions.length === HISTORY_PAGE_SIZE && oldest ? (
-        <div className="mt-4 text-center">
-          <LinkButton
-            variant="outline"
-            to={`${pageHref(title, "history")}?before=${oldest.id}`}
-          >
-            더 예전 기록
-          </LinkButton>
-        </div>
-      ) : null}
+      <KeysetNav path={historyHref} page={nav} />
 
       <RevertDialog
         key={revertTarget ?? "closed"}
@@ -228,91 +267,5 @@ export default function HistoryRoute({ loaderData }: Route.ComponentProps) {
         onClose={() => setRevertTarget(null)}
       />
     </div>
-  );
-}
-
-/** 되돌리기 전에 묻고, 사유(선택)를 받는다. */
-function RevertDialog({
-  title,
-  revisionId,
-  currentRevisionId,
-  onClose,
-}: {
-  title: string;
-  revisionId: number | null;
-  currentRevisionId: number | null;
-  onClose: () => void;
-}) {
-  const fetcher = useFetcher<typeof clientAction>();
-  const [summary, setSummary] = useState("");
-  const busy = fetcher.state !== "idle";
-  const autoSummary = `r${revisionId} 판으로 되돌림`;
-
-  return (
-    <Dialog
-      open={revisionId !== null}
-      onOpenChange={(open) => {
-        if (!open && !busy) onClose();
-      }}
-    >
-      <DialogContent>
-        <fetcher.Form method="post" className="contents">
-          <input type="hidden" name="revisionId" value={revisionId ?? ""} />
-          <DialogHeader>
-            <DialogTitle>r{revisionId} 판으로 되돌릴까요?</DialogTitle>
-            <DialogDescription>
-              지금 판의 내용을 r{revisionId} 판 내용으로 바꾼 새 판이 생깁니다.
-              기록은 지워지지 않아 다시 되돌릴 수 있습니다.{" "}
-              {currentRevisionId !== null && revisionId !== null ? (
-                <Link
-                  to={`${pageHref(title, "diff")}?from=${Math.min(revisionId, currentRevisionId)}&to=${Math.max(revisionId, currentRevisionId)}`}
-                  className="text-primary hover:underline"
-                >
-                  지금 판과 비교
-                </Link>
-              ) : null}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor="revert-summary">사유 (선택)</Label>
-            <Input
-              id="revert-summary"
-              name="summary"
-              type="text"
-              value={summary}
-              maxLength={150}
-              placeholder="왜 되돌리는지 한 줄로"
-              onChange={(event) => setSummary(event.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              편집 요약: {autoSummary}
-              {summary.trim() ? `: ${summary.trim()}` : ""}
-            </p>
-          </div>
-
-          {fetcher.data?.error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {fetcher.data.error}
-            </p>
-          ) : null}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={onClose}
-            >
-              그만두기
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {busy ? <Spinner /> : null}
-              되돌리기
-            </Button>
-          </DialogFooter>
-        </fetcher.Form>
-      </DialogContent>
-    </Dialog>
   );
 }

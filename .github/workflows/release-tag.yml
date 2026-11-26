@@ -1,0 +1,43 @@
+name: Release tag
+
+# Tags every commit that lands on `main` (a dev → main merge) with the date in
+# KST, so it is easy to see what reached `main` and when. A second release on
+# the same day gets `.2`, then `.3`, and so on.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Tag the merged commit
+        run: |
+          existing="$(git tag --points-at HEAD 'v*')"
+          if [[ -n "$existing" ]]; then
+            echo "HEAD is already tagged: $existing"
+            exit 0
+          fi
+          base="v$(TZ=Asia/Seoul date +%Y.%m.%d)"
+          tag="$base"
+          n=1
+          while git rev-parse -q --verify "refs/tags/$tag" >/dev/null; do
+            n=$((n + 1))
+            tag="$base.$n"
+          done
+          git tag "$tag" HEAD
+          git push origin "refs/tags/$tag"
+          echo "Tagged $(git rev-parse --short HEAD) as $tag"

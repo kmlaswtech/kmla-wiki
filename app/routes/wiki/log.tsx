@@ -1,17 +1,24 @@
+import { Link } from "react-router";
+
 import type { Route } from "./+types/log";
 import {
   describeAdminLog,
   getAdminCount,
   listAdminLog,
+  withParticle,
 } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
+import { topicHref } from "~/features/discussions";
+import { KeysetNav } from "~/shared/components/page-nav";
 import { RelativeTime } from "~/shared/components/relative-time";
+import { readPageCursor } from "~/shared/lib/keyset";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const [entries, adminCount] = await withVerifiedMember(request, () =>
-    Promise.all([listAdminLog(), getAdminCount()]),
+  const cursor = readPageCursor(new URL(request.url).searchParams);
+  const [page, adminCount] = await withVerifiedMember(request, () =>
+    Promise.all([listAdminLog(cursor), getAdminCount()]),
   );
-  return { entries, adminCount };
+  return { page, adminCount };
 }
 
 export const meta: Route.MetaFunction = () => [
@@ -21,39 +28,64 @@ export const meta: Route.MetaFunction = () => [
 /**
  * 공개 관리 기록. 관리자가 한 모든 조치가 사유와 함께 남는다.
  *
- * 누가 했는지는 "관리자"로만 보인다. 관리자가 문서별 가명을 넘어 한 사람의 편집을 모아 본 것도
- * 여기에 남는다.
+ * 누가 했는지는 관리자 이름(`관리자 B`)으로 보인다. 한 관리자의 잘못을 모든 관리자의 잘못으로 보지
+ * 않게 하려는 것이다. 관리자가 문서별 가명을 넘어 한 사람의 편집을 모아 본 것도 여기에 남는다.
  */
 export default function LogRoute({ loaderData }: Route.ComponentProps) {
-  const { entries, adminCount } = loaderData;
+  const { page, adminCount } = loaderData;
+  const entries = page.items;
 
   return (
     <div>
       <h1 className="mb-2 border-b pb-3 text-2xl font-bold">관리 기록</h1>
       <p className="mb-4 text-sm text-muted-foreground">
-        관리자는 {adminCount}명입니다. 관리자가 한 조치는 모두 사유와 함께
-        여기에 남습니다.
+        관리자 {adminCount}명 · 공개 관리 기록
       </p>
 
       {entries.length === 0 ? (
         <p className="py-8 text-center text-muted-foreground">
-          아직 기록이 없습니다.
+          관리 기록이 없습니다.
         </p>
       ) : (
         <ul className="divide-y text-sm">
           {entries.map((entry) => (
             <li key={entry.id} className="py-2.5">
               <p>
+                {/* 다른 기록이 이 번호로 가리킨다(예: 해제 되돌림의 "기록 #N"). */}
+                <span className="mr-2 text-muted-foreground tabular-nums">
+                  #{entry.id}
+                </span>
                 <span className="mr-2 text-muted-foreground">
                   <RelativeTime value={entry.createdAt} />
                 </span>
+                {/* 누가 했는지를 문장의 주어로 둔다(`관리자 A가 관리자 B의 …`). 이름을 공개하기
+                    전의 기록에는 행위자가 없다. */}
+                {entry.actorHandle ? (
+                  <span className="mr-1 font-medium">
+                    {withParticle(entry.actorHandle, "이", "가")}
+                  </span>
+                ) : null}
                 {describeAdminLog(entry)}
+                {/* 지운 토론은 회원이 열 수 없다. */}
+                {entry.discussionId !== null &&
+                entry.action !== "delete_discussion" ? (
+                  <>
+                    {" "}
+                    <Link
+                      to={topicHref(entry.discussionId)}
+                      className="text-primary hover:underline"
+                    >
+                      토론 보기
+                    </Link>
+                  </>
+                ) : null}
               </p>
               <p className="text-muted-foreground">사유: {entry.reason}</p>
             </li>
           ))}
         </ul>
       )}
+      <KeysetNav path="/log" page={page} />
     </div>
   );
 }

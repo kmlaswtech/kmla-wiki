@@ -40,9 +40,12 @@ insert into private.members (auth_user_id, kmla_profile_id, verified_until, is_a
 values
   ('10000000-0000-0000-0000-0000000000a1', 900001, now() + interval '365 days', false, null),
   ('10000000-0000-0000-0000-0000000000b0', 900002, now() + interval '365 days', false, null),
-  ('10000000-0000-0000-0000-0000000000ad', 900003, now() + interval '365 days', true, '관리자 A'),
+  ('10000000-0000-0000-0000-0000000000ad', 900003, now() + interval '365 days', false, null),
   ('10000000-0000-0000-0000-0000000000e0', 900004, now() - interval '1 day', false, null)
 on conflict (kmla_profile_id) do update set verified_until = excluded.verified_until;
+
+-- 관리자는 `promote_member`로만 만든다. 그래야 이름(`관리자 A`)이 이름 기록에 남는다.
+select private.promote_member(id) from private.members where kmla_profile_id = 900003 and not is_admin;
 
 -- 예시 문서. 실제 저장 경로(`save_revision`)로 넣어 가명·역링크·분류가 실제와 같게 만들어진다.
 do $$
@@ -58,7 +61,7 @@ declare
     jsonb_build_array('귀가', private.doc_of(
       private.doc_para(
         private.doc_text_node('집에 가는 방법을 모은 문서입니다.'),
-        jsonb_build_object('type', 'footnote', 'attrs', jsonb_build_object('note', '2026년 기준.'))
+        jsonb_build_object('type', 'footnote', 'content', jsonb_build_array(jsonb_build_object('type', 'text', 'text', '2026년 기준.')))
       ),
       private.doc_heading(2, '종류'),
       private.doc_list(

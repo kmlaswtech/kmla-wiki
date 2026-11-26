@@ -1,16 +1,26 @@
-import type { Editor } from "@tiptap/core";
+import { Extension, type Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { useState, type ReactNode } from "react";
+import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { Link2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { footnoteExtensions } from "../model/schema";
 import type { EditorRequest } from "./editor-ui";
+import { Divider, MarkTools, ToolButton } from "./mark-tools";
+import { createBox } from "./wiki-editor";
 import { TitleInput } from "./title-input";
 import {
   baseName,
+  EMPTY_CAPTION,
   MARK,
   NODE,
+  parseYoutubeUrl,
   SAFE_HREF,
   templateTitle,
+  type WikiNode,
+  youtubeWatchUrl,
 } from "~/features/markup";
+import { resolveRedirect } from "~/features/pages";
 import { Button } from "~/shared/ui/button";
 import {
   Dialog,
@@ -22,6 +32,7 @@ import {
 } from "~/shared/ui/dialog";
 import { Input } from "~/shared/ui/input";
 import { Label } from "~/shared/ui/label";
+import { Spinner } from "~/shared/ui/spinner";
 import { Textarea } from "~/shared/ui/textarea";
 
 /**
@@ -65,6 +76,8 @@ export function EditorDialogs({
           <FootnoteForm editor={editor} pos={shown.pos} onDone={close} />
         ) : shown?.kind === "table" ? (
           <TableForm editor={editor} onDone={close} />
+        ) : shown?.kind === "youtube" ? (
+          <YoutubeForm editor={editor} pos={shown.pos} onDone={close} />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -113,7 +126,7 @@ function asExternalHref(value: string): string | null {
 }
 
 /**
- * 링크 넣기·고치기. 문서 제목을 쓰면 위키 링크, `https://`로 시작하면 바깥 링크다.
+ * 링크 삽입·편집. 문서 제목을 쓰면 위키 링크, `https://`로 시작하면 바깥 링크다.
  * 글자를 골라 두었으면 그 글자에, 아니면 새 글자로 넣는다.
  */
 function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
@@ -136,16 +149,37 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
   const [label, setLabel] = useState("");
   const needsLabel = empty && !editing;
 
-  const apply = (value: string) => {
+  /** 넘겨주기를 확인하는 중인가. 그동안은 다시 넣지 않고 "삽입"을 막는다. */
+  const [checking, setChecking] = useState(false);
+  /** 확인하는 사이 대화상자가 닫혔으면 넣지 않는다. */
+  const closed = useRef(false);
+  useEffect(() => {
+    closed.current = false;
+    return () => {
+      closed.current = true;
+    };
+  }, []);
+
+  const apply = async (value: string) => {
     const address = value.trim();
-    if (!address) return;
+    if (!address || checking) return;
     const href = asExternalHref(address);
-    const [title = "", ...rest] = address.split("#");
+    const [rawTitle = "", ...rest] = address.split("#");
+    let title = rawTitle.trim();
+    // 넘겨주기 문서를 가리키면 끝까지 따라가 최종 문서에 건다. 링크가 넘겨주기 문서를 거치지 않게
+    // 한다. 보이는 글자는 친 그대로 둔다. 최종 문서를 찾지 못하면 친 이름에 건다.
+    if (!href && title !== "") {
+      setChecking(true);
+      const resolved = await resolveRedirect(title).catch(() => null);
+      if (closed.current) return;
+      setChecking(false);
+      if (resolved?.status === "page") title = resolved.title;
+    }
     const mark = href
       ? { type: MARK.link, attrs: { href } }
       : {
           type: MARK.wikiLink,
-          attrs: { target: title.trim(), section: rest.join("#").trim() },
+          attrs: { target: title, section: rest.join("#").trim() },
         };
 
     const chain = editor.chain().focus();
@@ -168,9 +202,9 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
 
   return (
     <DialogForm
-      title={editing ? "링크 고치기" : "링크 넣기"}
+      title={editing ? "링크 편집" : "링크 삽입"}
       description="문서 이름을 쓰면 위키 문서로, https://로 시작하면 바깥 사이트로 갑니다. 문서의 한 문단으로 가려면 '문서 이름#문단 제목'처럼 씁니다."
-      onSubmit={() => apply(target)}
+      onSubmit={() => void apply(target)}
       footer={
         <>
           {activeMark ? (
@@ -188,11 +222,12 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
                 onDone();
               }}
             >
-              링크 없애기
+              링크 제거
             </Button>
           ) : null}
-          <Button type="submit" disabled={target.trim() === ""}>
-            {editing ? "고치기" : "넣기"}
+          <Button type="submit" disabled={target.trim() === "" || checking}>
+            {checking ? <Spinner /> : null}
+            {editing ? "저장" : "삽입"}
           </Button>
         </>
       }
@@ -203,24 +238,25 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
           id="link-target"
           value={target}
           onChange={setTarget}
-          onCommit={needsLabel ? undefined : apply}
+          onCommit={needsLabel ? undefined : (value) => void apply(value)}
+          sections
+          wikiAddresses
           placeholder="예: 귀가, 귀가#신청, https://kmla.hs.kr"
           focusOnMount
         />
       </div>
       {needsLabel ? (
         <div className="grid gap-1.5">
-          <Label htmlFor="link-label">보여 줄 글자 (선택)</Label>
+          <Label htmlFor="link-label">표시할 텍스트 (선택)</Label>
           <Input
             id="link-label"
             value={label}
-            placeholder="비워 두면 문서 이름이 보입니다"
             onChange={(event) => setLabel(event.target.value)}
           />
         </div>
       ) : selectedText ? (
         <p className="text-sm text-muted-foreground">
-          고른 글자:{" "}
+          선택한 텍스트:{" "}
           <span className="font-medium text-foreground">{selectedText}</span>
         </p>
       ) : null}
@@ -245,12 +281,16 @@ function nodeTargetAt(
   return node?.type.name === type ? { node, pos } : null;
 }
 
-/** 고치던 노드의 속성을 바꾸거나, 새 노드를 커서 자리에 넣는다. */
+/**
+ * 고치던 노드의 속성을 바꾸거나, 새 노드를 커서 자리에 넣는다. 고칠 때는 내용(`content`)을 그대로
+ * 두고, 새로 넣을 때만 쓴다.
+ */
 function upsertNode(
   editor: Editor,
   target: NodeTarget | null,
   type: string,
   attrs: Record<string, unknown>,
+  content?: WikiNode[],
 ) {
   const chain = editor.chain().focus();
   if (target) {
@@ -261,7 +301,7 @@ function upsertNode(
       })
       .run();
   } else {
-    chain.insertContent({ type, attrs }).run();
+    chain.leaveCaption().insertContent({ type, attrs, content }).run();
   }
 }
 
@@ -298,7 +338,7 @@ function RemoveNodeButton({
   );
 }
 
-/** 틀 넣기·고치기. 값은 한 줄에 하나씩 적는다(틀 문서의 {{{1}}}, {{{2}}} 자리에 차례로 들어간다). */
+/** 틀 삽입·편집. 값은 한 줄에 하나씩 적는다(틀 문서의 {{{1}}}, {{{2}}} 자리에 차례로 들어간다). */
 function TemplateForm({
   editor,
   pos,
@@ -332,18 +372,18 @@ function TemplateForm({
 
   return (
     <DialogForm
-      title={current ? "틀 고치기" : "틀 넣기"}
-      description="틀 문서의 내용이 이 자리에 들어갑니다. 내용을 고치려면 틀 문서를 고칩니다."
+      title={current ? "틀 설정" : "틀 삽입"}
+      description="틀의 공통 내용은 틀 문서에서 편집할 수 있습니다."
       onSubmit={submit}
       footer={
         <>
           {current ? (
             <RemoveNodeButton editor={editor} target={current} onDone={onDone}>
-              틀 빼기
+              틀 제거
             </RemoveNodeButton>
           ) : null}
           <Button type="submit" disabled={title === null}>
-            {current ? "고치기" : "넣기"}
+            {current ? "저장" : "삽입"}
           </Button>
         </>
       }
@@ -367,7 +407,7 @@ function TemplateForm({
         ) : null}
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="template-values">넘길 값 (선택, 한 줄에 하나)</Label>
+        <Label htmlFor="template-values">매개변수 (선택, 한 줄에 하나)</Label>
         <Textarea
           id="template-values"
           value={values}
@@ -379,7 +419,43 @@ function TemplateForm({
   );
 }
 
-/** 각주 넣기·고치기. 출처 주소를 적으면 문서에서 누를 수 있는 링크가 된다. */
+/** 각주 편집기의 키. Enter는 줄바꿈이다(각주는 문단 하나다). */
+const FootnoteKeys = Extension.create<{ link: () => void }>({
+  name: "footnoteKeys",
+
+  addOptions() {
+    return { link: () => undefined };
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      Enter: ({ editor }) => editor.commands.setHardBreak(),
+      "Mod-k": () => {
+        this.options.link();
+        return true;
+      },
+    };
+  },
+});
+
+/** 보이는 내용이 없는가(글자가 비었거나 공백뿐이고, 값 자리도 없다). */
+function isBlankNote(doc: PMNode): boolean {
+  let blank = true;
+  doc.descendants((node) => {
+    if (node.type.name === NODE.templateParam || node.text?.trim()) {
+      blank = false;
+    }
+    return blank;
+  });
+  return blank;
+}
+
+/**
+ * 각주 삽입·편집. 내용은 작은 편집기에서 꾸밈과 링크까지 넣을 수 있다.
+ *
+ * 링크 넣기는 대화상자를 바꾸지 않고 이 안에서 화면만 바꾼다. 대화상자는 하나만 열리므로
+ * `request({ kind: "link" })`로 열면 쓰던 각주가 사라진다. 각주 편집기는 숨기기만 하고 내리지 않는다.
+ */
 function FootnoteForm({
   editor,
   pos,
@@ -390,53 +466,204 @@ function FootnoteForm({
   onDone: () => void;
 }) {
   const current = nodeTargetAt(editor, pos, NODE.footnote);
-  const [note, setNote] = useState(
-    current ? String(current.node.attrs.note ?? "") : "",
-  );
+  const [view, setView] = useState<"note" | "link">("note");
+
+  // 편집기의 키가 부를 함수. 편집기는 한 번만 만들므로 상자에 최신 함수를 두고, 키를 누를 때(렌더
+  // 밖에서) 읽는다.
+  const [keys] = useState(() => createBox({ link: () => {} }));
+  const [extensions] = useState(() => [
+    ...footnoteExtensions(),
+    FootnoteKeys.configure({
+      link: () => keys.current.link(),
+    }),
+  ]);
+  const note = useEditor({
+    extensions,
+    content: {
+      type: "doc",
+      content: [
+        {
+          type: NODE.paragraph,
+          content: current?.node.content.toJSON() ?? [],
+        },
+      ],
+    },
+    immediatelyRender: true,
+    shouldRerenderOnTransaction: false,
+    autofocus: "end",
+    editorProps: {
+      attributes: {
+        "aria-label": "각주 내용",
+        class: "wiki-content wiki-footnote min-h-16 px-3 py-2 outline-none",
+      },
+    },
+  });
+  const blank = useEditorState({
+    editor: note,
+    selector: ({ editor: inner }) => !inner || isBlankNote(inner.state.doc),
+  });
 
   const submit = () => {
-    const text = note.trim();
-    if (!text) return;
-    upsertNode(editor, current, NODE.footnote, { note: text });
+    if (!note || isBlankNote(note.state.doc)) return;
+    // 두 편집기는 꾸밈 정의가 같으므로 JSON 그대로 옮긴다.
+    const content = note.state.doc.firstChild?.content.toJSON() ?? [];
+    // 고치던 각주가 있으면 그 자리를 바꾸고, 없으면 커서 자리에 넣는다.
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(
+        current
+          ? { from: current.pos, to: current.pos + current.node.nodeSize }
+          : editor.state.selection,
+        { type: NODE.footnote, attrs: current?.node.attrs, content },
+      )
+      .run();
+    onDone();
+  };
+  const openLink = () => setView("link");
+  useEffect(() => {
+    keys.update({ link: openLink });
+  });
+
+  return (
+    <>
+      {/* `hidden`은 화면에서도, 화면 읽기 프로그램에서도 숨긴다(제목이 둘로 읽히지 않는다). */}
+      <div className="contents" hidden={view !== "note"}>
+        <DialogForm
+          title={current ? "각주 편집" : "각주 삽입"}
+          onSubmit={submit}
+          footer={
+            <>
+              {current ? (
+                <RemoveNodeButton
+                  editor={editor}
+                  target={current}
+                  onDone={onDone}
+                >
+                  각주 삭제
+                </RemoveNodeButton>
+              ) : null}
+              <Button type="submit" disabled={blank}>
+                {current ? "저장" : "삽입"}
+              </Button>
+            </>
+          }
+        >
+          {note ? (
+            <div className="grid gap-1.5">
+              <div className="overflow-hidden rounded-md border focus-within:ring-2 focus-within:ring-ring/50">
+                <div
+                  role="toolbar"
+                  aria-label="각주 꾸밈"
+                  className="flex flex-wrap items-center gap-0.5 border-b bg-muted/90 p-1"
+                >
+                  <MarkTools editor={note} />
+                  <Divider />
+                  <ToolButton label="링크" onClick={openLink}>
+                    <Link2 />
+                  </ToolButton>
+                </div>
+                <EditorContent editor={note} />
+              </div>
+            </div>
+          ) : null}
+        </DialogForm>
+      </div>
+      {view === "link" && note ? (
+        <LinkForm
+          editor={note}
+          onDone={() => {
+            setView("note");
+            requestAnimationFrame(() => note.commands.focus());
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * 유튜브 영상 삽입·편집. 주소의 시작 시각(`t=90`)도 읽는다. 크기와 정렬은 넣은 뒤 영상 아래에서
+ * 고른다.
+ */
+function YoutubeForm({
+  editor,
+  pos,
+  onDone,
+}: {
+  editor: Editor;
+  pos?: number;
+  onDone: () => void;
+}) {
+  const current = nodeTargetAt(editor, pos, NODE.youtube);
+  const [address, setAddress] = useState(
+    current
+      ? youtubeWatchUrl({
+          videoId: String(current.node.attrs.videoId ?? ""),
+          start: Number(current.node.attrs.start ?? 0),
+        })
+      : "",
+  );
+  const video = parseYoutubeUrl(address);
+  const invalid = address.trim() !== "" && video === null;
+
+  const submit = () => {
+    if (!video) return;
+    // 고칠 때는 고른 크기·정렬을 그대로 둔다.
+    upsertNode(
+      editor,
+      current,
+      NODE.youtube,
+      {
+        size: "small",
+        ...current?.node.attrs,
+        videoId: video.videoId,
+        start: video.start,
+      },
+      [...EMPTY_CAPTION],
+    );
     onDone();
   };
 
   return (
     <DialogForm
-      title={current ? "각주 고치기" : "각주 넣기"}
-      description="문장 끝에 번호가 붙고, 내용은 문서 맨 아래에 모입니다."
+      title={current ? "유튜브 영상 설정" : "유튜브 영상 삽입"}
+      description="주소에 시작 시간이 있으면 해당 위치부터 재생합니다. 예를 들어 ?t=90은 1분 30초부터 재생합니다."
       onSubmit={submit}
       footer={
         <>
           {current ? (
             <RemoveNodeButton editor={editor} target={current} onDone={onDone}>
-              각주 지우기
+              영상 제거
             </RemoveNodeButton>
           ) : null}
-          <Button type="submit" disabled={note.trim() === ""}>
-            {current ? "고치기" : "넣기"}
+          <Button type="submit" disabled={video === null}>
+            {current ? "저장" : "삽입"}
           </Button>
         </>
       }
     >
       <div className="grid gap-1.5">
-        <Label htmlFor="footnote-note">각주 내용</Label>
-        <Textarea
-          id="footnote-note"
-          value={note}
-          rows={3}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- 대화상자를 열자마자 칠 수 있게 한다.
+        <Label htmlFor="youtube-address">영상 주소</Label>
+        <Input
+          id="youtube-address"
+          // `type="url"`이면 `https://`를 뺀 주소(`youtu.be/…`)를 브라우저가 막는다. 주소는
+          // `parseYoutubeUrl`이 검사한다.
+          type="text"
+          inputMode="url"
+          value={address}
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- 대화상자를 열자마자 붙여넣을 수 있게 한다.
           autoFocus
-          placeholder="예: 2026년 기준. https://…"
-          onChange={(event) => setNote(event.target.value)}
-          onKeyDown={(event) => {
-            // 여러 줄은 받지 않는다. Enter는 넣기다.
-            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              submit();
-            }
-          }}
+          placeholder="예: https://youtu.be/…"
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? "youtube-address-error" : undefined}
+          onChange={(event) => setAddress(event.target.value)}
         />
+        {invalid ? (
+          <p id="youtube-address-error" className="text-sm text-destructive">
+            유튜브 영상 주소가 아닙니다.
+          </p>
+        ) : null}
       </div>
     </DialogForm>
   );
@@ -453,12 +680,13 @@ function TableForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
 
   return (
     <DialogForm
-      title="표 넣기"
-      description="첫 줄은 제목 줄입니다. 줄과 칸은 나중에 표 메뉴에서 더하거나 뺄 수 있습니다."
+      title="표 삽입"
+      description="첫 행은 머리글입니다."
       onSubmit={() => {
         editor
           .chain()
           .focus()
+          .leaveCaption()
           .insertTable({
             rows: clamp(rows, 1, 30),
             cols: clamp(columns, 1, 10),
@@ -467,11 +695,11 @@ function TableForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
           .run();
         onDone();
       }}
-      footer={<Button type="submit">넣기</Button>}
+      footer={<Button type="submit">삽입</Button>}
     >
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
-          <Label htmlFor="table-rows">줄</Label>
+          <Label htmlFor="table-rows">행</Label>
           <Input
             id="table-rows"
             type="number"
@@ -482,7 +710,7 @@ function TableForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="table-columns">칸</Label>
+          <Label htmlFor="table-columns">열</Label>
           <Input
             id="table-columns"
             type="number"

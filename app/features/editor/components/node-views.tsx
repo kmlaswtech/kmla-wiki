@@ -3,20 +3,49 @@ import {
   NodeViewWrapper,
   type ReactNodeViewProps,
 } from "@tiptap/react";
-import { ChevronDown, Pencil, Puzzle } from "lucide-react";
-import { useMemo } from "react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  ChevronDown,
+  Pencil,
+  Play,
+  Puzzle,
+} from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from "react";
 
+import { footnoteText } from "../model/schema";
 import { useEditorUi } from "./editor-ui";
 import { WikiImage } from "~/features/images";
 import {
   baseName,
+  captionText,
+  formatStart,
+  MEDIA_ALIGN_LABEL,
+  MEDIA_ALIGNS,
+  MEDIA_SIZE_LABEL,
+  MEDIA_SIZES,
+  mediaAlign,
+  mediaSize,
   NODE,
   parseWiki,
   templateTitle,
   WikiContent,
+  youtubeThumbnailUrl,
+  type MediaAlign,
+  type MediaSize,
   type WikiDoc,
+  type WikiNode,
 } from "~/features/markup";
 import { cn } from "~/shared/lib/utils";
+import { Button } from "~/shared/ui/button";
 
 /** 접기: 제목 칸과, 그 아래 바로 고칠 수 있는 내용. 편집 중에는 늘 펼쳐 둔다. */
 export function FoldView({
@@ -34,13 +63,12 @@ export function FoldView({
           className="size-4 shrink-0 text-muted-foreground"
           aria-hidden
         />
-        <input
-          type="text"
+        <AttrInput
           value={String(node.attrs.title ?? "")}
           placeholder="접기 제목"
           aria-label="접기 제목"
           readOnly={!editor.isEditable}
-          onChange={(event) => updateAttributes({ title: event.target.value })}
+          onCommit={(value) => updateAttributes({ title: value })}
           className="min-w-0 flex-1 bg-transparent font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground"
         />
       </div>
@@ -79,7 +107,7 @@ export function TemplateView({
 
   return (
     <NodeViewWrapper
-      className={cn("wiki-template-edit", selected && "ring-2 ring-ring/60")}
+      className={cn("wiki-template-edit", selected && "ring-1 ring-ring/60")}
       data-drag-handle=""
     >
       <div
@@ -94,17 +122,15 @@ export function TemplateView({
           <span className="truncate">({args.join(", ")})</span>
         ) : null}
         {editor.isEditable ? (
-          <button
-            type="button"
-            className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
+          <EditNodeButton
+            className="ml-auto"
             onClick={() => {
               const pos = getPos();
               if (typeof pos === "number") request({ kind: "template", pos });
             }}
           >
-            <Pencil className="size-3" aria-hidden />
-            고치기
-          </button>
+            틀 설정
+          </EditNodeButton>
         ) : null}
       </div>
       <div contentEditable={false} className="pointer-events-none select-none">
@@ -121,35 +147,312 @@ export function TemplateView({
   );
 }
 
-/** 올린 이미지와 그 설명. 설명은 화면 낭독기가 읽는다. */
-export function ImageView({
+/**
+ * 노드 속성을 고치는 한 줄 입력칸(접기 제목, 이미지 대체 텍스트).
+ *
+ * 한글을 조합하는 동안에는 노드에 쓰지 않는다. 글자마다 편집기 트랜잭션을 보내면 노드 뷰가 다시
+ * 그려지면서 조합 중인 글자가 씹힌다. 입력칸이 제 값을 들고 있다가 조합이 끝날 때 쓴다. 실행 취소처럼
+ * 바깥에서 값이 바뀌면 조합 중이 아닐 때 따라간다.
+ */
+export function AttrInput({
+  value,
+  onCommit,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
+  value: string;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const composing = useRef(false);
+
+  useEffect(() => {
+    if (!composing.current) setDraft(value);
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      {...props}
+      value={draft}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        if (
+          !composing.current &&
+          !(event.nativeEvent as InputEvent).isComposing
+        )
+          onCommit(event.target.value);
+      }}
+      onCompositionStart={() => {
+        composing.current = true;
+      }}
+      onCompositionEnd={(event) => {
+        composing.current = false;
+        onCommit(event.currentTarget.value);
+      }}
+    />
+  );
+}
+
+/** 편집기 노드의 속성을 문서 노드 꼴로 읽는다(크기·정렬 도우미가 문서 노드를 받는다). */
+function asWikiNode(node: ReactNodeViewProps["node"]): WikiNode {
+  return { type: node.type.name, attrs: node.attrs };
+}
+
+/** 올린 이미지와 그 대체 글. 대체 글은 화면 낭독기가 읽는다. */
+export function ImageView(props: ReactNodeViewProps) {
+  const { node, updateAttributes, editor } = props;
+  const { images } = useEditorUi();
+  const id = String(node.attrs.id ?? "");
+  const alt = String(node.attrs.alt ?? "");
+  // 문서 보기와 같이 각주 내용을 뺀 캡션 글자다.
+  const caption = captionText(node.toJSON() as WikiNode);
+
+  return (
+    <MediaNodeView
+      {...props}
+      allowOriginal
+      media={<WikiImage info={images.get(id)} alt={alt || caption} />}
+    >
+      <AttrInput
+        value={alt}
+        placeholder="이미지 대체 텍스트"
+        aria-label="이미지 대체 텍스트"
+        title="대체 텍스트를 비우면 화면 낭독기가 캡션을 읽습니다."
+        readOnly={!editor.isEditable}
+        onCommit={(value) => updateAttributes({ alt: value })}
+        className="mt-1 w-full max-w-md bg-transparent text-sm text-muted-foreground outline-none placeholder:text-muted-foreground/70"
+      />
+    </MediaNodeView>
+  );
+}
+
+/**
+ * 유튜브 영상. 편집기 안에서는 재생기 대신 미리보기 그림을 둔다. 재생기를 끼우면 끌어 옮길 때마다
+ * 다시 불러오고, 누르기를 재생기가 가져가 노드를 고르기 어렵다.
+ */
+export function YoutubeView(props: ReactNodeViewProps) {
+  const { node, getPos, editor } = props;
+  const { request } = useEditorUi();
+  const videoId = String(node.attrs.videoId ?? "");
+  const start = Number(node.attrs.start ?? 0);
+
+  return (
+    <MediaNodeView
+      {...props}
+      youtube
+      media={
+        <span className="wiki-youtube relative">
+          {videoId ? (
+            <img
+              src={youtubeThumbnailUrl(videoId)}
+              alt=""
+              className="size-full object-cover"
+              draggable={false}
+            />
+          ) : null}
+          <span className="absolute inset-0 flex items-center justify-center">
+            <span className="flex size-12 items-center justify-center rounded-full bg-black/60 text-white">
+              <Play className="size-6 fill-current" aria-hidden />
+            </span>
+          </span>
+        </span>
+      }
+    >
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        <span>
+          유튜브 영상{start > 0 ? ` (${formatStart(start)}부터)` : ""}
+        </span>
+        {editor.isEditable ? (
+          <EditNodeButton
+            onClick={() => {
+              const pos = getPos();
+              if (typeof pos === "number") request({ kind: "youtube", pos });
+            }}
+          >
+            영상 주소 변경
+          </EditNodeButton>
+        ) : null}
+      </div>
+    </MediaNodeView>
+  );
+}
+
+/**
+ * 이미지·영상 노드의 공통 틀: 문서 보기와 같은 상자(`wiki-media`)에 그림과 캡션, 그 아래에
+ * `children`(노드마다 다른 줄)과 크기·정렬 고르기를 둔다.
+ *
+ * 캡션은 노드 내용이라 본문처럼 바로 고친다(`NodeViewContent`). 그림 부분만 끌어 옮기는 자리다.
+ * 노드에 내용이 있으면 ProseMirror가 누른 노드를 저절로 고르지 않으므로, 그림을 누르면 직접 고른다.
+ */
+function MediaNodeView({
   node,
   selected,
   updateAttributes,
   editor,
-}: ReactNodeViewProps) {
-  const { images } = useEditorUi();
-  const id = String(node.attrs.id ?? "");
-  const alt = String(node.attrs.alt ?? "");
+  getPos,
+  media,
+  youtube = false,
+  allowOriginal = false,
+  children,
+}: ReactNodeViewProps & {
+  media: ReactNode;
+  youtube?: boolean;
+  allowOriginal?: boolean;
+  children?: ReactNode;
+}) {
+  const wikiNode = asWikiNode(node);
+  const size = mediaSize(wikiNode);
+  const align = mediaAlign(wikiNode);
 
   return (
     <NodeViewWrapper
-      className={cn("wiki-image-edit", selected && "ring-2 ring-ring/60")}
-      data-drag-handle=""
+      className={cn("wiki-image-edit", selected && "ring-1 ring-ring/60")}
     >
-      <div contentEditable={false}>
-        <WikiImage info={images.get(id)} alt={alt} />
-        <input
-          type="text"
-          value={alt}
-          placeholder="이미지 설명 (무엇을 찍은 사진인지)"
-          aria-label="이미지 설명"
-          readOnly={!editor.isEditable}
-          onChange={(event) => updateAttributes({ alt: event.target.value })}
-          className="mt-1 w-full max-w-md bg-transparent text-sm text-muted-foreground outline-none placeholder:text-muted-foreground/70"
-        />
+      <div
+        className="wiki-media"
+        data-size={size ?? undefined}
+        data-align={align}
+        data-youtube={youtube ? "" : undefined}
+      >
+        <div className="wiki-media-item">
+          {/* 누르기는 마우스·손가락으로 그림을 고르는 지름길일 뿐이다. 키보드는 편집기 안에서 선택을
+              옮겨 고른다(Shift+화살표). */}
+          {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            contentEditable={false}
+            draggable={editor.isEditable}
+            data-drag-handle=""
+            className="wiki-media-grip"
+            onClick={() => {
+              const pos = getPos();
+              if (editor.isEditable && typeof pos === "number") {
+                editor.commands.setNodeSelection(pos);
+              }
+            }}
+          >
+            {media}
+          </div>
+          {/* 문서 보기의 캡션과 같은 자리·모양(배경 띠)이다. 편집기에서는 비어 있어도 띠를 보여 적을
+              자리를 알린다(`is-empty`, `extensions.ts`). */}
+          <NodeViewContent />
+        </div>
+      </div>
+      {/* 그림 아래의 고치기 도구. 표 칸에서는 칸 너비를 정하지 않는다(app.css의 `wiki-media-tools`). */}
+      <div contentEditable={false} className="wiki-media-tools">
+        {children}
+        {editor.isEditable ? (
+          <MediaControls
+            size={size}
+            align={align}
+            allowOriginal={allowOriginal}
+            onChange={updateAttributes}
+          />
+        ) : null}
       </div>
     </NodeViewWrapper>
+  );
+}
+
+/** 노드를 대화상자로 고치는 작은 단추(틀·영상). */
+function EditNodeButton({
+  className,
+  onClick,
+  children,
+}: {
+  className?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground",
+        className,
+      )}
+      onClick={onClick}
+    >
+      <Pencil className="size-3" aria-hidden />
+      {children}
+    </button>
+  );
+}
+
+const ALIGN_ICON: Record<MediaAlign, ReactNode> = {
+  left: <AlignLeft className="size-3.5" aria-hidden />,
+  center: <AlignCenter className="size-3.5" aria-hidden />,
+  right: <AlignRight className="size-3.5" aria-hidden />,
+};
+
+/** 이미지·영상의 크기와 정렬 고르기. `allowOriginal`이면 "원본" 크기(고르지 않음)도 있다. */
+function MediaControls({
+  size,
+  align,
+  allowOriginal = false,
+  onChange,
+}: {
+  size: MediaSize | null;
+  align: MediaAlign;
+  allowOriginal?: boolean;
+  onChange: (attrs: { size?: MediaSize | null; align?: MediaAlign }) => void;
+}) {
+  const sizes: (MediaSize | null)[] = allowOriginal
+    ? [null, ...MEDIA_SIZES]
+    : [...MEDIA_SIZES];
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+      <div role="group" aria-label="크기" className="flex gap-0.5">
+        {sizes.map((option) => (
+          <ChoiceButton
+            key={option ?? "original"}
+            active={option === size}
+            onClick={() => onChange({ size: option })}
+          >
+            {option ? MEDIA_SIZE_LABEL[option] : "원본"}
+          </ChoiceButton>
+        ))}
+      </div>
+      <div role="group" aria-label="정렬" className="flex gap-0.5">
+        {MEDIA_ALIGNS.map((option) => (
+          <ChoiceButton
+            key={option}
+            active={option === align}
+            label={`${MEDIA_ALIGN_LABEL[option]} 정렬`}
+            onClick={() => onChange({ align: option })}
+          >
+            {ALIGN_ICON[option]}
+          </ChoiceButton>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChoiceButton({
+  active,
+  label,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  label?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      size="xs"
+      variant={active ? "secondary" : "ghost"}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      // 누르는 순간 편집기의 선택이 풀리지 않게 한다(툴바 단추와 같다).
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
   );
 }
 
@@ -161,13 +464,13 @@ export function FootnoteView({
   editor,
 }: ReactNodeViewProps) {
   const { request } = useEditorUi();
-  const note = String(node.attrs.note ?? "");
+  const note = footnoteText(node);
   return (
     <NodeViewWrapper
       as="sup"
       className={cn(
         "wiki-footnote-ref",
-        selected && "rounded-sm ring-2 ring-ring/60",
+        selected && "rounded-sm ring-1 ring-ring/60",
       )}
     >
       <button

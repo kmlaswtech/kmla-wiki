@@ -4,7 +4,12 @@ import type { Route } from "./+types/diff";
 import { positiveInt, titleFromParams } from "./title-param";
 import { withVerifiedMember } from "~/features/auth";
 import { docToText, pageHref } from "~/features/markup";
-import { DiffView, getPageView, getRevisionBodies } from "~/features/pages";
+import {
+  DiffView,
+  getPageView,
+  getRevisionBodies,
+  TextChange,
+} from "~/features/pages";
 import { RelativeTime } from "~/shared/components/relative-time";
 
 export async function clientLoader({
@@ -52,7 +57,7 @@ export default function DiffRoute({ loaderData }: Route.ComponentProps) {
             to={pageHref(title, "history")}
             className="text-primary hover:underline"
           >
-            기록으로 돌아가기
+            편집 기록
           </Link>
         </p>
       </header>
@@ -80,6 +85,14 @@ export default function DiffRoute({ loaderData }: Route.ComponentProps) {
                   </span>{" "}
                   · <RelativeTime value={revision.createdAt} />
                   {revision.summary ? ` · ${revision.summary}` : ""}
+                  {/* 판에 저장한 변화량은 바로 앞 판과의 것이다. 떨어진 두 판을 비교하면 보이지 않는다. */}
+                  {revision === after &&
+                  after.parentRevisionId === before.id ? (
+                    <>
+                      {" · "}
+                      <TextChange revision={after} />
+                    </>
+                  ) : null}
                 </dd>
               </div>
             ))}
@@ -91,7 +104,7 @@ export default function DiffRoute({ loaderData }: Route.ComponentProps) {
         </>
       ) : (
         <p className="py-8 text-center text-muted-foreground">
-          비교할 판을 볼 수 없습니다.
+          판을 불러오지 못했습니다.
         </p>
       )}
     </div>

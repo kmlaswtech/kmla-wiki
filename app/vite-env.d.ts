@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string | undefined;
   readonly VITE_SUPABASE_PUBLISHABLE_KEY: string | undefined;
   readonly VITE_DEV_LOGIN: string | undefined;
+  /** 빌드마다 다른 값. `vite.config.ts`가 넣고, 같은 값을 `version.json`으로 낸다. */
+  readonly APP_VERSION: string;
 }
 
 interface ImportMeta {

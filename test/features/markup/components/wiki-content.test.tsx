@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import {
+  caption,
   doc,
   footnote,
   heading,
@@ -10,7 +11,12 @@ import {
   para,
   text,
 } from "../model/doc-builders";
-import { parseWiki, WikiContent, type WikiDoc } from "~/features/markup";
+import {
+  docToText,
+  parseWiki,
+  WikiContent,
+  type WikiDoc,
+} from "~/features/markup";
 
 function show(
   body: WikiDoc,
@@ -26,6 +32,14 @@ function show(
       />
     </MemoryRouter>,
   );
+}
+
+/** 손가락이나 마우스로 누른다. jsdom에는 `PointerEvent`가 없어 종류를 직접 붙인다. */
+function tap(element: Element, pointerType: "touch" | "mouse") {
+  const down = new MouseEvent("pointerdown", { bubbles: true });
+  Object.defineProperty(down, "pointerType", { value: pointerType });
+  fireEvent(element, down);
+  fireEvent.click(element);
 }
 
 const external = (label: string, href: string) => ({
@@ -103,7 +117,19 @@ describe("WikiContent", () => {
     const { container } = show(
       doc(
         heading(2, "가"),
-        para(text("본문"), footnote("출처 https://kmla.online")),
+        para(
+          text("본문"),
+          footnote([
+            text("출처 "),
+            {
+              type: "text",
+              text: "학교",
+              marks: [{ type: "link", attrs: { href: "https://kmla.online" } }],
+            },
+            text(", "),
+            link("학사 규정"),
+          ]),
+        ),
       ),
       new Set(),
       true,
@@ -112,10 +138,14 @@ describe("WikiContent", () => {
       "가",
     );
     const notes = container.querySelector("section[data-footnotes]");
-    expect(notes).toHaveTextContent("출처");
+    expect(notes).toHaveTextContent("출처 학교, 학사 규정");
     expect(
       notes?.querySelector('a[href="https://kmla.online"]'),
     ).not.toBeNull();
+    // 각주 안의 위키 링크도 문서 링크로 그린다.
+    expect(
+      [...(notes?.querySelectorAll("a") ?? [])].map((a) => a.textContent),
+    ).toContain("학사 규정");
   });
 
   it("leaves out the footnote list and ids when embedded in another view", () => {
@@ -133,5 +163,367 @@ describe("WikiContent", () => {
     expect(container.querySelector("section[data-footnotes]")).toBeNull();
     expect(container.querySelector("[id]")).toBeNull();
     expect(screen.getByRole("button", { name: "각주 1" })).toBeInTheDocument();
+  });
+
+  it("lifts the strike line on a finger tap, but not on a mouse click or a link", () => {
+    const { container } = show(
+      doc(
+        para(
+          { type: "text", text: "취소", marks: [{ type: "strike" }] },
+          {
+            type: "text",
+            text: "링크",
+            marks: [
+              { type: "strike" },
+              { type: "link", attrs: { href: "https://kmla.online" } },
+            ],
+          },
+        ),
+      ),
+    );
+    const [plain, linked] = container.querySelectorAll("s");
+    tap(plain!, "mouse");
+    expect(plain).not.toHaveAttribute("data-revealed");
+    tap(plain!, "touch");
+    expect(plain).toHaveAttribute("data-revealed");
+    tap(plain!, "touch");
+    expect(plain).not.toHaveAttribute("data-revealed");
+    tap(linked!, "touch");
+    expect(linked).not.toHaveAttribute("data-revealed");
+  });
+
+  it("plays YouTube videos from the no-cookie address with their layout", () => {
+    const { container } = show(
+      doc(
+        {
+          type: "youtube",
+          attrs: {
+            videoId: "dQw4w9WgXcQ",
+            start: 90,
+            size: "small",
+            align: "center",
+          },
+        },
+        { type: "youtube", attrs: { videoId: 'x" onload="alert(1)' } },
+      ),
+    );
+    const frames = container.querySelectorAll("iframe");
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toHaveAttribute(
+      "src",
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=90",
+    );
+    const figure = container.querySelector("figure[data-youtube]");
+    expect(figure).toHaveAttribute("data-size", "small");
+    expect(figure).toHaveAttribute("data-align", "center");
+  });
+
+  it("gives images their chosen layout", () => {
+    const { container } = show(
+      doc({
+        type: "image",
+        attrs: {
+          id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a",
+          alt: "지도",
+          size: "full",
+          align: "right",
+        },
+      }),
+    );
+    const figure = container.querySelector("figure[data-wiki-image]");
+    expect(figure).toHaveAttribute("data-size", "full");
+    expect(figure).toHaveAttribute("data-align", "right");
+  });
+
+  it("shows a caption under images and videos only when there is one", () => {
+    const { container } = show(
+      doc(
+        {
+          type: "image",
+          attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a" },
+          content: caption(" "),
+        },
+        {
+          type: "youtube",
+          attrs: { videoId: "dQw4w9WgXcQ" },
+          content: caption("학교 소개"),
+        },
+      ),
+    );
+    const captions = container.querySelectorAll("figcaption");
+    expect(captions).toHaveLength(1);
+    expect(captions[0]).toHaveTextContent("학교 소개");
+    expect(
+      container.querySelector("figure[data-youtube] figcaption"),
+    ).not.toBeNull();
+  });
+
+  it("paints the caption band with the chosen background", () => {
+    const { container } = show(
+      doc({
+        type: "image",
+        attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a" },
+        content: [
+          {
+            type: "caption",
+            attrs: { background: "blue-strong" },
+            content: [text("본관")],
+          },
+        ],
+      }),
+    );
+    const figcaption = container.querySelector("figcaption")!;
+    expect(figcaption).toHaveAttribute("data-bg", "blue-strong");
+    expect(figcaption).toHaveAttribute("data-bg-strong", "");
+    expect(figcaption.getAttribute("style")).toContain("--wiki-bg");
+  });
+
+  it("renders styled captions with links and numbers their footnotes in order", () => {
+    const { container } = show(
+      doc(
+        para(text("앞"), footnote("하나")),
+        {
+          type: "youtube",
+          attrs: { videoId: "dQw4w9WgXcQ" },
+          content: caption(
+            { type: "text", text: "본관", marks: [{ type: "bold" }] },
+            link("학교"),
+            footnote("둘"),
+          ),
+        },
+        para(text("뒤"), footnote("셋")),
+      ),
+    );
+    const figcaption = container.querySelector("figcaption")!;
+    expect(figcaption.querySelector("strong")).toHaveTextContent("본관");
+    expect(figcaption.querySelector("a")).toHaveTextContent("학교");
+    expect(figcaption).toHaveTextContent("[2]");
+    const notes = container.querySelectorAll("section[data-footnotes] li");
+    expect([...notes].map((note) => note.textContent)).toEqual([
+      expect.stringContaining("하나"),
+      expect.stringContaining("둘"),
+      expect.stringContaining("셋"),
+    ]);
+    expect(figcaption).not.toHaveAttribute("data-bg");
+    // 영상 제목은 각주 내용을 뺀 캡션 글자다.
+    expect(container.querySelector("iframe")).toHaveAttribute(
+      "title",
+      "본관학교",
+    );
+  });
+});
+
+describe("WikiContent styling", () => {
+  const colored = (value: string, color: string) => ({
+    type: "text",
+    text: value,
+    marks: [{ type: "textColor", attrs: { color } }],
+  });
+
+  it("draws palette and custom text colors as CSS variables", () => {
+    const { container } = show(
+      doc(para(colored("빨강", "red"), colored("직접", "#112233,#ddeeff"))),
+    );
+    const [red, custom] = container.querySelectorAll(".wiki-color");
+    expect(red).toHaveAttribute("data-text-color", "red");
+    expect(red?.getAttribute("style")).toContain(
+      "var(--wiki-cell-text-red, #b71824)",
+    );
+    expect(custom?.getAttribute("style")).toContain("--wiki-fg-dark: #ddeeff");
+  });
+
+  it("drops values that are not checked", () => {
+    const { container } = show(
+      doc(para(colored("글", "red; background: url(x)")), {
+        type: "paragraph",
+        attrs: { textAlign: "justify" },
+        content: [text("a")],
+      }),
+    );
+    expect(container.querySelector(".wiki-color")).toBeNull();
+    expect(container.querySelector("p[style]")).toBeNull();
+  });
+
+  it("draws text size, paragraph alignment and table styling", () => {
+    const { container } = show(
+      doc(
+        {
+          type: "paragraph",
+          attrs: { textAlign: "center" },
+          content: [
+            {
+              type: "text",
+              text: "큰 글",
+              marks: [{ type: "textSize", attrs: { size: 2 } }],
+            },
+          ],
+        },
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableHeader",
+                  attrs: {
+                    colspan: 2,
+                    align: "center",
+                    background: "blue-strong",
+                    verticalAlign: "middle",
+                  },
+                  content: [para(text("이름"))],
+                },
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    expect(container.querySelector("p")).toHaveStyle({ textAlign: "center" });
+    expect(container.querySelector("[data-text-size='2']")).toHaveTextContent(
+      "큰 글",
+    );
+    const th = container.querySelector("th");
+    expect(th).toHaveAttribute("colspan", "2");
+    expect(th).toHaveAttribute("data-bg", "blue-strong");
+    expect(th).toHaveAttribute("data-bg-strong", "");
+    expect(th?.style.getPropertyValue("--wiki-bg")).toBe("#0060c1");
+    expect(th).toHaveStyle({ verticalAlign: "middle" });
+    // 칸 정렬은 없다(칸 안의 글은 문단 정렬로 맞춘다). 예전 값이 남아 있어도 그리지 않는다.
+    expect(th?.getAttribute("style")).not.toContain("text-align");
+  });
+});
+
+describe("profile", () => {
+  const profile = [
+    {
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableHeader",
+              attrs: { colspan: 2, background: "blue-strong" },
+              content: [para(text("민족사관고등학교"))],
+            },
+          ],
+        },
+        {
+          type: "tableRow",
+          content: [
+            { type: "tableHeader", content: [para(text("개교"))] },
+            {
+              type: "tableCell",
+              content: [para(text("1996년"), footnote("출처"))],
+            },
+          ],
+        },
+      ],
+    },
+    para(link("역사")),
+  ];
+
+  it("draws the profile with the table of contents beside it, then the body", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <WikiContent
+          withToc
+          document={parseWiki({
+            type: "doc",
+            attrs: { profile },
+            content: [heading(2, "개요"), para(text("본문"), footnote("둘째"))],
+          })}
+          existing={new Set()}
+          beforeBody={<nav data-testid="toc" />}
+        />
+      </MemoryRouter>,
+    );
+    const box = screen.getByRole("complementary", { name: "프로필" });
+    expect(box.querySelector("th[colspan='2']")).toHaveAttribute(
+      "data-bg",
+      "blue-strong",
+    );
+    expect(screen.getByRole("link", { name: "역사" })).toHaveClass(
+      "wiki-link-missing",
+    );
+    // 프로필 → 목차 → 본문 순서. 띄우지 않으므로 본문은 프로필이 끝난 뒤에 온다.
+    const toc = screen.getByTestId("toc");
+    const body = screen.getByText("본문");
+    expect(box.compareDocumentPosition(toc)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(toc.compareDocumentPosition(body)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    // 각주 번호는 보이는 순서대로 프로필부터 매긴다.
+    const notes = container.querySelectorAll("section[data-footnotes] li");
+    expect([...notes].map((note) => note.textContent)).toEqual([
+      "[1]출처",
+      "[2]둘째",
+    ]);
+  });
+
+  it("does not draw the profile of a template preview", () => {
+    render(
+      <MemoryRouter>
+        <WikiContent
+          embedded
+          document={parseWiki({ type: "doc", attrs: { profile }, content: [] })}
+          existing={new Set()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
+  it("ignores broken values and empty profiles", () => {
+    expect(
+      parseWiki({ type: "doc", attrs: { profile: "x" }, content: [] }).profile,
+    ).toBeNull();
+    expect(
+      parseWiki({
+        type: "doc",
+        attrs: { profile: [para()] },
+        content: [],
+      }).profile,
+    ).toBeNull();
+    expect(
+      parseWiki({
+        type: "doc",
+        attrs: { profile: [3, para(text("a"))] },
+        content: [],
+      }).profile,
+    ).toEqual([para(text("a"))]);
+  });
+
+  it("shows profile and styling changes in the diff text", () => {
+    const body = {
+      type: "doc" as const,
+      attrs: { profile: [para(text("민사고"), link("역사"))] },
+      content: [
+        {
+          type: "paragraph",
+          attrs: { textAlign: "center" },
+          content: [
+            {
+              type: "text",
+              text: "글",
+              marks: [{ type: "textColor", attrs: { color: "red" } }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(docToText(body)).toBe(
+      [
+        "[프로필]",
+        "민사고[[역사]]",
+        "[/프로필]",
+        "",
+        "(가운데 정렬) {{{#빨강 글}}}",
+      ].join("\n"),
+    );
   });
 });

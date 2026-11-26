@@ -1,3 +1,4 @@
+import type { Editor } from "@tiptap/core";
 import {
   useCallback,
   useDeferredValue,
@@ -16,9 +17,10 @@ import { clearDraft, loadDraft, saveDraft } from "../storage/drafts";
 import { DocMetaFields } from "./doc-meta-fields";
 import { EditorDialogs } from "./editor-dialogs";
 import type { EditorRequest } from "./editor-ui";
+import { ProfileEditor } from "./profile-editor";
 import { Toolbar } from "./toolbar";
 import { useWikiEditor, WikiEditorContent } from "./wiki-editor";
-import { loginHref } from "~/features/auth";
+import { useLoginOnExpiry } from "~/features/auth";
 import {
   IMAGE_INPUT_ACCEPT,
   resolveImages,
@@ -27,12 +29,15 @@ import {
 } from "~/features/images";
 import {
   docToText,
+  EMPTY_CAPTION,
   emptyDoc,
   extractRefs,
   getSection,
-  NODE,
   namespaceOf,
+  NODE,
   pageHref,
+  sectionScrollState,
+  starterProfile,
   titleKey,
   type WikiDoc,
 } from "~/features/markup";
@@ -44,7 +49,6 @@ import {
 } from "~/features/pages";
 import { LinkButton } from "~/shared/components/link-button";
 import { cn } from "~/shared/lib/utils";
-import { isWikiError, NOT_VERIFIED } from "~/shared/supabase/errors";
 import { Button } from "~/shared/ui/button";
 import {
   Dialog,
@@ -65,6 +69,8 @@ interface EditorFormProps {
   initialResolved: ResolvedBody;
   /** 처음 그릴 때 쓸 이미지 정보(편집 화면을 열 때 이미 받은 것). */
   initialImages: ReadonlyMap<string, ImageInfo>;
+  /** "넘겨주기로 바꾸기": 넘겨주기 입력(`RedirectForm`)으로 바꾼다. 문단 편집에는 없다. */
+  onConvertToRedirect?: () => void;
 }
 
 /** 입력이 멈춘 뒤 틀·링크 정보와 임시 저장을 갱신하기까지의 시간. */
@@ -77,7 +83,7 @@ const SAVE_SHORTCUT =
     ? "⌘S"
     : "Ctrl+S";
 
-const NO_META: DocMeta = { categories: [], redirect: "" };
+const NO_META: DocMeta = { categories: [], profile: null };
 
 /** 편집기에 여는 부분: 문단 편집이면 그 문단, 아니면 문서 전체. */
 function editingPart(target: EditTarget): WikiDoc {
@@ -87,7 +93,10 @@ function editingPart(target: EditTarget): WikiDoc {
 }
 
 /**
- * 편집 화면 한 벌: 툴바, 편집기, 분류·넘겨주기, 편집 요약, 저장.
+ * 편집 화면 한 벌: 툴바, 편집기, 분류, 편집 요약, 저장.
+ *
+ * 넘겨주기는 여기서 고치지 않는다(`RedirectForm`). 넘겨주기 문서를 일반 문서로 바꿔 여는 경우에도
+ * 넘겨주기는 빼고 시작한다. 그래서 본문을 쓰고 저장하면 넘겨주기가 풀린다.
  *
  * 편집기가 곧 미리보기다. 고치는 대로 문서 보기와 같은 모양으로 보인다. 원문 차이는 "변경 사항"
  * 탭에서 본다.
@@ -96,8 +105,10 @@ export function EditorForm({
   target,
   initialResolved,
   initialImages,
+  onConvertToRedirect,
 }: EditorFormProps) {
   const navigate = useNavigate();
+  const loginOnExpiry = useLoginOnExpiry();
   const key = titleKey(target.title);
   const sectionMode = target.sectionIndex !== null;
 
@@ -111,9 +122,6 @@ export function EditorForm({
 
   const [content, setContent] = useState<WikiDoc>(initial.content);
   const [meta, setMeta] = useState<DocMeta>(initial.meta);
-  const [showRedirect, setShowRedirect] = useState(
-    initial.meta.redirect !== "",
-  );
   const [summary, setSummary] = useState(draft?.summary ?? "");
   const [resolved, setResolved] = useState(initialResolved);
   const [images, setImages] =
@@ -122,6 +130,16 @@ export function EditorForm({
   const [request, setRequest] = useState<EditorRequest | null>(null);
   const [uploading, setUploading] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Safari에서는 단추를 눌러도 초점이 바뀌지 않을 수 있어 포인터 입력으로도 편집기를 고른다.
+  const [profileEditor, setProfileEditor] = useState<Editor | null>(null);
+  const profileEditorRef = useRef<Editor | null>(null);
+  const [activePart, setActivePart] = useState<"body" | "profile">("body");
+  // 프로필 내용을 통째로 바꿀 때(넣기, 임시 저장 버리기) 프로필 편집기를 새로 만든다.
+  const [profileKey, setProfileKey] = useState(0);
+  const onProfileEditor = useCallback((next: Editor | null) => {
+    profileEditorRef.current = next;
+    setProfileEditor(next);
+  }, []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<WikiDoc | null>(null);
@@ -139,6 +157,10 @@ export function EditorForm({
   );
   const baseline = useMemo(() => normalizeDoc(editingPart(base)), [base]);
   const baselineJson = useMemo(() => JSON.stringify(baseline), [baseline]);
+  // 넘겨주기 문서를 일반 문서로 바꿔 여는 중인가. 기준(`normalizeDoc`)에서 넘겨주기가 빠지므로,
+  // 아무것도 쓰지 않으면 바뀐 것이 없다(빈 문서로 저장되거나 임시 저장·나가기 경고가 생기지 않는다).
+  const releasingRedirect =
+    !sectionMode && Boolean(base.baseBody.attrs?.redirect);
   // 양쪽 다 편집기 스키마를 거친 값이라 키 순서가 같다. 그래서 키를 정렬하지 않고 바로 비교한다
   // (글자를 칠 때마다 계산하므로 큰 문서에서 정렬 비용이 크다).
   const dirty = useMemo(
@@ -160,8 +182,10 @@ export function EditorForm({
     existing: resolved.existing,
     request: setRequest,
     onChange: setContent,
-    onImageFiles: (files) => void insertImages(files),
+    onImageFiles: (files) => void insertImages(files, "body"),
   });
+  const toolEditor =
+    activePart === "profile" && profileEditor ? profileEditor : editor;
 
   // 원문 차이(충돌 안내, "변경 사항" 탭)에 쓰는 글자. 차이 계산이 무거워서, 보일 때만 그리고 입력이
   // 잠깐 멈춘 뒤에 다시 계산한다.
@@ -279,36 +303,48 @@ export function EditorForm({
     };
   }, [lookup]);
 
-  /** 고른·붙여넣은·끌어놓은 이미지를 한 장씩 올려 커서 자리에 넣는다. */
-  async function insertImages(files: File[]) {
+  /** 이미지 한 장을 올리고 미리보기 정보를 기억한다. 실패하면 알리고 `null`. */
+  async function uploadOne(file: File) {
+    setUploading((count) => count + 1);
+    try {
+      const uploaded = await uploadImage(file);
+      setImages((known) =>
+        new Map(known).set(uploaded.id, {
+          path: uploaded.path,
+          width: uploaded.width,
+          height: uploaded.height,
+        }),
+      );
+      return uploaded;
+    } catch (caught) {
+      toast.error(
+        caught instanceof Error
+          ? caught.message
+          : "이미지를 올리지 못했습니다.",
+      );
+      return null;
+    } finally {
+      setUploading((count) => count - 1);
+    }
+  }
+
+  /** 고른·붙여넣은·끌어놓은 이미지를 한 장씩 올려 그 편집기의 커서 자리에 넣는다. */
+  async function insertImages(files: File[], part: "body" | "profile") {
     for (const file of files) {
-      setUploading((count) => count + 1);
-      try {
-        const uploaded = await uploadImage(file);
-        setImages((known) =>
-          new Map(known).set(uploaded.id, {
-            path: uploaded.path,
-            width: uploaded.width,
-            height: uploaded.height,
-          }),
-        );
-        editor
-          ?.chain()
-          .focus()
-          .insertContent({
-            type: NODE.image,
-            attrs: { id: uploaded.id, alt: uploaded.alt },
-          })
-          .run();
-      } catch (caught) {
-        toast.error(
-          caught instanceof Error
-            ? caught.message
-            : "이미지를 올리지 못했습니다.",
-        );
-      } finally {
-        setUploading((count) => count - 1);
-      }
+      const uploaded = await uploadOne(file);
+      if (!uploaded) continue;
+      // 올리는 동안 프로필을 뺐을 수 있다. 그러면 본문에 넣는다.
+      const into = (part === "profile" && profileEditorRef.current) || editor;
+      into
+        ?.chain()
+        .focus()
+        .leaveCaption()
+        .insertContent({
+          type: NODE.image,
+          attrs: { id: uploaded.id, alt: uploaded.alt, size: "small" },
+          content: [...EMPTY_CAPTION],
+        })
+        .run();
     }
   }
 
@@ -318,7 +354,8 @@ export function EditorForm({
     editor?.commands.setContent(next.content, { emitUpdate: true });
     setContent(next.content);
     setMeta(next.meta);
-    setShowRedirect(next.meta.redirect !== "");
+    setProfileKey((last) => last + 1);
+    setActivePart("body");
   }
 
   async function save(confirmed: boolean) {
@@ -342,11 +379,15 @@ export function EditorForm({
         clearDraft(key, target.sectionIndex);
         allowLeave.current = true;
         if (outcome.rebased) {
-          toast.success(
-            "그 사이 다른 문단이 바뀌어, 최신 판에 합쳐 저장했습니다.",
-          );
+          toast.success("편집한 문단을 최신 판에 반영했습니다.");
         }
-        await navigate(pageHref(outcome.saved.title));
+        // 문단만 고쳤으면 문서 화면이 그 문단으로 스크롤한다.
+        await navigate(
+          pageHref(outcome.saved.title),
+          target.sectionIndex === null
+            ? undefined
+            : { state: sectionScrollState(target.sectionIndex) },
+        );
         return;
       }
 
@@ -357,7 +398,7 @@ export function EditorForm({
           : getSection(outcome.latest.body, base.sectionIndex);
       if (latestPart === null) {
         setError(
-          "그 사이 문단 구성이 바뀌어 문단 편집을 이어 갈 수 없습니다. 쓰던 글을 복사해 두고 전체 편집으로 다시 시도해 주세요.",
+          "문단 구성이 바뀌었습니다. 편집 내용을 복사한 뒤 문서 전체 편집에서 다시 저장해 주세요.",
         );
         return;
       }
@@ -368,19 +409,16 @@ export function EditorForm({
       });
       setConflict(normalizeDoc(latestPart));
     } catch (caught) {
-      if (isWikiError(caught, NOT_VERIFIED)) {
-        // 쓰던 글은 임시 저장에 있다. 로그인하고 돌아오면 복원된다.
+      // 쓰던 글은 임시 저장에 둔다. 로그인하고 돌아오면 복원된다.
+      const expired = await loginOnExpiry(caught, () => {
         saveDraft(key, target.sectionIndex, {
           body: current,
           summary,
           baseRevisionId: base.baseRevisionId,
         });
         allowLeave.current = true;
-        await navigate(
-          loginHref(`${location.pathname}${location.search}`, "expired"),
-        );
-        return;
-      }
+      });
+      if (expired) return;
       setError(describeWriteError(caught));
     } finally {
       setSaving(false);
@@ -398,7 +436,7 @@ export function EditorForm({
     >
       {draftNotice ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-          <span>이 브라우저에 남아 있던, 저장하지 않은 글을 불러왔습니다.</span>
+          <span>이 브라우저의 임시 저장 내용을 불러왔습니다.</span>
           <Button
             type="button"
             size="xs"
@@ -410,21 +448,27 @@ export function EditorForm({
               setDraftNotice(false);
             }}
           >
-            버리고 현재 판으로
+            임시 저장 내용 버리기
           </Button>
         </div>
       ) : null}
 
       {conflict !== null ? (
         <section className="space-y-2 rounded-md border border-destructive/40 p-3">
-          <h2 className="font-semibold">다른 사람이 먼저 고쳤습니다</h2>
+          <h2 className="font-semibold">편집 중에 문서가 변경되었습니다</h2>
           <p className="text-sm text-muted-foreground">
-            아래는 최신 판(−)과 내 글(+)의 차이입니다. 다른 사람이 고친 내용이
-            빠지지 않게 편집기에서 맞춘 뒤 다시 저장해 주세요. 지금 그대로
-            저장하면 아래 차이대로 저장됩니다.
+            최신 판(−)과 내 편집 내용(+)을 비교해 주세요. 그대로 저장하면 최신
+            판에 추가된 내용이 빠질 수 있습니다. 필요한 내용을 편집기에 반영한
+            뒤 저장해 주세요.
           </p>
           <DiffView before={conflictText} after={currentText} />
         </section>
+      ) : null}
+
+      {releasingRedirect ? (
+        <p className="rounded-md bg-muted px-3 py-2 text-sm break-keep text-muted-foreground">
+          본문을 저장하면 넘겨주기가 해제됩니다.
+        </p>
       ) : null}
 
       <div role="tablist" aria-label="편집과 변경 사항" className="flex gap-1">
@@ -443,15 +487,35 @@ export function EditorForm({
         ))}
       </div>
 
+      {/* grid로 감싸지 않는다. grid 칸은 안의 최소 폭(큰 이미지의 원본 폭)만큼 넓어져 편집기가 화면을 넘는다. */}
       <div className={cn(tab !== "edit" && "hidden")}>
-        {editor ? (
+        {toolEditor ? (
           <Toolbar
-            editor={editor}
+            editor={toolEditor}
             request={setRequest}
             onPickImage={() => fileInput.current?.click()}
             isTemplatePage={namespaceOf(target.title) === "template"}
-            onRedirect={sectionMode ? undefined : () => setShowRedirect(true)}
-            className="sticky top-14 z-10"
+            onConvertToRedirect={
+              sectionMode || !onConvertToRedirect
+                ? undefined
+                : () => {
+                    // 쓰던 글은 임시 저장에 남긴다. 본문 편집으로 돌아오면 이어서 쓴다.
+                    flushDraft(current, summary, dirty);
+                    onConvertToRedirect();
+                  }
+            }
+            onAddProfile={
+              sectionMode || meta.profile
+                ? undefined
+                : () => {
+                    setMeta((last) => ({
+                      ...last,
+                      profile: starterProfile(),
+                    }));
+                    setProfileKey((last) => last + 1);
+                  }
+            }
+            className="sticky top-(--site-header-height) z-10"
           />
         ) : null}
         <input
@@ -465,22 +529,54 @@ export function EditorForm({
             const files = [...(event.target.files ?? [])];
             // 같은 파일을 다시 골라도 onChange가 오게 비운다.
             event.target.value = "";
-            void insertImages(files);
+            void insertImages(files, activePart);
           }}
         />
-        <WikiEditorContent
-          editor={editor}
-          resolved={resolved}
-          images={images}
-          request={setRequest}
-          className="rounded-b-md border border-t-0 bg-background px-4 py-3 focus-within:ring-2 focus-within:ring-ring/50"
-        />
+        <div className="overflow-hidden rounded-b-md border border-t-0 bg-background focus-within:ring-1 focus-within:ring-ring/50">
+          {/* 프로필은 문서 맨 위에 보이므로 본문 편집기 위에 둔다. 문단 편집에서는 고치지 않는다. */}
+          {!sectionMode && meta.profile ? (
+            <div
+              onFocus={() => setActivePart("profile")}
+              onPointerDown={() => setActivePart("profile")}
+            >
+              <ProfileEditor
+                key={profileKey}
+                initialProfile={meta.profile}
+                title={target.title}
+                resolved={resolved}
+                images={images}
+                request={setRequest}
+                onChange={(profile) =>
+                  setMeta((last) => ({ ...last, profile }))
+                }
+                onImageFiles={(files) => void insertImages(files, "profile")}
+                onEditor={onProfileEditor}
+                onRemove={() => {
+                  setMeta((last) => ({ ...last, profile: null }));
+                  setActivePart("body");
+                }}
+              />
+            </div>
+          ) : null}
+          <div
+            onFocus={() => setActivePart("body")}
+            onPointerDown={() => setActivePart("body")}
+          >
+            <WikiEditorContent
+              editor={editor}
+              resolved={resolved}
+              images={images}
+              request={setRequest}
+              className="px-4 py-3"
+            />
+          </div>
+        </div>
         {uploading > 0 ? (
           <p
             role="status"
             className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground"
           >
-            <Spinner /> 이미지를 올리는 중입니다…
+            <Spinner /> 이미지 업로드 중…
           </p>
         ) : null}
       </div>
@@ -491,20 +587,13 @@ export function EditorForm({
             <DiffView before={baselineText} after={currentText} />
           ) : (
             <p className="rounded-md border p-4 text-sm text-muted-foreground">
-              아직 바꾼 것이 없습니다.
+              변경 사항이 없습니다.
             </p>
           )}
         </section>
       ) : null}
 
-      {sectionMode ? null : (
-        <DocMetaFields
-          meta={meta}
-          onChange={setMeta}
-          showRedirect={showRedirect}
-          onHideRedirect={() => setShowRedirect(false)}
-        />
-      )}
+      {sectionMode ? null : <DocMetaFields meta={meta} onChange={setMeta} />}
 
       <div className="grid gap-1.5">
         <Label htmlFor="edit-summary">편집 요약 (선택)</Label>
@@ -513,7 +602,7 @@ export function EditorForm({
           type="text"
           value={summary}
           maxLength={200}
-          placeholder="무엇을 왜 고쳤는지 한 줄로"
+          placeholder="변경 내용이나 이유"
           onChange={(event) => setSummary(event.target.value)}
         />
       </div>
@@ -524,7 +613,8 @@ export function EditorForm({
         </p>
       ) : null}
 
-      <div className="flex items-center gap-2">
+      {/* 폰에는 저장 단축키가 없다. 아래로 끝까지 내리지 않아도 저장할 수 있게 화면 아래에 붙인다. */}
+      <div className="flex items-center gap-2 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-4 max-sm:border-t max-sm:bg-background max-sm:px-4 max-sm:py-2">
         <Button type="submit" disabled={!canSave}>
           {saving ? <Spinner /> : null}
           저장
@@ -549,9 +639,9 @@ export function EditorForm({
         </span>
       </div>
 
-      {editor ? (
+      {toolEditor ? (
         <EditorDialogs
-          editor={editor}
+          editor={toolEditor}
           request={request}
           onClose={() => setRequest(null)}
         />
@@ -560,9 +650,9 @@ export function EditorForm({
       <Dialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>쓰던 글을 버릴까요?</DialogTitle>
+            <DialogTitle>편집 내용을 버릴까요?</DialogTitle>
             <DialogDescription>
-              저장하지 않은 내용과 이 브라우저의 임시 저장이 모두 사라집니다.
+              저장하지 않은 내용이 이 브라우저에서도 삭제됩니다.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -571,7 +661,7 @@ export function EditorForm({
               variant="outline"
               onClick={() => setConfirmDiscard(false)}
             >
-              계속 쓰기
+              계속 편집
             </Button>
             <Button
               type="button"
@@ -597,10 +687,9 @@ export function EditorForm({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>편집을 그만두고 나갈까요?</DialogTitle>
+            <DialogTitle>편집 화면에서 나갈까요?</DialogTitle>
             <DialogDescription>
-              쓰던 글은 이 브라우저에 임시 저장되어, 이 문서를 다시 편집하면
-              이어서 쓸 수 있습니다.
+              이 브라우저에서 문서를 다시 편집하면 이어서 작성할 수 있습니다.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -615,6 +704,8 @@ export function EditorForm({
               type="button"
               onClick={() => {
                 flushDraft(current, summary, dirty);
+                // 이동이 문서 전체 로드가 되어도(새 배포 반영) 브라우저 경고가 다시 뜨지 않게 한다.
+                allowLeave.current = true;
                 blocker.proceed?.();
               }}
             >
@@ -627,10 +718,10 @@ export function EditorForm({
       <Dialog open={confirmDeletion} onOpenChange={setConfirmDeletion}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>내용을 절반 넘게 지웁니다</DialogTitle>
+            <DialogTitle>문서 내용이 크게 줄어듭니다</DialogTitle>
             <DialogDescription>
-              이 편집은 문서의 절반 이상을 지웁니다. 의도한 것이 맞다면 편집
-              요약에 이유를 적어 주세요. 판 기록에서 언제든 되돌릴 수 있습니다.
+              문서 내용의 절반 이상이 삭제됩니다. 의도한 편집이라면 편집 요약에
+              이유를 적어 주세요.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -639,7 +730,7 @@ export function EditorForm({
               variant="outline"
               onClick={() => setConfirmDeletion(false)}
             >
-              다시 보기
+              편집으로 돌아가기
             </Button>
             <Button
               type="button"

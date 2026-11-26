@@ -10,7 +10,7 @@ export function DiffView({ before, after }: { before: string; after: string }) {
   if (rows.every((row) => row.type === "same" || row.type === "gap")) {
     return (
       <p className="py-8 text-center text-muted-foreground">
-        두 판의 내용이 같습니다.
+        변경 사항이 없습니다.
       </p>
     );
   }
@@ -24,7 +24,7 @@ export function DiffView({ before, after }: { before: string; after: string }) {
               key={index}
               className="bg-muted px-3 py-0.5 text-center font-sans text-xs text-muted-foreground"
             >
-              바뀌지 않은 {row.count}줄
+              변경 없는 {row.count}줄
             </div>
           );
         }

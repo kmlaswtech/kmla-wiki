@@ -9,7 +9,24 @@ import {
   type WikiMark,
   type WikiNode,
 } from "./doc";
+import {
+  DEFAULT_VIDEO_SIZE,
+  MEDIA_ALIGN_LABEL,
+  MEDIA_SIZE_LABEL,
+  mediaAlign,
+  mediaCaption,
+  mediaSize,
+} from "./media";
+import { profileOf } from "./profile";
 import { templateTitle } from "./refs";
+import {
+  cellVAlignOf,
+  HUE_LABEL,
+  parseBackground,
+  textAlignOf,
+  textSizeOf,
+  type CellVAlign,
+} from "./style";
 import { headingDepth } from "./sections";
 
 /**
@@ -25,6 +42,8 @@ export function docToText(doc: WikiDoc): string {
   if (typeof redirect === "string" && redirect !== "") {
     lines.push(`#넘겨주기 [[${redirect}]]`, "");
   }
+  const profile = profileOf(doc);
+  if (profile) lines.push(profileToText(profile), "");
   lines.push(blocksToText(doc.content));
   const categories = doc.attrs?.categories ?? [];
   if (categories.length > 0) {
@@ -36,13 +55,20 @@ export function docToText(doc: WikiDoc): string {
     .trim();
 }
 
+/** 프로필. 본문과 같은 표기로 적고 앞뒤에 표시를 둔다. */
+function profileToText(profile: readonly WikiNode[]): string {
+  return ["[프로필]", blocksToText(profile), "[/프로필]"].join("\n");
+}
+
 /** 화면에 보이는 글자의 양. 큰 삭제를 알아챌 때 쓴다(꾸밈 표기는 세지 않는다). */
 export function visibleTextLength(doc: WikiDoc): number {
   let length = 0;
-  walk(doc.content, (node) => {
+  const count = (node: WikiNode) => {
+    // 이미지·영상의 캡션도 글자 노드라 함께 센다.
     if (node.type === NODE.text) length += (node.text ?? "").trim().length;
-    if (node.type === NODE.footnote) length += stringAttr(node, "note").length;
-  });
+  };
+  walk(profileOf(doc) ?? [], count);
+  walk(doc.content, count);
   return length;
 }
 
@@ -60,10 +86,10 @@ function indent(text: string, first: string, rest: string): string {
 function blockToText(node: WikiNode): string {
   switch (node.type) {
     case NODE.paragraph:
-      return inlineToText(node.content ?? []);
+      return alignPrefix(node) + inlineToText(node.content ?? []);
     case NODE.heading: {
       const marker = "#".repeat(headingDepth(node));
-      return `${marker} ${inlineToText(node.content ?? [])}`;
+      return `${marker} ${alignPrefix(node)}${inlineToText(node.content ?? [])}`;
     }
     case NODE.bulletList:
       return (node.content ?? [])
@@ -108,14 +134,55 @@ function blockToText(node: WikiNode): string {
       // 설명이 같은 다른 이미지로 바꾼 것도 비교에 보이게 이미지 번호 앞부분을 적는다.
       const id = stringAttr(node, "id").slice(0, 8);
       const alt = stringAttr(node, "alt");
-      return `[이미지 ${id}${alt ? `: ${alt}` : ""}]`;
+      return `[이미지 ${id}${alt ? `: ${alt}` : ""}${mediaLayoutText(node)}]`;
+    }
+    case NODE.youtube: {
+      const start = numberAttr(node, "start") ?? 0;
+      return `[유튜브 ${stringAttr(node, "videoId")}${start > 0 ? ` ${start}초부터` : ""}${mediaLayoutText(node)}]`;
     }
     default:
       return node.content ? blocksToText(node.content) : "";
   }
 }
 
-/** 표 칸 하나. 제목 칸과 합친 칸도 비교에 보이게 표시한다. */
+/**
+ * 크기·정렬과 캡션. 바꾼 것도 비교에 보이게 적는다. 이미지의 기본값(원본 크기, 왼쪽, 캡션 없음)은
+ * 적지 않아, 이 기능 전의 이미지는 글자가 그대로다.
+ */
+function mediaLayoutText(node: WikiNode): string {
+  const chosen = mediaSize(node);
+  // 영상은 고르지 않아도 기본 크기가 있다. 기본 크기는 이미지처럼 적지 않는다.
+  const size =
+    node.type === NODE.youtube && chosen === DEFAULT_VIDEO_SIZE ? null : chosen;
+  const align = mediaAlign(node);
+  const parts = [
+    size ? MEDIA_SIZE_LABEL[size] : null,
+    align === "left" ? null : `${MEDIA_ALIGN_LABEL[align]} 정렬`,
+  ].filter(Boolean);
+  // 캡션의 꾸밈·링크·각주도 본문과 같은 표기로 적는다. 띠 배경은 표 칸처럼 앞에 적는다.
+  const captionNode = mediaCaption(node);
+  const text = inlineToText(captionNode?.content ?? []).trim();
+  const background = captionNode ? stringAttr(captionNode, "background") : "";
+  const caption =
+    text && background ? `(배경 ${colorText(background)}) ${text}` : text;
+  return (
+    (parts.length > 0 ? ` (${parts.join(", ")})` : "") +
+    (caption ? ` — ${caption}` : "")
+  );
+}
+
+/** 문단 정렬. 왼쪽(기본)은 적지 않는다. */
+function alignPrefix(node: WikiNode): string {
+  const align = textAlignOf(node);
+  return align ? `(${MEDIA_ALIGN_LABEL[align]} 정렬) ` : "";
+}
+
+const CELL_VALIGN_LABEL: Record<CellVAlign, string> = {
+  middle: "세로 가운데",
+  bottom: "세로 아래",
+};
+
+/** 표 칸 하나. 제목 칸, 합친 칸, 배경, 세로 정렬도 비교에 보이게 표시한다. */
 function cellToText(cell: WikiNode): string {
   const marks: string[] = [];
   if (cell.type === NODE.tableHeader) marks.push("제목 칸");
@@ -123,6 +190,10 @@ function cellToText(cell: WikiNode): string {
   const rowspan = numberAttr(cell, "rowspan") ?? 1;
   if (colspan > 1) marks.push(`가로 ${colspan}칸`);
   if (rowspan > 1) marks.push(`세로 ${rowspan}칸`);
+  const background = stringAttr(cell, "background");
+  if (background) marks.push(`배경 ${colorText(background)}`);
+  const verticalAlign = cellVAlignOf(cell);
+  if (verticalAlign) marks.push(CELL_VALIGN_LABEL[verticalAlign]);
   const text = blocksToText(cell.content ?? []).replace(/\n+/g, " / ");
   return marks.length > 0 ? `(${marks.join(", ")}) ${text}` : text;
 }
@@ -131,6 +202,8 @@ function cellToText(cell: WikiNode): string {
 const MARK_ORDER: readonly string[] = [
   MARK.wikiLink,
   MARK.link,
+  MARK.textSize,
+  MARK.textColor,
   MARK.bold,
   MARK.italic,
   MARK.underline,
@@ -138,8 +211,23 @@ const MARK_ORDER: readonly string[] = [
   MARK.code,
 ];
 
+/** 색 값을 읽는 글자로(`빨강`, `빨강 진하게`, `#112233`). */
+function colorText(value: string): string {
+  // 배경 값은 글자 색 값을 모두 포함한다(진한 배경만 더 있다).
+  const color = parseBackground(value);
+  if (color?.kind !== "palette") return value;
+  return `${HUE_LABEL[color.hue]}${color.strong ? " 진하게" : ""}`;
+}
+
 function wrapMark(text: string, mark: WikiMark): string {
   switch (mark.type) {
+    // 나무위키의 `{{{#색 글}}}`, `{{{+1 글}}}` 표기를 빌린다.
+    case MARK.textColor:
+      return `{{{#${colorText(stringAttr(mark, "color"))} ${text}}}}`;
+    case MARK.textSize: {
+      const size = textSizeOf(mark);
+      return size ? `{{{${size > 0 ? "+" : ""}${size} ${text}}}}` : text;
+    }
     case MARK.bold:
       return `**${text}**`;
     case MARK.italic:
@@ -176,7 +264,7 @@ function inlineToText(nodes: readonly WikiNode[]): string {
         case NODE.hardBreak:
           return "\n";
         case NODE.footnote:
-          return `[* ${stringAttr(node, "note")}]`;
+          return `[* ${inlineToText(node.content ?? [])}]`;
         case NODE.templateParam:
           return `{{{${numberAttr(node, "index") ?? 1}}}}`;
         default:

@@ -1,15 +1,27 @@
 import { Link, redirect } from "react-router";
 
+import type { WikiShellHandle } from "./gate";
 import type { Route } from "./+types/search";
 import { withVerifiedMember } from "~/features/auth";
 import { pageHref, parseTitle } from "~/features/markup";
 import { findExactTitle, searchPages } from "~/features/pages";
 
+// 검색을 보내면 검색창의 포커스를 뺀다. 그 뒤 Tab이 검색창 다음의 돋보기로 가지 않고 검색창으로
+// 오게 한다. 결과가 없으면 다시 검색하는 일이 많다.
+export const handle: WikiShellHandle = { reading: true };
+
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const params = new URL(request.url).searchParams;
   const query = (params.get("q") ?? "").trim();
 
-  // 머리띠 검색창에서 Enter를 친 경우(`go=1`). 제목이 정확히 맞는 문서가 있으면 바로 연다.
+  // 검색을 먼저 보낸다. 아래에서 정확한 제목을 찾는 동안 기다리지 않게 한다.
+  const search = withVerifiedMember(request, () => searchPages(query));
+  // 검색 실패는 결과 목록을 보여 줄 때만 알린다. 정확한 제목으로 가는 길을 막지 않는다.
+  search.catch(() => undefined);
+
+  // 머리띠 검색창에서 Enter를 친 경우(`go=1`). 제목이 정확히 맞는 문서가 있으면 바로 연다. 이때는
+  // 이미 보낸 검색이 버려진다. 검색 RPC 하나를 버리는 대신, 맞는 문서가 없을 때 한 번 더 기다리지
+  // 않는다.
   if (params.get("go") === "1" && query !== "") {
     const exact = await withVerifiedMember(request, () =>
       findExactTitle(query),
@@ -17,8 +29,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     if (exact) throw redirect(pageHref(exact));
   }
 
-  const hits = await withVerifiedMember(request, () => searchPages(query));
-  return { query, hits };
+  return { query, hits: await search };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -39,9 +50,7 @@ export default function SearchRoute({ loaderData }: Route.ComponentProps) {
       </h1>
 
       {query === "" ? (
-        <p className="text-muted-foreground">
-          위의 검색창에 찾을 말을 넣어 주세요.
-        </p>
+        <p className="text-muted-foreground">검색어를 입력해 주세요.</p>
       ) : (
         <>
           {/* 찾는 문서가 없으면 바로 만들 수 있게 한다. */}
@@ -53,13 +62,13 @@ export default function SearchRoute({ loaderData }: Route.ComponentProps) {
               >
                 {asTitle}
               </Link>{" "}
-              문서는 아직 없습니다. 눌러서 만들 수 있습니다.
+              일치하는 제목의 문서가 없습니다.
             </p>
           ) : null}
 
           {hits.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">
-              찾은 문서가 없습니다.
+              검색 결과가 없습니다.
             </p>
           ) : (
             <ul className="divide-y">

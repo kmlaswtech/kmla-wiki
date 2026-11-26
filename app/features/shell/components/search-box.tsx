@@ -1,10 +1,11 @@
 import { Autocomplete } from "@base-ui/react/autocomplete";
-import { FileText, Search } from "lucide-react";
+import { FileText, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Form, useNavigate } from "react-router";
 
 import { pageHref } from "~/features/markup";
 import { suggestTitles } from "~/features/pages";
+import { useDebouncedValue } from "~/shared/hooks/use-debounced-value";
 import { cn } from "~/shared/lib/utils";
 import { Button } from "~/shared/ui/button";
 
@@ -22,7 +23,14 @@ type Suggestion =
  * 치면 `go=1`을 붙여 검색으로 가고, 제목이 정확히 맞는 문서가 있으면 검색 화면이 그 문서로 넘긴다.
  * 결과 목록을 보고 싶을 때는 후보 맨 아래의 "전체 검색"을 고른다.
  */
-export function SearchBox({ className }: { className?: string }) {
+export function SearchBox({
+  className,
+  tabToSearch = false,
+}: {
+  className?: string;
+  /** 포커스가 아무 데도 없을 때 Tab이 검색창으로 오게 한다(문서를 읽는 화면). */
+  tabToSearch?: boolean;
+}) {
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
   /** 입력칸의 확정된 값. Base UI에 넘기는 데만 쓴다. */
@@ -41,25 +49,44 @@ export function SearchBox({ className }: { className?: string }) {
   /** 후보 찾기와 제출에 같이 쓰는 검색어. */
   const trimmed = typed.trim();
 
+  const settled = useDebouncedValue(trimmed, SUGGEST_DELAY_MS);
+
   useEffect(() => {
     const id = ++requestId.current;
     // 빈 검색어에는 후보를 그리지 않는다(아래 `items`). 앞선 후보는 다음 응답이 덮는다. 입력칸을
     // 비우면 후보도 비운다(`changeTyped`). 남겨 두면 새로 친 글자에 맞지 않는 후보가 잠깐 보인다.
-    if (trimmed === "") return;
-    const timer = window.setTimeout(() => {
-      suggestTitles(trimmed, "", SUGGEST_LIMIT)
-        .then((next) => {
-          if (id === requestId.current) setTitles(next);
-        })
-        // 후보를 못 받아도 검색은 된다.
-        .catch(() => undefined);
-    }, SUGGEST_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [trimmed]);
+    if (settled === "") return;
+    suggestTitles(settled, "", SUGGEST_LIMIT)
+      .then((next) => {
+        if (id === requestId.current)
+          setTitles(next.map((suggestion) => suggestion.title));
+      })
+      // 후보를 못 받아도 검색은 된다.
+      .catch(() => undefined);
+  }, [settled]);
 
   // `/`를 누르면 검색창으로 간다. 글을 쓰는 중에는 가로채지 않는다.
+  //
+  // 문서를 볼 때는 포커스가 아무 데도 없으면 Tab도 검색창으로 간다. 문서를 읽다가 다른 문서를 찾는
+  // 일이 가장 많기 때문이다. 본문 글자나 빈 곳을 누른 뒤에도 그렇다(브라우저는 누른 자리 다음 링크로
+  // 보내지만, 일부러 검색창을 먼저 둔다). 링크·단추에 포커스가 있으면 브라우저대로 다음 요소로 가므로,
+  // 검색창에서 Tab을 이어 누르면 본문 링크까지 간다.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.key === "Tab" &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        tabToSearch &&
+        (document.activeElement === null ||
+          document.activeElement === document.body)
+      ) {
+        event.preventDefault();
+        input.current?.focus();
+        return;
+      }
       if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey)
         return;
       const target = event.target as HTMLElement | null;
@@ -73,7 +100,7 @@ export function SearchBox({ className }: { className?: string }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [tabToSearch]);
 
   const items: Suggestion[] =
     trimmed === ""
@@ -104,14 +131,16 @@ export function SearchBox({ className }: { className?: string }) {
     <Form
       action="/search"
       role="search"
-      className={cn("flex gap-1", className)}
+      className={cn("flex", className)}
       onSubmit={(event) => {
         if (trimmed === "") {
           event.preventDefault();
           return;
         }
-        // 제출 뒤에는 검색창을 비운다. 검색어는 검색 화면 제목에 남는다.
+        // 제출 뒤에는 검색창을 비운다. 검색어는 검색 화면 제목에 남는다. 포커스도 뺀다. 남겨 두면
+        // 폰에서는 키보드가 결과를 가린다.
         window.setTimeout(reset, 0);
+        input.current?.blur();
       }}
     >
       <input type="hidden" name="q" value={trimmed} />
@@ -133,23 +162,54 @@ export function SearchBox({ className }: { className?: string }) {
           item.kind === "page" ? item.title : item.query
         }
       >
-        <Autocomplete.Input
-          ref={input}
-          // 조합 중인 값도 후보 찾기에 쓴다(`typed` 설명).
-          onChange={(event) => changeTyped(event.currentTarget.value)}
-          type="search"
-          aria-label="문서 검색"
-          placeholder="문서 검색"
-          autoComplete="off"
-          className="h-8 w-full min-w-0 flex-1 rounded-md border border-input bg-transparent px-2.5 py-1 text-base transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 md:text-sm dark:bg-muted"
-        />
+        {/* 테두리는 입력칸과 그 안의 단추(지우기, 검색)를 함께 감싼 상자에 둔다. 높이는 머리띠의 다른
+            단추와 맞춘다(손가락으로 누르는 화면에서는 한 단계 크다). */}
+        <Autocomplete.InputGroup className="flex h-8 w-full min-w-0 items-center rounded-md border border-input pr-0.5 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-muted coarse:h-9">
+          <Autocomplete.Input
+            ref={input}
+            // 조합 중인 값도 후보 찾기에 쓴다(`typed` 설명).
+            onChange={(event) => changeTyped(event.currentTarget.value)}
+            type="search"
+            aria-label="문서 검색"
+            placeholder="문서 검색"
+            autoComplete="off"
+            // 브라우저가 붙이는 지우기(×) 단추는 브라우저마다 다르게 생겨 숨기고 아래 단추를 쓴다.
+            className="h-full min-w-0 flex-1 bg-transparent pl-2.5 text-base outline-none placeholder:text-muted-foreground md:text-sm [&::-webkit-search-cancel-button]:appearance-none"
+          />
+          {/* Base UI의 `Clear`는 한글을 조합하는 동안 입력칸이 빈 줄로 알아 숨는다. `typed`로 직접 그린다. */}
+          {typed !== "" ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className={INNER_BUTTON}
+              aria-label="검색어 지우기"
+              onClick={() => {
+                reset();
+                input.current?.focus();
+              }}
+            >
+              <X />
+            </Button>
+          ) : null}
+          <Button
+            type="submit"
+            size="icon-sm"
+            variant="ghost"
+            className={INNER_BUTTON}
+            aria-label="검색"
+          >
+            <Search />
+          </Button>
+        </Autocomplete.InputGroup>
         <Autocomplete.Portal>
           <Autocomplete.Positioner
             className="z-50 outline-none"
             sideOffset={4}
             align="start"
           >
-            <Autocomplete.Popup className="w-(--anchor-width) max-w-(--available-width) overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-md">
+            {/* 폰에서는 입력칸이 머리띠 한 줄에 들어가 좁다. 후보 제목이 잘리지 않게 최소 폭을 둔다. */}
+            <Autocomplete.Popup className="w-(--anchor-width) max-w-(--available-width) min-w-[min(20rem,var(--available-width))] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-md">
               <Autocomplete.List className="max-h-[min(var(--available-height),22rem)] overflow-y-auto overscroll-contain p-1">
                 {(item: Suggestion) =>
                   item.kind === "page" ? (
@@ -176,7 +236,7 @@ export function SearchBox({ className }: { className?: string }) {
                     >
                       <Search className="size-4 shrink-0" aria-hidden />
                       <span className="truncate">
-                        &lsquo;{item.query}&rsquo; 전체 검색
+                        &lsquo;{item.query}&rsquo; 검색 결과 보기
                       </span>
                     </Autocomplete.Item>
                   )
@@ -186,12 +246,13 @@ export function SearchBox({ className }: { className?: string }) {
           </Autocomplete.Positioner>
         </Autocomplete.Portal>
       </Autocomplete.Root>
-      <Button type="submit" size="icon-sm" variant="outline" aria-label="검색">
-        <Search />
-      </Button>
     </Form>
   );
 }
+
+/** 입력칸 상자 안의 단추. 상자 안이라 hover 배경 없이 글자색만 바꾼다. */
+const INNER_BUTTON =
+  "size-7 text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent coarse:size-8";
 
 const ITEM =
   "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground";

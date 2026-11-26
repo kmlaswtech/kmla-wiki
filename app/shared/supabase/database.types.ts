@@ -37,34 +37,43 @@ export type Database = {
       admin_log: {
         Row: {
           action: string
+          actor_handle: string | null
           created_at: string
+          discussion_id: number | null
           id: number
           note: string | null
           page_title: string | null
           pseudonym: string | null
           reason: string
           revision_id: number | null
+          target_handle: string | null
         }
         ComputedFields: never
         Insert: {
           action: string
+          actor_handle?: string | null
           created_at?: string
+          discussion_id?: number | null
           id?: never
           note?: string | null
           page_title?: string | null
           pseudonym?: string | null
           reason: string
           revision_id?: number | null
+          target_handle?: string | null
         }
         Update: {
           action?: string
+          actor_handle?: string | null
           created_at?: string
+          discussion_id?: number | null
           id?: never
           note?: string | null
           page_title?: string | null
           pseudonym?: string | null
           reason?: string
           revision_id?: number | null
+          target_handle?: string | null
         }
         Relationships: []
       }
@@ -219,8 +228,6 @@ export type Database = {
           author_pseudonym: string
           body: NonNullable<Json>
           body_text: string | null
-          byte_delta: number
-          byte_size: number
           created_at: string
           hidden_at: string | null
           id: number
@@ -228,14 +235,15 @@ export type Database = {
           page_id: number
           parent_revision_id: number | null
           summary: string
+          text_added: number
+          text_removed: number
+          text_size: number
         }
         ComputedFields: never
         Insert: {
           author_pseudonym: string
           body: NonNullable<Json>
           body_text?: never
-          byte_delta: number
-          byte_size: number
           created_at?: string
           hidden_at?: string | null
           id?: never
@@ -243,13 +251,14 @@ export type Database = {
           page_id: number
           parent_revision_id?: number | null
           summary?: string
+          text_added: number
+          text_removed: number
+          text_size: number
         }
         Update: {
           author_pseudonym?: string
           body?: NonNullable<Json>
           body_text?: never
-          byte_delta?: number
-          byte_size?: number
           created_at?: string
           hidden_at?: string | null
           id?: never
@@ -257,6 +266,9 @@ export type Database = {
           page_id?: number
           parent_revision_id?: number | null
           summary?: string
+          text_added?: number
+          text_removed?: number
+          text_size?: number
         }
         Relationships: [
           {
@@ -280,14 +292,71 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_discussion_post: {
+        Args: { p_as_admin?: boolean; p_body: string; p_discussion_id: number }
+        Returns: number
+      }
       admin_count: { Args: Record<PropertyKey, never>; Returns: number }
       ban_editor: {
-        Args: { p_days: number; p_reason: string; p_revision_id: number }
+        Args: { p_length: string; p_reason: string; p_revision_id: number }
+        Returns: number
+      }
+      ban_history: {
+        Args: { p_revision_id: number }
+        Returns: {
+          active: boolean
+          lifted: number
+          total: number
+        }[]
+      }
+      bulk_revert: {
+        Args: {
+          p_from_revision_id: number
+          p_items: Json
+          p_lookup_id: string
+          p_reason: string
+        }
+        Returns: {
+          outcome: string
+          page_id: number
+          page_title: string
+        }[]
+      }
+      change_ban_end: {
+        Args: { p_ban_log_id: number; p_length: string; p_reason: string }
+        Returns: undefined
+      }
+      close_discussion: {
+        Args: { p_as_admin?: boolean; p_body: string; p_discussion_id: number }
+        Returns: number
+      }
+      count_open_discussions: { Args: { p_page_id: number }; Returns: number }
+      count_open_reports: { Args: Record<PropertyKey, never>; Returns: number }
+      count_page_watchers: { Args: { p_page_id: number }; Returns: number }
+      count_unread_notifications: {
+        Args: Record<PropertyKey, never>
         Returns: number
       }
       delete_page: {
         Args: { p_page_id: number; p_reason: string }
         Returns: undefined
+      }
+      find_author_lookup: { Args: { p_revision_id: number }; Returns: string }
+      get_author_lookup: {
+        Args: { p_lookup_id: string }
+        Returns: {
+          expires_at: string
+          hidden_at: string
+          is_current: boolean
+          page_title: string
+          pseudonym: string
+          source_revision_id: number
+        }[]
+      }
+      get_discussion: { Args: { p_discussion_id: number }; Returns: Json }
+      get_discussion_version: {
+        Args: { p_discussion_id: number }
+        Returns: string
       }
       get_my_status: {
         Args: Record<PropertyKey, never>
@@ -313,6 +382,8 @@ export type Database = {
         Args: { p_reason: string; p_revision_id: number }
         Returns: undefined
       }
+      is_page_watched: { Args: { p_page_id: number }; Returns: boolean }
+      keepalive: { Args: Record<PropertyKey, never>; Returns: boolean }
       lift_ban: {
         Args: { p_ban_log_id: number; p_reason: string }
         Returns: undefined
@@ -321,6 +392,7 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: {
           admin_handle: string
+          admin_nickname: string
           is_me: boolean
         }[]
       }
@@ -333,21 +405,108 @@ export type Database = {
       list_author_edits: {
         Args: {
           p_before_revision_id?: number
-          p_reason: string
-          p_revision_id: number
+          p_limit?: number
+          p_lookup_id: string
         }
         Returns: {
-          byte_delta: number
           created_at: string
           hidden_at: string
           is_current: boolean
           kind: string
           page_deleted: boolean
+          page_id: number
           page_title: string
           parent_revision_id: number
           pseudonym: string
           revision_id: number
           summary: string
+          text_added: number
+          text_removed: number
+        }[]
+      }
+      list_my_author_lookups: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          expires_at: string
+          lookup_id: string
+          page_title: string
+          pseudonym: string
+          source_revision_id: number
+        }[]
+      }
+      list_open_post_reports: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          author_name: string
+          body: string
+          discussion_id: number
+          discussion_title: string
+          dismissed_count: number
+          first_reported_at: string
+          kind: string
+          page_title: string
+          post_created_at: string
+          post_id: number
+          reports: Json
+        }[]
+      }
+      list_open_reports: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          dismissed_count: number
+          first_reported_at: string
+          is_current: boolean
+          page_id: number
+          page_title: string
+          parent_revision_id: number
+          pseudonym: string
+          reports: Json
+          revision_created_at: string
+          revision_id: number
+        }[]
+      }
+      list_page_discussions: {
+        Args: { p_page_id: number }
+        Returns: {
+          created_at: string
+          deleted: boolean
+          id: number
+          is_open: boolean
+          last_post_at: string
+          opener_name: string
+          post_count: number
+          revision_id: number
+          title: string
+        }[]
+      }
+      list_recent_discussions: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: number
+          is_open: boolean
+          last_post_at: string
+          opener_name: string
+          page_title: string
+          post_count: number
+          title: string
+        }[]
+      }
+      list_restorable_revocations: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          admin_handle: string
+          admin_log_id: number
+          reason: string
+          restorable_until: string
+        }[]
+      }
+      list_watched_pages: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          page_deleted: boolean
+          page_id: number
+          page_title: string
+          watched_at: string
         }[]
       }
       mark_image_deleted: { Args: { p_image_id: string }; Returns: undefined }
@@ -364,6 +523,20 @@ export type Database = {
         }[]
       }
       my_pseudonym: { Args: { p_page_id: number }; Returns: string }
+      open_author_lookup: {
+        Args: { p_reason: string; p_revision_id: number }
+        Returns: string
+      }
+      open_discussion: {
+        Args: {
+          p_as_admin?: boolean
+          p_body: string
+          p_page_id: number
+          p_revision_id?: number
+          p_title: string
+        }
+        Returns: number
+      }
       orphan_pages: {
         Args: { p_after?: string; p_limit?: number }
         Returns: {
@@ -371,7 +544,49 @@ export type Database = {
         }[]
       }
       page_backlinks: { Args: { p_title_key: string }; Returns: Json }
+      page_sizes: {
+        Args: {
+          p_limit?: number
+          p_longest?: boolean
+          p_namespace?: string
+          p_offset?: number
+        }
+        Returns: {
+          text_size: number
+          title: string
+        }[]
+      }
+      preview_bulk_revert: {
+        Args: { p_from_revision_id?: number; p_lookup_id: string }
+        Returns: {
+          current_revision_id: number
+          edit_count: number
+          has_move: boolean
+          kept_count: number
+          move_leftover: boolean
+          page_id: number
+          page_title: string
+          restore_revision_id: number
+          status: string
+        }[]
+      }
       random_page: { Args: Record<PropertyKey, never>; Returns: string }
+      read_notifications: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          author_name: string
+          discussion_id: number
+          discussion_title: string
+          first_post_id: number
+          from_revision_id: number
+          last_at: string
+          new_count: number
+          page_title: string
+          reason: string
+          to_revision_id: number
+          unread: boolean
+        }[]
+      }
       record_member_verification: {
         Args: {
           p_auth_user_id: string
@@ -380,14 +595,62 @@ export type Database = {
         }
         Returns: undefined
       }
+      redirect_issues: {
+        Args: { p_limit?: number }
+        Returns: {
+          next: string
+          target: string
+          title: string
+        }[]
+      }
       register_image: {
         Args: { p_height: number; p_image_id: string; p_width: number }
         Returns: undefined
       }
+      rename_discussion: {
+        Args: { p_discussion_id: number; p_title: string }
+        Returns: undefined
+      }
+      reopen_discussion: {
+        Args: { p_as_admin?: boolean; p_body: string; p_discussion_id: number }
+        Returns: number
+      }
+      report_discussion_post: {
+        Args: { p_category: string; p_note?: string; p_post_id: number }
+        Returns: undefined
+      }
+      report_revision: {
+        Args: { p_category: string; p_note?: string; p_revision_id: number }
+        Returns: undefined
+      }
       resolve_body: { Args: { p_body: Json }; Returns: Json }
       resolve_images: { Args: { p_body: Json }; Returns: Json }
+      resolve_post_reports: {
+        Args: { p_post_id: number; p_resolution: string }
+        Returns: number
+      }
+      resolve_redirect: {
+        Args: { p_stop_key?: string; p_title: string }
+        Returns: {
+          status: string
+          title: string
+          via: string
+        }[]
+      }
+      resolve_reports: {
+        Args: { p_resolution: string; p_revision_id: number }
+        Returns: number
+      }
       restore_page: {
         Args: { p_page_id: number; p_reason: string }
+        Returns: undefined
+      }
+      restore_revoked_admin: {
+        Args: { p_admin_log_id: number; p_reason: string }
+        Returns: undefined
+      }
+      revert_and_hide_revision: {
+        Args: { p_reason: string; p_revision_id: number }
         Returns: undefined
       }
       revert_page: {
@@ -396,6 +659,13 @@ export type Database = {
           page_id: number
           revision_id: number
           title: string
+        }[]
+      }
+      revision_discussion_counts: {
+        Args: { p_page_id: number }
+        Returns: {
+          discussion_count: number
+          revision_id: number
         }[]
       }
       revoke_admin: {
@@ -428,6 +698,19 @@ export type Database = {
           title: string
         }[]
       }
+      set_admin_nickname: { Args: { p_nickname: string }; Returns: undefined }
+      set_discussion_deleted: {
+        Args: { p_deleted: boolean; p_discussion_id: number; p_reason: string }
+        Returns: undefined
+      }
+      set_discussion_post_hidden: {
+        Args: { p_hidden: boolean; p_post_id: number; p_reason: string }
+        Returns: undefined
+      }
+      set_page_watched: {
+        Args: { p_page_id: number; p_watched: boolean }
+        Returns: undefined
+      }
       set_protection: {
         Args: { p_level: string; p_page_id: number; p_reason: string }
         Returns: undefined
@@ -444,6 +727,7 @@ export type Database = {
           p_query: string
         }
         Returns: {
+          redirect_target: string
           title: string
         }[]
       }
@@ -453,6 +737,14 @@ export type Database = {
           ref_count: number
           title_key: string
         }[]
+      }
+      withdraw_discussion: {
+        Args: { p_discussion_id: number }
+        Returns: string
+      }
+      withdraw_discussion_post: {
+        Args: { p_post_id: number }
+        Returns: undefined
       }
     }
     Enums: {

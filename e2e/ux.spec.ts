@@ -9,7 +9,7 @@ const path = (name: string, action = "w") =>
 async function loginAsMember(page: Page) {
   await page.goto("/login");
   await page.getByLabel("개발용 계정").selectOption("alice@wiki.test");
-  await page.getByRole("button", { name: "이 계정으로 들어가기" }).click();
+  await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page.getByRole("link", { name: "큼온 위키" })).toBeVisible();
 }
 
@@ -43,8 +43,8 @@ test("편집 중 글을 잃지 않는다: 취소 확인, 나가기 확인, 단�
 
   // 고친 뒤 취소하면 묻는다.
   await page.getByRole("link", { name: "취소" }).click();
-  await expect(page.getByText("쓰던 글을 버릴까요?")).toBeVisible();
-  await page.getByRole("button", { name: "계속 쓰기" }).click();
+  await expect(page.getByText("편집 내용을 버릴까요?")).toBeVisible();
+  await page.getByRole("button", { name: "계속 편집" }).click();
   await expect(page).toHaveURL(/\/edit\//);
 
   // Ctrl/⌘+S로 저장한다.
@@ -59,15 +59,15 @@ test("편집 중 글을 잃지 않는다: 취소 확인, 나가기 확인, 단�
   await page.goto(path("편집 보호", "edit"));
   await writeBody(page, "둘째 내용");
   await page.getByRole("link", { name: "최근 변경" }).click();
-  await expect(page.getByText("편집을 그만두고 나갈까요?")).toBeVisible();
+  await expect(page.getByText("편집 화면에서 나갈까요?")).toBeVisible();
   await page.getByRole("button", { name: "나가기" }).click();
   await expect(page).toHaveURL(/\/recent$/);
 
   await page.goto(path("편집 보호", "edit"));
   await expect(
-    page.getByText("저장하지 않은 글을 불러왔습니다."),
+    page.getByText("이 브라우저의 임시 저장 내용을 불러왔습니다."),
   ).toBeVisible();
-  await page.getByRole("button", { name: "버리고 현재 판으로" }).click();
+  await page.getByRole("button", { name: "임시 저장 내용 버리기" }).click();
   await expect(editorOf(page)).toHaveText("첫 내용");
 
   // 고친 것이 없으면 묻지 않고 나간다.
@@ -95,12 +95,12 @@ test("검색창: 후보를 골라 바로 가고, 정확한 제목은 Enter로 �
     title("검색 대상"),
   );
 
-  // 결과 목록을 보고 싶으면 "전체 검색"을 고른다.
+  // 결과 목록을 보고 싶으면 "검색 결과 보기"를 고른다.
   await search.fill(`대상 ${RUN}`);
-  await page.getByRole("option", { name: /전체 검색/ }).click();
+  await page.getByRole("option", { name: /검색 결과 보기/ }).click();
   await expect(page).toHaveURL(/\/search\?q=/);
   await expect(
-    page.getByRole("link", { name: title("검색 대상") }),
+    page.getByRole("main").getByRole("link", { name: title("검색 대상") }),
   ).toBeVisible();
 });
 
@@ -150,7 +150,7 @@ test("검색창: 정규식 기호가 든 제목도 글자 그대로 찾는다", 
   await expect(option).toBeHidden();
 });
 
-test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 미리보기", async ({
+test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 미리보기와 이동", async ({
   page,
 }) => {
   await loginAsMember(page);
@@ -162,7 +162,7 @@ test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 
     .getByRole("dialog")
     .getByLabel("각주 내용")
     .fill("각주 내용입니다");
-  await page.getByRole("dialog").getByRole("button", { name: "넣기" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "삽입" }).click();
   await editorOf(page).press("End");
   await page.keyboard.press("Enter");
   await page.keyboard.type("### 가 아래");
@@ -193,11 +193,18 @@ test("문서 읽기: 최근 수정 시각, 제목 번호, 문단 접기, 각주 
   await page.getByRole("button", { name: "가 문단 펼치기" }).click();
   await expect(page.getByText("아래 본문")).toBeVisible();
 
-  // 각주 번호를 누르면 그 자리에 내용이 뜨고, 아래로 내려가지 않는다.
+  // 각주 번호에 마우스를 올리면 그 자리에 내용이 뜬다.
   await page.goto(path("읽기"));
-  await page.getByRole("button", { name: "각주 1" }).click();
+  const footnote = page.getByRole("button", { name: "각주 1" });
+  await footnote.hover();
   await expect(
     page.locator("[data-slot=popover-content]").getByText("각주 내용입니다"),
   ).toBeVisible();
   await expect(page).not.toHaveURL(/#/);
+
+  // 마우스로 누르면 아래 각주 목록으로 가고, 목록의 번호를 누르면 본문으로 돌아온다.
+  await footnote.click();
+  await expect(page).toHaveURL(/#fn-1$/);
+  await page.getByRole("link", { name: "본문으로 돌아가기" }).click();
+  await expect(page).toHaveURL(/#fnref-1$/);
 });

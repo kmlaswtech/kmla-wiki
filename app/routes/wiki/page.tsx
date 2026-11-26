@@ -1,14 +1,26 @@
-import { useCallback } from "react";
-import { Link, replace, useRevalidator } from "react-router";
+import { useCallback, useState } from "react";
+import { replace, useRevalidator } from "react-router";
 
+import type { WikiShellHandle } from "./gate";
 import type { Route } from "./+types/page";
-import { LinkButton } from "~/shared/components/link-button";
 import { positiveInt, titleFromParams } from "./title-param";
-import { PageAdminMenu } from "~/features/admin";
+import { usePageAdminActions } from "~/features/admin";
 import { withVerifiedMember } from "~/features/auth";
 import { WikiImage } from "~/features/images";
 import { pageHref } from "~/features/markup";
-import { getPageView, PageArticle, type MissingPage } from "~/features/pages";
+import { WatchButton } from "~/features/notifications";
+import {
+  AddAliasButton,
+  canAddAlias,
+  getPageView,
+  MissingArticle,
+  PageArticle,
+  redirectsHere,
+  type PageMenuItem,
+} from "~/features/pages";
+import { ReportDialog } from "~/features/reports";
+
+export const handle: WikiShellHandle = { reading: true };
 
 export async function clientLoader({
   request,
@@ -44,62 +56,77 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 export default function PageRoute({ loaderData }: Route.ComponentProps) {
   const { view } = loaderData;
+  if (!view.found) return <MissingArticle view={view} />;
+  // 문서마다 새로 그려 메뉴와 대화상자의 상태가 다른 문서로 넘어가지 않게 한다.
+  return <FoundPageView key={view.page.id} view={view} />;
+}
+
+type FoundView = Extract<
+  Route.ComponentProps["loaderData"]["view"],
+  { found: true }
+>;
+
+function FoundPageView({ view }: { view: FoundView }) {
   const revalidator = useRevalidator();
-  const images = view.found ? view.images : null;
+  const revalidate = useCallback(
+    () => void revalidator.revalidate(),
+    [revalidator],
+  );
+  const { images } = view;
   const renderImage = useCallback(
     (imageId: string, alt: string) => (
-      <WikiImage info={images?.get(imageId)} alt={alt} />
+      <WikiImage info={images.get(imageId)} alt={alt} />
     ),
     [images],
   );
+  const admin = usePageAdminActions({
+    page: view.page,
+    aliasCount: redirectsHere(view).length,
+    onDone: revalidate,
+  });
+  const [reporting, setReporting] = useState(false);
+  // 관리자는 신고하지 않고 바로 조치한다. 보고 있는 판을 신고한다(예전 판을 보는 중이면 그 판).
+  const reportTarget =
+    !view.isAdmin && view.canEdit && view.revision
+      ? {
+          kind: "revision" as const,
+          id: view.revision.id,
+          pageTitle: view.page.title,
+        }
+      : null;
+  const menuItems: PageMenuItem[] = view.isAdmin
+    ? admin.items
+    : reportTarget
+      ? [{ label: "신고", onSelect: () => setReporting(true) }]
+      : [];
 
-  if (!view.found) return <Missing view={view} />;
   return (
-    <PageArticle
-      view={view}
-      renderImage={renderImage}
-      headerActions={
-        view.isAdmin ? (
-          <PageAdminMenu
-            page={view.page}
-            onDone={() => void revalidator.revalidate()}
+    <>
+      <PageArticle
+        view={view}
+        renderImage={renderImage}
+        aliasAction={
+          canAddAlias(view) ? (
+            <AddAliasButton title={view.page.title} onAdded={revalidate} />
+          ) : null
+        }
+        watchAction={
+          <WatchButton
+            pageId={view.page.id}
+            watched={view.watched}
+            watchers={view.watchers}
           />
-        ) : null
-      }
-    />
-  );
-}
-
-/** 없는 문서. 빨간 링크를 눌러 들어오는 곳이라, 바로 만들 수 있게 한다. */
-function Missing({ view }: { view: MissingPage }) {
-  return (
-    <article>
-      <h1 className="mb-4 border-b pb-3 text-3xl leading-10 font-bold">
-        {view.title}
-      </h1>
-      <p className="text-muted-foreground">이 문서는 아직 없습니다.</p>
-      {view.title && view.validTitle && view.canEdit ? (
-        <LinkButton className="mt-4" to={pageHref(view.title, "edit")}>
-          이 문서 만들기
-        </LinkButton>
+        }
+        menuItems={menuItems}
+      />
+      {view.isAdmin ? admin.dialogs : null}
+      {reportTarget ? (
+        <ReportDialog
+          target={reportTarget}
+          open={reporting}
+          onOpenChange={setReporting}
+        />
       ) : null}
-      {view.backlinks.length > 0 ? (
-        <section className="mt-8 text-sm">
-          <h2 className="mb-2 font-semibold">이 문서를 가리키는 문서</h2>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1">
-            {view.backlinks.map((link) => (
-              <li key={link.title}>
-                <Link
-                  to={pageHref(link.title)}
-                  className="text-primary hover:underline"
-                >
-                  {link.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </article>
+    </>
   );
 }

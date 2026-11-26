@@ -1,5 +1,14 @@
 import { Pencil } from "lucide-react";
-import { Fragment, useMemo, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Link } from "react-router";
 
 import {
@@ -11,7 +20,24 @@ import {
   type WikiMark,
   type WikiNode,
 } from "../model/doc";
-import { headingId } from "../model/heading-id";
+import { sectionAnchor } from "../model/heading-id";
+import {
+  captionText,
+  mediaAlign,
+  mediaCaption,
+  mediaSize,
+} from "../model/media";
+import {
+  backgroundVars,
+  cellVAlignOf,
+  parseBackground,
+  parseTextColor,
+  textAlignOf,
+  textColorVars,
+  textSizeOf,
+  type TextAlign,
+} from "../model/style";
+import { normalizeStart, YOUTUBE_ID, youtubeEmbedUrl } from "../model/youtube";
 import { headingNumberMap } from "../model/heading-number";
 import {
   MISSING_TEMPLATE,
@@ -48,13 +74,17 @@ interface WikiContentProps {
    * 제목·각주에 `id`를 달지 않는다. 바깥 문서의 `id`와 겹치면 `#fn-1` 같은 이동이 틀어진다.
    */
   embedded?: boolean;
+  /**
+   * 본문 앞에 그릴 것(문서 보기의 목차). 프로필이 있으면 프로필 왼쪽에 나란히 둔다. 본문
+   * 규칙(`.wiki-content`) 밖에 그린다.
+   */
+  beforeBody?: ReactNode;
   className?: string;
 }
 
 interface RenderContext {
   existing: ReadonlySet<string>;
   renderImage?: (imageId: string, alt: string) => ReactNode;
-  notes: ReadonlyMap<number, string>;
   embedded: boolean;
 }
 
@@ -71,15 +101,13 @@ export function WikiContent({
   renderImage,
   withToc = false,
   embedded = false,
+  beforeBody,
   className,
 }: WikiContentProps) {
   const content = useMemo(() => {
     const context: RenderContext = {
       existing,
       renderImage,
-      notes: new Map(
-        document.footnotes.map((footnote) => [footnote.number, footnote.note]),
-      ),
       embedded,
     };
     // 목차와 같은 번호. 목차를 그리지 않을 만큼 제목이 적으면 번호도 붙이지 않는다.
@@ -94,6 +122,7 @@ export function WikiContent({
           number={numbers?.get(heading.index)}
           numberLinksToToc={withToc}
           withId={!embedded}
+          align={textAlignOf(block.node)}
           editHref={
             sectionEditHref && heading.sectionIndex !== null
               ? sectionEditHref(heading.sectionIndex)
@@ -113,7 +142,15 @@ export function WikiContent({
             : renderBlock(block.node, index, context),
         );
 
-    return (
+    // 프로필은 문서 머리에 둔다. 끼워 그리는 미리보기(틀)에는 그리지 않는다.
+    const profile =
+      document.profile && !embedded ? (
+        <aside aria-label="프로필" className="wiki-content wiki-profile">
+          {renderBlocks(document.profile, context)}
+        </aside>
+      ) : null;
+
+    const rest = (
       <>
         {body}
         {document.footnotes.length > 0 && !embedded ? (
@@ -129,7 +166,7 @@ export function WikiContent({
                   >
                     [{footnote.number}]
                   </a>
-                  <NoteText note={footnote.note} />
+                  {renderInline(footnote.content, context)}
                 </li>
               ))}
             </ol>
@@ -137,9 +174,88 @@ export function WikiContent({
         ) : null}
       </>
     );
+    return { profile, rest };
   }, [document, existing, sectionEditHref, renderImage, withToc, embedded]);
 
-  return <div className={cn("wiki-content", className)}>{content}</div>;
+  const root = useRef<HTMLDivElement>(null);
+  useRevealStrikeOnTap(root);
+  useResetStrikeOnChange(root, document);
+
+  return (
+    <div ref={root} className={className}>
+      {content.profile ? (
+        // 나무위키처럼 프로필은 오른쪽, 목차는 그 왼쪽에 나란히 둔다. 본문은 프로필이 끝난 뒤에
+        // 온다(본문이 프로필 옆으로 흐르지 않는다). 좁은 화면은 프로필, 목차, 본문 순서로 쌓는다.
+        <div className="wiki-head">
+          {content.profile}
+          {beforeBody}
+        </div>
+      ) : (
+        beforeBody
+      )}
+      <div className="wiki-content">{content.rest}</div>
+    </div>
+  );
+}
+
+/**
+ * 취소선 글자. 마우스를 쓰는 화면은 올렸을 때 선을 걷는다(CSS). 손가락으로 쓰는 화면에는 올릴
+ * 마우스가 없으므로 누를 때마다 선을 걷고 되돌린다(`data-revealed`). 링크 안의 취소선은 누르면
+ * 링크로 간다.
+ *
+ * 취소선마다 단추를 달지 않고 본문 하나에서 받는다. `<s>`는 누르는 요소가 아니므로 역할을 바꾸지
+ * 않는다.
+ */
+function useRevealStrikeOnTap(root: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    /** 지금 누르는 것이 손가락(또는 펜)인지. `pointerdown`이 `click`보다 먼저 온다. */
+    let touchPress = false;
+    const onPointerDown = (event: PointerEvent) => {
+      touchPress = event.pointerType !== "mouse";
+    };
+    const onClick = (event: MouseEvent) => {
+      if (!touchPress || !(event.target instanceof Element)) return;
+      const strike = event.target.closest("s");
+      // 링크·각주 단추·접기 제목 안이면 그쪽 동작이 먼저다.
+      if (
+        !strike ||
+        !element.contains(strike) ||
+        event.target.closest("a, button, summary")
+      )
+        return;
+      strike.setAttribute("data-touched", "");
+      strike.toggleAttribute("data-revealed");
+    };
+    element.addEventListener("pointerdown", onPointerDown);
+    element.addEventListener("click", onClick);
+    return () => {
+      element.removeEventListener("pointerdown", onPointerDown);
+      element.removeEventListener("click", onClick);
+    };
+  }, [root]);
+}
+
+/**
+ * 다른 문서·판으로 바뀌면 걷어 둔 취소선을 되돌린다. React가 같은 `<s>` 요소를 다른 글자에 다시
+ * 쓰면 손으로 붙인 속성이 남기 때문이다.
+ */
+function useResetStrikeOnChange(
+  root: RefObject<HTMLElement | null>,
+  document: ParsedDocument,
+) {
+  useEffect(() => {
+    const element = root.current;
+    return () => {
+      for (const strike of element?.querySelectorAll("s[data-touched]") ?? []) {
+        strike.removeAttribute("data-touched");
+        strike.removeAttribute("data-revealed");
+      }
+    };
+    // 문서가 바뀔 때마다 앞 문서에서 걷어 둔 것을 지우려고 `document`를 둔다.
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
+  }, [root, document]);
 }
 
 /**
@@ -206,12 +322,20 @@ function renderBlock(
   const children = node.content ?? [];
   switch (node.type) {
     case NODE.paragraph:
-      return <p key={key}>{renderInline(children, context)}</p>;
+      return (
+        <p key={key} style={alignStyle(textAlignOf(node))}>
+          {renderInline(children, context)}
+        </p>
+      );
     case NODE.heading: {
       // 인용·접기 안의 제목. 문단을 나누지 않고 모양만 제목이다.
       const level = numberAttr(node, "level") ?? 2;
       const Tag = level >= 4 ? "h4" : level === 3 ? "h3" : "h2";
-      return <Tag key={key}>{renderInline(children, context)}</Tag>;
+      return (
+        <Tag key={key} style={alignStyle(textAlignOf(node))}>
+          {renderInline(children, context)}
+        </Tag>
+      );
     }
     case NODE.bulletList:
       return <ul key={key}>{renderBlocks(children, context)}</ul>;
@@ -245,20 +369,11 @@ function renderBlock(
             <tbody>
               {children.map((row, rowIndex) => (
                 <tr key={rowIndex}>
-                  {(row.content ?? []).map((cell, cellIndex) => {
-                    const Cell = cell.type === NODE.tableHeader ? "th" : "td";
-                    const colSpan = numberAttr(cell, "colspan");
-                    const rowSpan = numberAttr(cell, "rowspan");
-                    return (
-                      <Cell
-                        key={cellIndex}
-                        colSpan={colSpan && colSpan > 1 ? colSpan : undefined}
-                        rowSpan={rowSpan && rowSpan > 1 ? rowSpan : undefined}
-                      >
-                        {renderBlocks(cell.content ?? [], context)}
-                      </Cell>
-                    );
-                  })}
+                  {(row.content ?? []).map((cell, cellIndex) => (
+                    <TableCell key={cellIndex} cell={cell}>
+                      {renderBlocks(cell.content ?? [], context)}
+                    </TableCell>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -274,20 +389,54 @@ function renderBlock(
       );
     case NODE.image: {
       const id = stringAttr(node, "id");
-      const alt = stringAttr(node, "alt");
+      const rawAlt = stringAttr(node, "alt");
+      // 설명(화면 낭독기용)을 비워 두었으면 캡션을 대신 읽게 한다.
+      const alt = rawAlt || captionText(node);
       return (
-        <figure
+        <MediaFigure
           key={key}
-          className="wiki-image"
+          node={node}
+          context={context}
           data-wiki-image={id}
-          data-alt={alt}
+          data-alt={rawAlt}
         >
           {context.renderImage ? (
             context.renderImage(id, alt)
           ) : (
             <span className="text-muted-foreground">[이미지: {alt}]</span>
           )}
-        </figure>
+        </MediaFigure>
+      );
+    }
+    case NODE.youtube: {
+      const videoId = stringAttr(node, "videoId");
+      if (!YOUTUBE_ID.test(videoId)) return null;
+      const start = normalizeStart(numberAttr(node, "start"));
+      return (
+        <MediaFigure
+          key={key}
+          node={node}
+          context={context}
+          data-youtube={videoId}
+          data-start={start}
+        >
+          <span className="wiki-youtube">
+            <iframe
+              src={youtubeEmbedUrl({ videoId, start })}
+              title={captionText(node) || "유튜브 영상"}
+              loading="lazy"
+              // 유튜브는 어느 사이트에 끼웠는지 알아야 재생한다(리퍼러가 없으면 오류 153).
+              referrerPolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              // 재생에 필요한 것만 연다. 유튜브 재생기는 스크립트와 자기 저장소가 있어야 돈다. 두 가지를 함께
+              // 여는 것이 위험한 경우는 같은 출처의 글을 끼울 때뿐이다. 이 틀은 늘 유튜브 주소(다른 출처)라
+              // 이 사이트에 닿지 못한다.
+              // oxlint-disable-next-line react/iframe-missing-sandbox
+              sandbox="allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox"
+            />
+          </span>
+        </MediaFigure>
       );
     }
     case MISSING_TEMPLATE: {
@@ -306,6 +455,103 @@ function renderBlock(
         <Fragment key={key}>{renderBlocks(children, context)}</Fragment>
       ) : null;
   }
+}
+
+/** 문단·제목 정렬. 왼쪽(기본)이면 `style`을 두지 않는다. */
+function alignStyle(align: TextAlign | null): CSSProperties | undefined {
+  return align ? { textAlign: align } : undefined;
+}
+
+/**
+ * 표 칸: 합치기, 배경. `data-bg`는 이 글을 복사해 편집기에 붙여넣을 때 배경을 되살리는 데
+ * 쓴다(`features/editor/model/schema.ts`).
+ */
+function TableCell({
+  cell,
+  children,
+}: {
+  cell: WikiNode;
+  children: ReactNode;
+}) {
+  const Cell = cell.type === NODE.tableHeader ? "th" : "td";
+  const colSpan = numberAttr(cell, "colspan");
+  const rowSpan = numberAttr(cell, "rowspan");
+  const { style, ...fill } = backgroundProps(cell);
+  return (
+    <Cell
+      colSpan={colSpan && colSpan > 1 ? colSpan : undefined}
+      rowSpan={rowSpan && rowSpan > 1 ? rowSpan : undefined}
+      {...fill}
+      style={{ ...style, verticalAlign: cellVAlignOf(cell) ?? undefined }}
+    >
+      {children}
+    </Cell>
+  );
+}
+
+/**
+ * 표 칸·캡션 띠의 배경(`background` 속성). 값이 없거나 모르는 값이면 아무것도 없다. `data-bg`는 이 글을
+ * 복사해 편집기에 붙여넣을 때 배경을 되살리는 데 쓴다.
+ */
+function backgroundProps(node: WikiNode | null): {
+  "data-bg"?: string;
+  "data-bg-strong"?: "";
+  style?: CSSProperties;
+} {
+  const background = node ? parseBackground(node.attrs?.background) : null;
+  if (!background) return {};
+  const { vars, strong } = backgroundVars(background);
+  return {
+    "data-bg": stringAttr(node!, "background"),
+    "data-bg-strong": strong ? "" : undefined,
+    style: vars,
+  };
+}
+
+/**
+ * 이미지·영상 상자: 크기·정렬과, 그림 아래의 캡션(비어 있으면 그리지 않는다). `data-*`는 이 글을
+ * 복사해 편집기에 붙여넣을 때 노드로 되살리는 데 쓴다(`features/editor/model/schema.ts`).
+ */
+function MediaFigure({
+  node,
+  context,
+  children,
+  ...data
+}: {
+  node: WikiNode;
+  context: RenderContext;
+  children: ReactNode;
+  [dataAttribute: `data-${string}`]: string | number;
+}) {
+  const captionNode = mediaCaption(node);
+  const caption = captionNode?.content ?? [];
+  return (
+    <figure
+      className="wiki-media"
+      data-size={mediaSize(node) ?? undefined}
+      data-align={mediaAlign(node)}
+      {...data}
+    >
+      <div className="wiki-media-item">
+        {children}
+        {caption.some(isVisibleInline) ? (
+          // 띠 배경은 표 칸과 같은 값·팔레트다.
+          <figcaption
+            className="wiki-media-caption"
+            {...backgroundProps(captionNode)}
+          >
+            {renderInline(caption, context)}
+          </figcaption>
+        ) : null}
+      </div>
+    </figure>
+  );
+}
+
+/** 빈칸과 줄바꿈만 있는 캡션은 그리지 않는다. 각주 번호는 보이는 것이다. */
+function isVisibleInline(node: WikiNode): boolean {
+  if (node.type === NODE.text) return (node.text ?? "").trim() !== "";
+  return node.type !== NODE.hardBreak;
 }
 
 function renderInline(
@@ -328,9 +574,11 @@ function renderInline(
           <FootnoteRef
             key={index}
             number={number}
-            note={context.notes.get(number) ?? ""}
+            content={node.content ?? []}
             embedded={context.embedded}
-          />
+          >
+            {renderInline(node.content ?? [], context)}
+          </FootnoteRef>
         );
       }
       case NODE.templateParam:
@@ -356,6 +604,8 @@ function renderInline(
 const MARK_ORDER: readonly string[] = [
   MARK.wikiLink,
   MARK.link,
+  MARK.textSize,
+  MARK.textColor,
   MARK.bold,
   MARK.italic,
   MARK.underline,
@@ -384,6 +634,25 @@ function applyMarks(
         return <s>{inner}</s>;
       case MARK.code:
         return <code>{inner}</code>;
+      case MARK.textColor: {
+        // `data-text-color`는 복사해 붙여넣을 때 색을 되살리는 데 쓴다.
+        const color = parseTextColor(mark.attrs?.color);
+        return color ? (
+          <span
+            className="wiki-color"
+            data-text-color={stringAttr(mark, "color")}
+            style={textColorVars(color)}
+          >
+            {inner}
+          </span>
+        ) : (
+          inner
+        );
+      }
+      case MARK.textSize: {
+        const size = textSizeOf(mark);
+        return size ? <span data-text-size={size}>{inner}</span> : inner;
+      }
       case MARK.link: {
         const href = stringAttr(mark, "href");
         return SAFE_HREF.test(href) ? (
@@ -427,7 +696,7 @@ function WikiLink({
   context: RenderContext;
   children: ReactNode;
 }) {
-  const anchor = section.trim() ? `#${encodeURI(headingId(section))}` : "";
+  const anchor = sectionAnchor(section);
   const title = parseTitle(rawTitle);
 
   // 같은 문서 안의 문단.
@@ -454,20 +723,45 @@ function WikiLink({
   );
 }
 
-/** 각주 번호. 아래 목록으로 내려가는 대신 그 자리에 내용을 띄운다. */
+/**
+ * 각주 번호. 마우스를 올리면 그 자리에 내용을 띄우고, 마우스나 키보드로 누르면 아래 각주 목록으로
+ * 내려간다. 목록의 번호를 누르면 다시 이 자리로 올라온다. 폰과 패드에서는 올릴 마우스가 없으므로
+ * 손가락으로 누르면 목록으로 내려가지 않고 그 자리에 내용을 띄운다.
+ */
 function FootnoteRef({
   number,
-  note,
+  content,
   embedded,
+  children,
 }: {
   number: number;
-  note: string;
+  /** 각주 내용(노드). 복사해 붙여넣을 때 되살리도록 속성에 싣는다. */
+  content: readonly WikiNode[];
   embedded: boolean;
+  /** 그린 각주 내용. */
+  children: ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
+  /** 지금 누르는 것이 손가락(또는 펜)인지. 누르기는 `pointerdown`이 먼저 오므로 거기서 정한다. */
+  const touchPress = useRef(false);
+  // 목록이 없는 곳(끼워 넣은 틀)이거나 손가락으로 누르면, 누르기로 미리보기를 연다.
+  const pressOpens = () => embedded || touchPress.current;
   return (
     // `data-*`는 이 글을 복사해 편집기에 붙여넣을 때 각주로 되살리는 데 쓴다.
-    <sup className="wiki-footnote-ref" data-footnote="" data-note={note}>
-      <Popover>
+    <sup
+      className="wiki-footnote-ref"
+      data-footnote=""
+      data-footnote-content={JSON.stringify(content)}
+    >
+      <Popover
+        open={open}
+        onOpenChange={(next, details) => {
+          // 마우스와 키보드의 누르기는 목록으로 내려가는 데 쓴다.
+          if (next && details.reason === "trigger-press" && !pressOpens())
+            return;
+          setOpen(next);
+        }}
+      >
         <PopoverTrigger
           openOnHover
           delay={150}
@@ -478,63 +772,50 @@ function FootnoteRef({
               href={embedded ? undefined : `#fn-${number}`}
               id={embedded ? undefined : `fnref-${number}`}
               aria-label={`각주 ${number}`}
-              onClick={(event) => event.preventDefault()}
+              onPointerDown={(event) => {
+                touchPress.current = event.pointerType !== "mouse";
+              }}
+              onKeyDown={() => {
+                touchPress.current = false;
+              }}
+              onClick={(event) => {
+                if (pressOpens()) event.preventDefault();
+                else setOpen(false);
+              }}
             />
           }
         >
           [{number}]
         </PopoverTrigger>
-        <PopoverContent side="top" className="wiki-content wiki-footnote">
+        <PopoverContent
+          side="top"
+          // 출처 한 줄이 한 줄에 들어가게 기본 팝오버보다 넓게 둔다. 좁은 화면에서는 화면 너비를 따른다.
+          className="wiki-content wiki-footnote max-w-[min(40rem,var(--available-width))] py-2"
+        >
           <p>
-            <NoteText note={note} />
+            <span className="mr-2 text-primary tabular-nums">[{number}]</span>
+            {children}
           </p>
-          {embedded ? null : (
-            <a
-              href={`#fn-${number}`}
-              className="mt-2 block text-xs text-muted-foreground"
-            >
-              각주 목록으로
-            </a>
-          )}
         </PopoverContent>
       </Popover>
     </sup>
   );
 }
 
-const URL_IN_TEXT = /(https?:\/\/[^\s<>"]+)/g;
-
-/** 각주 내용. 글자만 담기지만 출처 주소는 누를 수 있게 링크로 바꾼다. */
-function NoteText({ note }: { note: string }) {
-  return (
-    <>
-      {note.split(URL_IN_TEXT).map((part, index) =>
-        index % 2 === 1 ? (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            className="break-all"
-          >
-            {part}
-          </a>
-        ) : (
-          <Fragment key={index}>{part}</Fragment>
-        ),
-      )}
-    </>
-  );
-}
-
 type HeadingTag = "h2" | "h3" | "h4";
 
-/** 문단 제목: 접기 단추, 번호, 제목, [편집]. */
+/**
+ * 문단 제목: 번호, 제목, 그리고 오른쪽 끝의 [편집]과 접기 단추.
+ *
+ * 단추를 제목 앞에 두면 제목 글자가 본문보다 안쪽으로 밀려 왼쪽 줄이 어긋난다. 그래서 둘 다 오른쪽
+ * 끝으로 보낸다(나무위키와 같다). [편집]은 마우스를 쓰는 화면에서는 제목에 올렸을 때만 보인다.
+ */
 function WikiHeading({
   heading,
   number,
   numberLinksToToc,
   withId,
+  align,
   editHref,
   children,
 }: {
@@ -542,6 +823,7 @@ function WikiHeading({
   number?: string;
   numberLinksToToc: boolean;
   withId: boolean;
+  align: TextAlign | null;
   editHref?: string;
   children?: ReactNode;
 }) {
@@ -551,29 +833,34 @@ function WikiHeading({
   return (
     <Tag
       id={withId ? heading.id : undefined}
-      className={cn("group scroll-mt-16", onClick && "cursor-pointer")}
+      className={cn(
+        "group flex items-center gap-2",
+        onClick && "cursor-pointer",
+      )}
       onClick={onClick}
     >
-      <FoldToggle label={heading.text} />
-      {number ? (
-        numberLinksToToc ? (
-          <a href={`#${TOC_ID}`} className="heading-number" title="목차로">
-            {number}.
-          </a>
-        ) : (
-          <span className="heading-number">{number}.</span>
-        )
-      ) : null}
-      {children}
+      <span className="min-w-0 flex-1" style={alignStyle(align)}>
+        {number ? (
+          numberLinksToToc ? (
+            <a href={`#${TOC_ID}`} className="heading-number" title="목차로">
+              {number}.
+            </a>
+          ) : (
+            <span className="heading-number">{number}.</span>
+          )
+        ) : null}
+        {children}
+      </span>
       {editHref ? (
         <Link
           to={editHref}
-          className="ml-2 inline-flex items-center gap-1 align-middle text-xs font-normal text-muted-foreground no-underline hover:text-primary"
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-normal text-muted-foreground no-underline transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-primary coarse:-my-2 coarse:px-2 coarse:py-2.5 [@media(hover:hover)]:opacity-0"
         >
           <Pencil className="size-3" aria-hidden />
           편집
         </Link>
       ) : null}
+      <FoldToggle label={heading.text} />
     </Tag>
   );
 }

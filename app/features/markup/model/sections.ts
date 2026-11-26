@@ -94,3 +94,20 @@ export function isEmptyParagraph(node: WikiNode): boolean {
 export function isBlank(doc: WikiDoc): boolean {
   return doc.content.every(isEmptyParagraph);
 }
+
+/**
+ * 문단 편집을 저장한 뒤 문서 화면으로 넘기는 navigation state. 문서 화면은 이 번호의 제목으로
+ * 스크롤한다. `#제목`을 쓰지 않는 것은 같은 이름의 문단이 여럿일 수 있기 때문이다.
+ */
+export function sectionScrollState(index: number): { scrollToSection: number } {
+  return { scrollToSection: index };
+}
+
+/** `sectionScrollState`가 만든 값에서 문단 번호를 꺼낸다. 없으면 `null`. */
+export function readSectionScroll(state: unknown): number | null {
+  if (typeof state !== "object" || state === null) return null;
+  const index = (state as { scrollToSection?: unknown }).scrollToSection;
+  return typeof index === "number" && Number.isInteger(index) && index >= 0
+    ? index
+    : null;
+}

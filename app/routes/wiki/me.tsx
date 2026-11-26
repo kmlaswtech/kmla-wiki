@@ -1,8 +1,8 @@
-import { Link, useOutletContext } from "react-router";
+import { useOutletContext } from "react-router";
 
 import type { MemberStatus } from "~/features/auth";
-import { pageHref } from "~/features/markup";
 import { LinkButton } from "~/shared/components/link-button";
+import { ThemeSelect } from "~/shared/components/theme-select";
 import { formatDateTime } from "~/shared/lib/time";
 
 export const meta = () => [{ title: "내 정보 - 큼온 위키" }];
@@ -21,12 +21,8 @@ export default function MeRoute() {
       <dl className="divide-y text-sm">
         <Row label="회원 확인">
           {status.verifiedUntil
-            ? `${formatDateTime(status.verifiedUntil)}까지 유효`
-            : "없음"}
-          <p className="mt-1 text-muted-foreground">
-            기간이 지나면 "큼온으로 로그인"을 한 번 더 거칩니다. KMLA Online에
-            로그인돼 있으면 화면 이동만으로 끝납니다.
-          </p>
+            ? `${formatDateTime(status.verifiedUntil)}까지`
+            : "미확인"}
         </Row>
         <Row label="편집">
           {status.ban ? (
@@ -41,7 +37,7 @@ export default function MeRoute() {
                 사유: {status.ban.reason}
               </p>
               <p className="mt-1 text-muted-foreground">
-                차단 중에도 문서는 볼 수 있습니다.
+                문서는 계속 읽을 수 있습니다.
               </p>
             </>
           ) : (
@@ -50,19 +46,13 @@ export default function MeRoute() {
         </Row>
         <Row label="가명">
           <p className="text-muted-foreground">
-            편집 기록에는 실명 대신 가명이 남고, 가명은 문서마다 다릅니다. 각
-            문서의 기록에서 내가 쓴 판에는 "나" 표시가 붙습니다. 익명성이
-            어디까지 지켜지는지는{" "}
-            <Link
-              to={pageHref("위키:이용 안내")}
-              className="text-primary hover:underline"
-            >
-              이용 안내
-            </Link>
-            에 적혀 있습니다.
+            편집자 가명은 문서마다 다릅니다.
           </p>
         </Row>
         {status.isAdmin ? <Row label="권한">관리자</Row> : null}
+        <Row label="화면">
+          <ThemeSelect />
+        </Row>
       </dl>
 
       <LinkButton className="mt-6" variant="outline" to="/logout">

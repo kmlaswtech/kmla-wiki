@@ -5,7 +5,7 @@
  * 노드나 마크로 따로 있어, 서버(`private.extract_refs`)와 화면이 같은 자리를 그대로 읽는다.
  *
  * 노드와 마크의 이름·속성은 DB 함수와 편집기 스키마(`features/editor/model/schema.ts`)가 함께 쓴다.
- * 이름을 바꾸면 세 곳을 같이 고친다.
+ * 이름을 바꾸면 세 곳을 같이 고친다(노드·마크 이름은 `schema-names.test.ts`가 검사).
  */
 
 export interface WikiMark {
@@ -23,6 +23,8 @@ export interface WikiNode {
 
 /** 문서 단위 정보. 본문 흐름에 자리가 없는 것들이라 문서 속성에 둔다. */
 export interface WikiDocAttrs {
+  /** 프로필(`model/profile.ts`). 블록 노드 목록. 값은 `profileOf`로 검사해 읽는다. */
+  profile?: unknown;
   /** 이 문서가 속한 분류의 전체 제목(`분류:생활`). */
   categories?: string[];
   /** 넘겨주기 문서면 대상 제목. */
@@ -58,9 +60,19 @@ export const NODE = {
   template: "template",
   /** 틀 본문 안의 값 자리. `attrs.index`(1부터). */
   templateParam: "templateParam",
-  /** 올린 이미지. `attrs.id`(uuid), `attrs.alt`. */
+  /**
+   * 올린 이미지. `attrs.id`(uuid), `attrs.alt`, `attrs.size`, `attrs.align`(`model/media.ts`). 내용은
+   * 캡션 노드 하나다.
+   */
   image: "image",
-  /** 각주. `attrs.note`(내용, 글자). */
+  /**
+   * 유튜브 영상. `attrs.videoId`, `attrs.start`(초), `attrs.size`, `attrs.align`
+   * (`model/youtube.ts`, `model/media.ts`). 내용은 캡션 노드 하나다.
+   */
+  youtube: "youtube",
+  /** 이미지·영상 아래의 글. 이미지·영상 안에만 있다. 내용은 글자(꾸밈 포함), 줄바꿈, 각주, 값 자리. */
+  caption: "caption",
+  /** 각주. 내용은 `content`(글자·줄바꿈·값 자리, 꾸밈 포함). 그릴 때 `attrs.number`가 붙는다. */
   footnote: "footnote",
 } as const;
 
@@ -74,6 +86,10 @@ export const MARK = {
   link: "link",
   /** 위키 문서. `attrs.target`(제목, 비면 같은 문서), `attrs.section`(문단 제목). */
   wikiLink: "wikiLink",
+  /** 글자 색. `attrs.color`(팔레트 이름이나 `#rrggbb`, `model/style.ts`). */
+  textColor: "textColor",
+  /** 글자 크기 단계. `attrs.size`(-2~3, 0 없음, `model/style.ts`). */
+  textSize: "textSize",
 } as const;
 
 /** 제목 단계. `#` 하나짜리는 문서 제목 자리라 본문은 2단계부터 쓴다. */
@@ -87,6 +103,15 @@ export const SAFE_HREF = /^(https?:|mailto:)/i;
 
 export function emptyDoc(): WikiDoc {
   return { type: "doc", content: [{ type: NODE.paragraph }] };
+}
+
+/** 넘겨주기 문서의 본문. 본문과 분류 없이 대상만 둔다(DB가 다른 모양은 거부한다). */
+export function redirectDoc(target: string): WikiDoc {
+  return {
+    type: "doc",
+    content: emptyDoc().content,
+    attrs: { redirect: target },
+  };
 }
 
 /** 저장된 값이 문서 모양인지. 서버가 검사하지만 화면도 낡은 값·깨진 값에 버틴다. */
@@ -128,6 +153,8 @@ export function stringListAttr(node: WikiNode, name: string): string[] {
 export function nodeText(node: WikiNode): string {
   if (node.type === NODE.text) return node.text ?? "";
   if (node.type === NODE.hardBreak) return " ";
+  // 각주 내용은 본문에 보이지 않는다(제목 글자, 문단 제목에 섞이지 않게 한다).
+  if (node.type === NODE.footnote) return "";
   return (node.content ?? []).map(nodeText).join("");
 }
 

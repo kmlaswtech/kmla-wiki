@@ -1,30 +1,23 @@
-import { CornerDownRight, Tag, X } from "lucide-react";
+import { Tag, X } from "lucide-react";
 import { useState } from "react";
 
 import type { DocMeta } from "../model/doc-io";
 import { TitleInput } from "./title-input";
-import { baseName, categoryTitle, parseTitle } from "~/features/markup";
-import { Button } from "~/shared/ui/button";
+import { baseName, categoryTitle } from "~/features/markup";
 
 /**
- * 본문 흐름 밖의 문서 정보: 분류와 넘겨주기. 편집기 아래에 따로 둔다.
+ * 본문 흐름 밖의 문서 정보: 분류. 편집기 아래에 따로 둔다.
  *
- * 넘겨주기 칸은 넘겨주기 문서일 때나 툴바에서 고를 때만 보인다(대부분의 문서에는 필요 없다).
+ * 넘겨주기는 여기서 고치지 않는다. 넘겨주기 문서는 따로 된 입력(`RedirectForm`)을 쓴다.
  */
 export function DocMetaFields({
   meta,
   onChange,
-  showRedirect,
-  onHideRedirect,
 }: {
   meta: DocMeta;
   onChange: (meta: DocMeta) => void;
-  showRedirect: boolean;
-  onHideRedirect: () => void;
 }) {
   const [category, setCategory] = useState("");
-  const redirectInvalid =
-    meta.redirect.trim() !== "" && parseTitle(meta.redirect) === null;
 
   const categoryInvalid =
     category.trim() !== "" && categoryTitle(category) === null;
@@ -41,55 +34,6 @@ export function DocMetaFields({
 
   return (
     <div className="space-y-3 rounded-md border px-3 py-2.5">
-      {showRedirect ? (
-        <div className="grid gap-1.5">
-          <label
-            htmlFor="doc-redirect"
-            className="flex items-center gap-1.5 text-sm font-medium"
-          >
-            <CornerDownRight className="size-4" aria-hidden />
-            넘겨주기
-          </label>
-          <p className="text-xs text-muted-foreground">
-            이 문서를 열면 아래 문서로 바로 넘어갑니다. 다른 이름으로도 찾아오게
-            할 때 씁니다.
-          </p>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <TitleInput
-                id="doc-redirect"
-                value={meta.redirect}
-                onChange={(redirect) => onChange({ ...meta, redirect })}
-                // 여기서 Enter를 쳐도 문서가 저장되지 않게 한다.
-                submitOnEnter={false}
-                placeholder="넘겨줄 문서 이름"
-                aria-invalid={redirectInvalid || undefined}
-                aria-describedby={
-                  redirectInvalid ? "doc-redirect-error" : undefined
-                }
-              />
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onChange({ ...meta, redirect: "" });
-                onHideRedirect();
-              }}
-            >
-              넘겨주기 없애기
-            </Button>
-          </div>
-          {redirectInvalid ? (
-            <p id="doc-redirect-error" className="text-sm text-destructive">
-              쓸 수 없는 문서 이름입니다({"[ ] { } | # < >"}는 제목에 쓸 수
-              없습니다). 이대로 저장하면 넘겨주기가 빠집니다.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
       <div className="grid gap-1.5">
         <label
           htmlFor="doc-category"
@@ -109,7 +53,7 @@ export function DocMetaFields({
                 <button
                   type="button"
                   aria-label={`${baseName(title)} 분류 빼기`}
-                  className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground coarse:p-1.5"
                   onClick={() =>
                     onChange({
                       ...meta,

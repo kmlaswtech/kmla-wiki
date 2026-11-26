@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  caption,
   doc,
   footnote,
   heading,
@@ -23,21 +24,33 @@ import {
 } from "~/features/editor/model/doc-io";
 
 describe("document attributes", () => {
-  it("splits categories and the redirect off and joins them back", () => {
+  it("splits categories off and joins them back", () => {
+    const body = {
+      ...doc(para(text("글"))),
+      attrs: { categories: ["분류:생활"] },
+    };
+    const { content, meta } = splitDoc(body);
+    expect(content.attrs).toBeUndefined();
+    expect(meta).toEqual({ categories: ["분류:생활"], profile: null });
+    expect(joinDoc(content, meta)).toEqual(body);
+  });
+
+  it("leaves the redirect out, because the body editor does not edit it", () => {
     const body = {
       ...doc(para(text("글"))),
       attrs: { categories: ["분류:생활"], redirect: "PRISM" },
     };
     const { content, meta } = splitDoc(body);
-    expect(content.attrs).toBeUndefined();
-    expect(meta).toEqual({ categories: ["분류:생활"], redirect: "PRISM" });
-    expect(joinDoc(content, meta)).toEqual(body);
+    expect(joinDoc(content, meta)).toEqual({
+      ...doc(para(text("글"))),
+      attrs: { categories: ["분류:생활"] },
+    });
   });
 
   it("drops empty attributes, duplicate categories and trailing empty paragraphs", () => {
     const joined = joinDoc(doc(para(text("글")), para(), para()), {
       categories: ["생활", "분류:생활", " "],
-      redirect: "  ",
+      profile: null,
     });
     expect(joined).toEqual({
       ...doc(para(text("글"))),
@@ -47,7 +60,7 @@ describe("document attributes", () => {
 
   it("keeps one paragraph in an empty document", () => {
     expect(
-      joinDoc(doc(para(), para()), { categories: [], redirect: "" }),
+      joinDoc(doc(para(), para()), { categories: [], profile: null }),
     ).toEqual(doc(para()));
   });
 });
@@ -60,11 +73,57 @@ describe("normalizeDoc", () => {
       template("틀:오래된 정보", ["값"]),
       {
         type: "image",
-        attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a", alt: "지도" },
+        attrs: {
+          id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a",
+          alt: "지도",
+          size: "medium",
+          align: "center",
+        },
+        content: caption("본관", footnote("출처"), " 앞"),
+      },
+      {
+        type: "youtube",
+        attrs: {
+          videoId: "dQw4w9WgXcQ",
+          start: 90,
+          size: "small",
+          align: "right",
+        },
+        content: caption(),
       },
       { type: "fold", attrs: { title: "더" }, content: [para(text("숨김"))] },
     );
     expect(sameDoc(normalizeDoc(body), body)).toBe(true);
+  });
+
+  it("fills the default size, alignment and empty caption of images and videos", () => {
+    const normalized = normalizeDoc(
+      doc(
+        {
+          type: "image",
+          attrs: { id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a" },
+        },
+        { type: "youtube", attrs: { videoId: "dQw4w9WgXcQ" } },
+      ),
+    );
+    expect(normalized.content.map((node) => node.attrs)).toEqual([
+      {
+        id: "0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a",
+        alt: "",
+        size: null,
+        align: "left",
+      },
+      {
+        videoId: "dQw4w9WgXcQ",
+        start: 0,
+        size: "large",
+        align: "left",
+      },
+    ]);
+    expect(normalized.content.map((node) => node.content)).toEqual([
+      caption(),
+      caption(),
+    ]);
   });
 
   it("drops nodes the editor does not know", () => {

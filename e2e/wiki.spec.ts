@@ -9,7 +9,7 @@ const path = (name: string, action = "w") =>
 async function login(page: Page, email: string) {
   await page.goto("/login");
   await page.getByLabel("개발용 계정").selectOption(email);
-  await page.getByRole("button", { name: "이 계정으로 들어가기" }).click();
+  await page.getByRole("button", { name: "로그인", exact: true }).click();
 }
 
 async function loginAsMember(page: Page, email = "alice@wiki.test") {
@@ -45,7 +45,7 @@ async function createPage(page: Page, name: string, body: string) {
 test("회원 확인이 없는 계정은 들어오지 못한다", async ({ page }) => {
   await login(page, "outsider@wiki.test");
   await expect(
-    page.getByText("승인된 KMLA Online 회원만 이용할 수 있습니다."),
+    page.getByText("KMLA Online 회원만 이용할 수 있습니다."),
   ).toBeVisible();
 
   await page.goto("/w/귀가");
@@ -56,9 +56,15 @@ test("확인 기간이 지난 회원은 보던 곳을 기억한 채 로그인 �
   page,
 }) => {
   await login(page, "expired@wiki.test");
+  // 로그인이 끝나 만료 안내가 뜬 뒤에 옮긴다. 세션이 생기기 전이면 사유 없이 로그인으로 간다.
+  await expect(
+    page.getByText("회원 확인 기간이 만료되었습니다."),
+  ).toBeVisible();
   await page.goto("/w/귀가");
   await expect(page).toHaveURL(/\/login\?next=%2Fw%2F.*reason=expired/);
-  await expect(page.getByText("회원 확인 기간이 지났습니다.")).toBeVisible();
+  await expect(
+    page.getByText("회원 확인 기간이 만료되었습니다."),
+  ).toBeVisible();
 });
 
 test("문서를 읽는다: 목차, 각주, 분류, 틀, 넘겨주기", async ({ page }) => {
@@ -68,15 +74,19 @@ test("문서를 읽는다: 목차, 각주, 분류, 틀, 넘겨주기", async ({ 
   await expect(page.getByRole("navigation", { name: "목차" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "각주" })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "생활", exact: true }),
+    page.getByRole("main").getByRole("link", { name: "생활", exact: true }),
   ).toBeVisible();
   // 없는 문서로 가는 링크는 빨간 링크다.
-  await expect(page.getByRole("link", { name: "외출·외박" })).toHaveClass(
-    /wiki-link-missing/,
-  );
+  await expect(
+    page.getByRole("main").getByRole("link", { name: "외출·외박" }),
+  ).toHaveClass(/wiki-link-missing/);
 
   // 하위 문서: 상위 경로와 끼워 넣은 틀.
-  await page.getByRole("link", { name: "귀가/정기 귀가" }).first().click();
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: "귀가/정기 귀가" })
+    .first()
+    .click();
   await expect(
     page.getByRole("navigation", { name: "상위 문서" }),
   ).toContainText("귀가");
@@ -87,7 +97,9 @@ test("문서를 읽는다: 목차, 각주, 분류, 틀, 넘겨주기", async ({ 
 
   // 넘겨주기 문서 자체 보기.
   await page.goto("/w/중베?redirect=no");
-  await expect(page.getByText("문서로 넘겨줍니다.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "넘겨주기" })).toContainText(
+    "덕고관/엘리베이터",
+  );
 });
 
 test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ page }) => {
@@ -95,7 +107,7 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
 
   await page.goto(path("새 문서"));
   await expect(page.getByText("이 문서는 아직 없습니다.")).toBeVisible();
-  await page.getByRole("link", { name: "이 문서 만들기" }).click();
+  await page.getByRole("link", { name: "문서 만들기" }).click();
 
   await writeBody(
     page,
@@ -135,7 +147,7 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
   await expect(page.locator(".wiki-content")).toContainText("다 내용");
 
   // 기록: 두 판, 내 판 표시, 가명.
-  await page.getByRole("link", { name: "기록" }).click();
+  await page.getByRole("link", { name: "기록", exact: true }).click();
   const rows = page
     .getByRole("listitem")
     .filter({ hasText: /익명#[0-9A-F]{6}/ });
@@ -147,9 +159,9 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
   await rows.first().getByRole("link", { name: "비교" }).click();
   await expect(page.locator("ins")).toContainText("고친");
 
-  // 고른 두 판 비교. 처음에는 최신 판과 그 앞 판이 골라져 있다.
+  // 선택한 두 판 비교. 처음에는 최신 판과 그 앞 판이 골라져 있다.
   await page.goBack();
-  await page.getByRole("button", { name: "고른 두 판 비교" }).click();
+  await page.getByRole("button", { name: "선택한 두 판 비교" }).click();
   await expect(page.locator("ins")).toContainText("고친");
 
   // 되돌리기: 확인 창에서 사유를 받고, 편집 요약이 자동으로 채워진다.
@@ -161,7 +173,7 @@ test("문서를 만들고, 고치고, 기록에서 내 판을 본다", async ({ 
   await expect(page.locator(".wiki-content")).toContainText("나 내용");
   await expect(page.locator(".wiki-content")).not.toContainText("고친 나 내용");
 
-  await page.getByRole("link", { name: "기록" }).click();
+  await page.getByRole("link", { name: "기록", exact: true }).click();
   await expect(rows.first()).toContainText(/r\d+ 판으로 되돌림: 시험 되돌림/);
 });
 
@@ -186,8 +198,8 @@ test("편집기에서 이미지를 올리면 커서 자리에 들어가 바로 �
   await expect(
     editorOf(page).getByRole("img", { name: "빨간 점" }),
   ).toBeVisible();
-  // 설명은 파일 이름에서 채워지고, 고칠 수 있다.
-  await expect(page.getByLabel("이미지 설명")).toHaveValue("빨간 점");
+  // 대체 글은 파일 이름에서 채워지고, 고칠 수 있다.
+  await expect(page.getByLabel("이미지 대체 텍스트")).toHaveValue("빨간 점");
 
   await page.getByRole("button", { name: "저장" }).click();
   await expect(
@@ -211,7 +223,7 @@ test("특수 기능: 작성이 필요한 문서, 모든 문서", async ({ page }
   await page.getByRole("link", { name: "모든 문서" }).click();
   await page.getByRole("link", { name: "위키", exact: true }).click();
   await expect(
-    page.getByRole("link", { name: "위키:편집 도움말" }),
+    page.getByRole("main").getByRole("link", { name: "위키:편집 도움말" }),
   ).toBeVisible();
 });
 
@@ -228,13 +240,13 @@ test("툴바로 꾸미고 각주와 표를 넣는다", async ({ page }) => {
   await page.getByRole("button", { name: "각주", exact: true }).click();
   const footnote = page.getByRole("dialog");
   await footnote.getByLabel("각주 내용").fill("출처");
-  await footnote.getByRole("button", { name: "넣기" }).click();
+  await footnote.getByRole("button", { name: "삽입" }).click();
   await expect(
     editor.getByRole("button", { name: "각주: 출처" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "표", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "넣기" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "삽입" }).click();
   await expect(editor.getByRole("table")).toBeVisible();
 
   // 저장하면 문서 보기에도 같은 모양이다.
@@ -258,7 +270,7 @@ test("[[를 치면 링크 창이 열리고, 자동완성으로 문서를 고른�
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("문서 이름 또는 주소").pressSequentially("귀가/");
   await page.getByRole("option", { name: "귀가/정기 귀가" }).click();
-  await dialog.getByRole("button", { name: "넣기" }).click();
+  await dialog.getByRole("button", { name: "삽입" }).click();
   await expect(
     editorOf(page).locator('a[data-wiki-target="귀가/정기 귀가"]'),
   ).toHaveText("귀가/정기 귀가");
@@ -296,7 +308,7 @@ test("다른 사람이 먼저 고치면 내 글을 지키고 차이를 보여 �
   await other.close();
 
   await page.getByRole("button", { name: "저장" }).click();
-  await expect(page.getByText("다른 사람이 먼저 고쳤습니다")).toBeVisible();
+  await expect(page.getByText("편집 중에 문서가 변경되었습니다")).toBeVisible();
   await expect(editorOf(page)).toContainText("앨리스가 고친 내용");
   await expect(page.locator("del")).toContainText("밥이");
 
@@ -307,7 +319,7 @@ test("다른 사람이 먼저 고치면 내 글을 지키고 차이를 보여 �
   );
 
   // 두 사람의 가명은 다르다.
-  await page.getByRole("link", { name: "기록" }).click();
+  await page.getByRole("link", { name: "기록", exact: true }).click();
   const rows = page
     .getByRole("listitem")
     .filter({ hasText: /익명#[0-9A-F]{6}/ });
@@ -327,11 +339,11 @@ test("검색, 이동, 최근 변경", async ({ page }) => {
   await page.getByLabel("문서 검색").fill(`찾을말${RUN}`);
   await page.getByLabel("문서 검색").press("Enter");
   await expect(
-    page.getByRole("link", { name: title("이동 전") }),
+    page.getByRole("main").getByRole("link", { name: title("이동 전") }),
   ).toBeVisible();
 
   await page.goto(path("이동 전", "move"));
-  await page.getByLabel("새 이름").fill(title("이동 후"));
+  await page.getByLabel("새 제목").fill(title("이동 후"));
   await page.getByRole("button", { name: "이동" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     title("이동 후"),
@@ -346,7 +358,10 @@ test("검색, 이동, 최근 변경", async ({ page }) => {
 
   await page.goto("/recent");
   await expect(
-    page.getByRole("link", { name: title("이동 후") }).first(),
+    page
+      .getByRole("main")
+      .getByRole("link", { name: title("이동 후") })
+      .first(),
   ).toBeVisible();
 });
 
@@ -374,13 +389,11 @@ test("관리자가 훼손에 대응한다: 다른 편집 보기, 차단, 판 숨
 
   // 같은 사람의 다른 편집: 사유를 적어야 보인다.
   await rows.last().getByRole("button", { name: /관리$/ }).click();
-  await page
-    .getByRole("menuitem", { name: "이 사람의 다른 편집 보기" })
-    .click();
+  await page.getByRole("menuitem", { name: "작성자의 다른 편집 조회" }).click();
   await page.getByLabel("조회 사유").fill("E2E 훼손 확인");
   await page.getByRole("button", { name: "조회" }).click();
   await expect(
-    page.getByRole("link", { name: title("관리 둘") }),
+    page.getByRole("main").getByRole("link", { name: title("관리 둘") }),
   ).toBeVisible();
 
   // 예전 판 숨기기.
@@ -393,7 +406,7 @@ test("관리자가 훼손에 대응한다: 다른 편집 보기, 차단, 판 숨
 
   // 차단.
   await rows.first().getByRole("button", { name: /관리$/ }).click();
-  await page.getByRole("menuitem", { name: "이 사람 차단" }).click();
+  await page.getByRole("menuitem", { name: "작성자 차단" }).click();
   await page.getByLabel(/^사유/).fill("E2E 차단");
   await page.getByRole("button", { name: "차단", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
@@ -404,7 +417,14 @@ test("관리자가 훼손에 대응한다: 다른 편집 보기, 차단, 판 숨
     bob.getByRole("listitem").filter({ hasText: /익명#[0-9A-F]{6}/ }),
   ).toHaveCount(1);
   await bob.goto(path("관리 둘", "edit"));
-  await expect(bob.getByText("편집이 차단된 상태입니다").first()).toBeVisible();
+  await expect(
+    bob.getByRole("main").getByText("편집이 차단되었습니다."),
+  ).toBeVisible();
+  await expect(editorOf(bob)).toHaveText("다른 문서 내용");
+  await expect(editorOf(bob)).toHaveAttribute("contenteditable", "false");
+  await expect(
+    bob.getByRole("main").getByRole("button", { name: "저장" }),
+  ).toHaveCount(0);
   await other.close();
 
   // 공개 기록과 차단 내역, 해제.
@@ -424,7 +444,7 @@ test("관리자가 훼손에 대응한다: 다른 편집 보기, 차단, 판 숨
 
   // 문서 보호.
   await page.goto(path("관리 둘"));
-  await page.getByRole("button", { name: "문서 관리" }).click();
+  await page.getByRole("button", { name: "더 보기" }).click();
   await page.getByRole("menuitem", { name: "문서 보호" }).click();
   await page.getByLabel(/^사유/).fill("E2E 보호");
   await page.getByRole("button", { name: "보호", exact: true }).click();

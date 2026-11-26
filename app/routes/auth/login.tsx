@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import type { Route } from "./+types/login";
@@ -5,6 +6,9 @@ import {
   loadMemberStatus,
   sanitizeNext,
   signInForDevelopment,
+  startKmlaSignIn,
+  unverifiedReason,
+  type LoginReason,
 } from "~/features/auth";
 import { env } from "~/shared/lib/env";
 import { Button } from "~/shared/ui/button";
@@ -23,16 +27,18 @@ const DEV_ACCOUNTS = [
   { email: "alice@wiki.test", label: "앨리스 (회원)" },
   { email: "bob@wiki.test", label: "밥 (회원)" },
   { email: "admin@wiki.test", label: "관리자" },
-  { email: "expired@wiki.test", label: "확인 기간이 지난 회원" },
-  { email: "outsider@wiki.test", label: "회원 확인이 없는 계정" },
+  { email: "expired@wiki.test", label: "회원 확인 만료" },
+  { email: "outsider@wiki.test", label: "미확인 계정" },
 ];
 const DEV_PASSWORD = "password123";
 
+// URL의 `reason`은 아무 값이나 올 수 있어 `string`으로 찾는다. 알려진 사유는 빠짐없이 둔다.
 const REASON_MESSAGE: Record<string, string> = {
-  expired:
-    "회원 확인 기간이 지났습니다. 다시 로그인하면 보던 곳으로 돌아갑니다.",
-  "not-member": "승인된 KMLA Online 회원만 이용할 수 있습니다.",
-};
+  expired: "회원 확인 기간이 만료되었습니다. 다시 로그인해 주세요.",
+  "not-member": "KMLA Online 회원만 이용할 수 있습니다.",
+  denied: "KMLA Online에서 로그인을 승인하지 않았습니다.",
+  failed: "로그인하지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
+} satisfies Record<LoginReason, string>;
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const url = new URL(request.url);
@@ -42,12 +48,11 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   }
   // 로그인은 됐지만 회원 확인이 없는 계정이 주소를 직접 열었을 때도 사유를 알려 준다.
   const reason =
-    url.searchParams.get("reason") ??
-    (status ? (status.isMember ? "expired" : "not-member") : null);
-  return { reason };
+    url.searchParams.get("reason") ?? unverifiedReason(status) ?? null;
+  return { reason, next: sanitizeNext(url.searchParams.get("next")) };
 }
 
-/** 로컬 개발 로그인. "큼온으로 로그인"이 붙으면 이 action은 개발 환경에서만 쓰인다. */
+/** 로컬 개발 로그인. 개발 빌드(`VITE_DEV_LOGIN=1`)에서만 쓰인다. */
 export async function clientAction({ request }: Route.ClientActionArgs) {
   const form = await request.formData();
   const email = form.get("email");
@@ -61,7 +66,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     return data(
       {
         error:
-          "로그인하지 못했습니다. 로컬 DB에 seed 계정이 있는지 확인해 주세요.",
+          "개발용 계정으로 로그인하지 못했습니다. 로컬 DB의 초기 계정을 확인해 주세요.",
       },
       { status: 400 },
     );
@@ -77,6 +82,20 @@ export default function LoginPage({
   const navigation = useNavigation();
   const pending = navigation.state !== "idle";
   const reason = loaderData.reason ? REASON_MESSAGE[loaderData.reason] : null;
+  const [kmlaPending, setKmlaPending] = useState(false);
+  const [kmlaError, setKmlaError] = useState(false);
+
+  async function signInWithKmla() {
+    setKmlaPending(true);
+    setKmlaError(false);
+    try {
+      // 성공하면 kmla.online으로 넘어가서 이 화면으로 돌아오지 않는다.
+      await startKmlaSignIn(loaderData.next);
+    } catch {
+      setKmlaError(true);
+      setKmlaPending(false);
+    }
+  }
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center p-4">
@@ -84,8 +103,8 @@ export default function LoginPage({
         <CardHeader>
           <CardTitle className="text-xl">큼온 위키</CardTitle>
           <CardDescription>
-            민사고 학교생활 정보를 함께 쓰고 고치는 위키입니다. KMLA Online 승인
-            회원만 볼 수 있습니다.
+            민족사관고등학교의 정보를 함께 작성하고 고치는 위키입니다. KMLA
+            Online 승인 회원만 이용할 수 있습니다.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -95,14 +114,18 @@ export default function LoginPage({
             </p>
           ) : null}
 
-          {/* "큼온으로 로그인"은 KMLA Online 연동 단계에서 연결한다. */}
-          <Button className="w-full" disabled>
-            큼온으로 로그인 (준비 중)
+          <Button
+            className="w-full"
+            disabled={kmlaPending}
+            onClick={() => void signInWithKmla()}
+          >
+            {kmlaPending ? <Spinner /> : null}큼온으로 로그인
           </Button>
-          <p className="text-xs text-muted-foreground">
-            비밀번호는 kmla.online에서만 입력합니다. 위키는 회원 여부와 내부
-            식별 번호만 받고, 이름·이메일·기수는 받지 않습니다.
-          </p>
+          {kmlaError ? (
+            <p role="alert" className="text-sm text-destructive">
+              kmla.online으로 이동하지 못했습니다. 잠시 뒤에 다시 시도해 주세요.
+            </p>
+          ) : null}
 
           {env.devLogin ? (
             <Form
@@ -127,7 +150,7 @@ export default function LoginPage({
                 className="w-full"
                 disabled={pending}
               >
-                {pending ? <Spinner /> : null}이 계정으로 들어가기
+                {pending ? <Spinner /> : null}로그인
               </Button>
               {actionData?.error ? (
                 <p role="alert" className="text-sm text-destructive">

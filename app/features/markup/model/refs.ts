@@ -7,6 +7,7 @@ import {
   type WikiDoc,
   type WikiNode,
 } from "./doc";
+import { profileOf } from "./profile";
 import { parseTitle } from "./title";
 
 export type RefKind = "link" | "category" | "template" | "image" | "redirect";
@@ -58,7 +59,8 @@ export function extractRefs(doc: WikiDoc): Ref[] {
     refs.push({ kind: "category", target: title });
   }
 
-  walk(doc.content, (node: WikiNode) => {
+  // 프로필도 본문과 같은 노드라 링크·틀·이미지를 같은 방법으로 찾는다.
+  const collect = (node: WikiNode) => {
     for (const mark of node.marks ?? []) {
       if (mark.type !== MARK.wikiLink) continue;
       // 대상이 비면 같은 문서 안의 문단으로 가는 링크다.
@@ -73,7 +75,9 @@ export function extractRefs(doc: WikiDoc): Ref[] {
       const id = stringAttr(node, "id");
       if (IMAGE_ID.test(id)) refs.push({ kind: "image", target: id });
     }
-  });
+  };
+  walk(profileOf(doc) ?? [], collect);
+  walk(doc.content, collect);
 
   return refs;
 }

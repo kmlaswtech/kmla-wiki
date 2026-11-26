@@ -2,12 +2,16 @@ import type {
   Backlink,
   PageView,
   RecentChange,
+  RedirectInfo,
   ResolvedBody,
   RevisionBody,
   RevisionSummary,
   SearchHit,
+  TitleInfo,
 } from "../model/types";
+import { headingTargets, type HeadingTarget } from "../model/headings";
 import { titleMatchPattern } from "../model/hangul-match";
+import { SPECIAL_PAGE_SIZE } from "../model/special";
 import {
   asWikiDoc,
   parseTitle,
@@ -17,6 +21,13 @@ import {
   type WikiDoc,
 } from "~/features/markup";
 import { toImageMap, type RawImage } from "~/features/images";
+import {
+  keysetPage,
+  keysetQuery,
+  takePage,
+  type KeysetPage,
+  type PageCursor,
+} from "~/shared/lib/keyset";
 import { getSupabase } from "~/shared/supabase/client";
 import type { Json } from "~/shared/supabase/database.types";
 import { unwrap } from "~/shared/supabase/errors";
@@ -39,6 +50,11 @@ interface RawPageView {
   can_edit: boolean;
   is_admin: boolean;
   redirected_from?: string | null;
+  redirect?: {
+    target: string;
+    state: RedirectInfo["state"];
+    next: string | null;
+  } | null;
   page?: {
     id: number;
     title: string;
@@ -60,6 +76,9 @@ interface RawPageView {
   backlinks: RawBacklink[];
   children?: string[];
   members?: string[];
+  open_discussions?: number;
+  watched?: boolean;
+  watchers?: number;
 }
 
 function toResolved(raw: RawResolved): ResolvedBody {
@@ -114,6 +133,10 @@ export async function getPageView(
     };
   }
 
+  const backlinks = toBacklinks(raw.backlinks);
+  // 넘겨주기 문서로 오는 넘겨주기는 이중 넘겨주기다. 다른 이름으로 치지 않고 역링크에 남긴다.
+  const isAlias = (link: Backlink) => !raw.redirect && link.isRedirect;
+
   return {
     found: true,
     page: {
@@ -127,6 +150,13 @@ export async function getPageView(
       deletedAt: raw.page.deleted_at,
     },
     redirectedFrom: raw.redirected_from ?? null,
+    redirect: raw.redirect
+      ? {
+          target: raw.redirect.target,
+          state: raw.redirect.state,
+          next: raw.redirect.next ?? null,
+        }
+      : null,
     revision: raw.revision
       ? {
           id: raw.revision.id,
@@ -137,9 +167,13 @@ export async function getPageView(
       : null,
     resolved: toResolved(raw.resolved),
     images: toImageMap(raw.images ?? []),
-    backlinks: toBacklinks(raw.backlinks),
+    aliases: backlinks.filter(isAlias).map((link) => link.title),
+    backlinks: backlinks.filter((link) => !isAlias(link)),
     children: raw.children ?? [],
     members: raw.members ?? [],
+    openDiscussions: raw.open_discussions ?? 0,
+    watched: raw.watched ?? false,
+    watchers: raw.watchers ?? 0,
     ...viewer,
   };
 }
@@ -156,7 +190,7 @@ export async function resolveBody(body: WikiDoc): Promise<ResolvedBody> {
 
 // 목록에는 본문을 싣지 않는다. 판마다 본문 전체가 들어 있어 목록에서 읽으면 전송량이 커진다.
 const SUMMARY_COLUMNS =
-  "id, parent_revision_id, kind, summary, author_pseudonym, byte_size, byte_delta, created_at, hidden_at";
+  "id, parent_revision_id, kind, summary, author_pseudonym, text_added, text_removed, created_at, hidden_at";
 
 interface RawRevision {
   id: number;
@@ -164,8 +198,8 @@ interface RawRevision {
   kind: string;
   summary: string;
   author_pseudonym: string;
-  byte_size: number;
-  byte_delta: number;
+  text_added: number;
+  text_removed: number;
   created_at: string;
   hidden_at: string | null;
 }
@@ -177,47 +211,75 @@ function toSummary(row: RawRevision): RevisionSummary {
     kind: row.kind as RevisionSummary["kind"],
     summary: row.summary,
     authorPseudonym: row.author_pseudonym,
-    byteSize: row.byte_size,
-    byteDelta: row.byte_delta,
+    textAdded: row.text_added,
+    textRemoved: row.text_removed,
     createdAt: row.created_at,
     hiddenAt: row.hidden_at,
   };
 }
 
-export const HISTORY_PAGE_SIZE = 50;
+const HISTORY_PAGE_SIZE = 50;
 
-/** 문서의 판 기록, 최신순. `before`보다 오래된 판부터 이어서 읽는다. */
+/** 문서의 판 기록 한 쪽, 최신순. */
 export async function listHistory(
   pageId: number,
-  before?: number,
-): Promise<RevisionSummary[]> {
-  let query = getSupabase()
-    .from("revisions")
-    .select(SUMMARY_COLUMNS)
-    .eq("page_id", pageId)
-    .order("id", { ascending: false })
-    .limit(HISTORY_PAGE_SIZE);
-  if (before !== undefined) query = query.lt("id", before);
+  cursor: PageCursor,
+): Promise<KeysetPage<RevisionSummary>> {
+  const query = keysetQuery(
+    getSupabase()
+      .from("revisions")
+      .select(SUMMARY_COLUMNS)
+      .eq("page_id", pageId),
+    cursor,
+    HISTORY_PAGE_SIZE,
+  );
 
-  return unwrap(await query).map(toSummary);
+  const rows = unwrap(await query).map(toSummary);
+  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE);
 }
 
-/** 모든 문서의 최근 변경, 최신순. */
+/** 모든 문서의 최근 변경 한 쪽, 최신순. */
 export async function listRecentChanges(
-  before?: number,
-): Promise<RecentChange[]> {
-  let query = getSupabase()
-    .from("revisions")
-    // pages와 revisions 사이에 외래 키가 둘이라(page_id, current_revision_id) 어느 쪽인지 적는다.
-    .select(`${SUMMARY_COLUMNS}, page:pages!revisions_page_id_fkey(title)`)
-    .order("id", { ascending: false })
-    .limit(HISTORY_PAGE_SIZE);
-  if (before !== undefined) query = query.lt("id", before);
+  cursor: PageCursor,
+): Promise<KeysetPage<RecentChange>> {
+  const query = keysetQuery(
+    getSupabase()
+      .from("revisions")
+      // pages와 revisions 사이에 외래 키가 둘이라(page_id, current_revision_id) 어느 쪽인지 적는다.
+      .select(`${SUMMARY_COLUMNS}, page:pages!revisions_page_id_fkey(title)`),
+    cursor,
+    HISTORY_PAGE_SIZE,
+  );
 
-  return unwrap(await query).map((row) => ({
+  const rows = unwrap(await query).map((row) => ({
     ...toSummary(row),
     pageTitle: row.page.title,
   }));
+  return keysetPage(rows, cursor, HISTORY_PAGE_SIZE);
+}
+
+/**
+ * 가장 최근에 바뀐 문서 `limit`개와 그 현재 판, 최신순. 문서마다 한 줄이다(곁의 최근 변경 목록).
+ *
+ * 판 id는 늘기만 하므로 현재 판 id 순서가 곧 마지막으로 바뀐 순서다. 볼 수 없는 판(숨긴 판)은
+ * 빠진다.
+ */
+export async function listRecentlyChangedPages(
+  limit: number,
+): Promise<RecentChange[]> {
+  const rows = unwrap(
+    await getSupabase()
+      .from("pages")
+      .select(
+        `title, revision:revisions!pages_current_revision_fkey(${SUMMARY_COLUMNS})`,
+      )
+      .not("current_revision_id", "is", null)
+      .order("current_revision_id", { ascending: false })
+      .limit(limit),
+  );
+  return rows.flatMap((row) =>
+    row.revision ? [{ ...toSummary(row.revision), pageTitle: row.title }] : [],
+  );
 }
 
 /** 판 비교용. 요청한 판 가운데 볼 수 있는 것만 돌려준다. */
@@ -259,20 +321,58 @@ export async function searchPages(query: string): Promise<SearchHit[]> {
  * 잡히고, 넘겨주기는 문서 보기가 따라간다.
  */
 export async function findExactTitle(query: string): Promise<string | null> {
+  return (await getTitleInfo(query))?.title ?? null;
+}
+
+/** 그 제목의 문서가 있는지, 넘겨주기인지. 없거나 쓸 수 없는 제목이면 `null`. */
+export async function getTitleInfo(query: string): Promise<TitleInfo | null> {
   const title = parseTitle(query);
   if (!title) return null;
   const rows = unwrap(
     await getSupabase()
       .from("pages")
-      .select("title")
+      .select("title, redirect_target")
       .is("deleted_at", null)
       .eq("title_key", titleKey(title))
       .limit(1),
   );
-  return rows[0]?.title ?? null;
+  const row = rows[0];
+  return row ? { title: row.title, redirectTarget: row.redirect_target } : null;
 }
 
-export const SPECIAL_PAGE_SIZE = 100;
+/**
+ * 넘겨주기를 끝까지 따라간 결과. `via`는 처음 만난 넘겨주기 문서다(쓴 이름이 넘겨주기가 아니면
+ * `null`). 없는 문서에 닿으면 `missing`, 돌고 돌면 `loop`, `stopTitle` 문서에 닿으면 `stop`이다.
+ */
+export type RedirectResolution =
+  | { status: "page"; title: string; via: string | null }
+  | { status: "missing" | "loop" | "stop"; via: string | null };
+
+/**
+ * 넘겨주기를 끝까지 따라가 최종 문서를 찾는다(`resolve_redirect`). 넘겨주기 문서를 저장하기 전에
+ * 확인할 때는 그 문서 이름을 `stopTitle`로 준다. 저장(`save_revision`)과 같은 판정이 나온다.
+ */
+export async function resolveRedirect(
+  title: string,
+  stopTitle?: string,
+): Promise<RedirectResolution> {
+  const rows = unwrap(
+    await getSupabase().rpc("resolve_redirect", {
+      p_title: title,
+      ...(stopTitle === undefined ? {} : { p_stop_key: titleKey(stopTitle) }),
+    }),
+  );
+  const row = rows[0];
+  // 생성 타입은 열이 null일 수 있음을 모른다.
+  const via = (row?.via as string | null | undefined) ?? null;
+  const final = row?.title as string | null | undefined;
+  if (row?.status === "page" && final) {
+    return { status: "page", title: final, via };
+  }
+  const status =
+    row?.status === "loop" || row?.status === "stop" ? row.status : "missing";
+  return { status, via };
+}
 
 /** 링크는 걸려 있는데 아직 없는 문서. 많이 가리켜진 순. 영문 제목은 소문자로 온다. */
 export async function listWantedPages(): Promise<
@@ -282,30 +382,79 @@ export async function listWantedPages(): Promise<
   return rows.map((row) => ({ title: row.title_key, refCount: row.ref_count }));
 }
 
+/** 특수 문서 목록 한 쪽. 한 개 더 읽어서(`SPECIAL_PAGE_SIZE + 1`) 다음 쪽이 있는지 안다. */
+interface SpecialPage<T> {
+  rows: T[];
+  more: boolean;
+}
+
 /** 어디서도 링크하지 않는 일반 문서. `after` 제목 다음부터. */
-export async function listOrphanPages(after?: string): Promise<string[]> {
+export async function listOrphanPages(
+  after?: string,
+): Promise<SpecialPage<string>> {
   const rows = unwrap(
     await getSupabase().rpc("orphan_pages", {
       p_after: after,
-      p_limit: SPECIAL_PAGE_SIZE,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return rows.map((row) => row.title);
+  return takePage(
+    rows.map((row) => row.title),
+    SPECIAL_PAGE_SIZE,
+  );
 }
 
 /** 이름공간의 모든 문서, 가나다순. `after` 제목 다음부터. */
 export async function listAllPages(
   namespace: Namespace = "main",
   after?: string,
-): Promise<string[]> {
+): Promise<SpecialPage<string>> {
   const rows = unwrap(
     await getSupabase().rpc("list_all_pages", {
       p_namespace: namespace,
       p_after: after,
-      p_limit: SPECIAL_PAGE_SIZE,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
     }),
   );
-  return rows.map((row) => row.title);
+  return takePage(
+    rows.map((row) => row.title),
+    SPECIAL_PAGE_SIZE,
+  );
+}
+
+/**
+ * 이름공간의 문서를 현재 판 크기 순으로. `longest`면 긴 문서부터, 아니면 짧은 문서부터다.
+ * `offset`개를 건너뛴 다음부터 준다.
+ */
+export async function listPagesBySize(
+  namespace: Namespace,
+  longest: boolean,
+  offset = 0,
+): Promise<SpecialPage<{ title: string; textSize: number }>> {
+  const rows = unwrap(
+    await getSupabase().rpc("page_sizes", {
+      p_namespace: namespace,
+      p_longest: longest,
+      p_offset: offset,
+      p_limit: SPECIAL_PAGE_SIZE + 1,
+    }),
+  );
+  return takePage(
+    rows.map((row) => ({ title: row.title, textSize: row.text_size })),
+    SPECIAL_PAGE_SIZE,
+  );
+}
+
+/** 손볼 넘겨주기. `next`가 `null`이면 대상이 없거나 삭제됐고, 있으면 대상도 넘겨주기다. */
+export async function listRedirectIssues(): Promise<
+  { title: string; target: string; next: string | null }[]
+> {
+  // 생성 타입은 `next`를 null 없이 적지만 대상이 없으면 null이 온다.
+  return unwrap(await getSupabase().rpc("redirect_issues")) as {
+    title: string;
+    target: string;
+    next: string | null;
+  }[];
 }
 
 /** 아무 문서의 제목. 문서가 하나도 없으면 `null`. */
@@ -313,12 +462,31 @@ export async function getRandomTitle(): Promise<string | null> {
   return unwrap(await getSupabase().rpc("random_page"));
 }
 
+/**
+ * 링크의 `#문단` 후보. 문서가 없으면 `null`.
+ *
+ * 문서 보기 전체(`get_page_view`)를 읽는다. 넘겨주기를 따라가고 틀이 넣은 제목까지 문서 보기와 똑같이
+ * 맞추려면 이것이 필요하다. 링크 대화상자에서 `#`을 친 뒤 문서 제목이 바뀔 때만 부른다.
+ */
+export async function listHeadings(
+  title: string,
+): Promise<HeadingTarget[] | null> {
+  const view = await getPageView(title);
+  return view.found ? headingTargets(view) : null;
+}
+
+/** 자동완성 후보 하나. 넘겨주기 문서이면 그 대상도 담는다. */
+export interface TitleSuggestion {
+  title: string;
+  redirectTarget: string | null;
+}
+
 /** 자동완성용 제목 목록. `prefix`가 있으면 그 이름공간(`틀:`, `분류:`) 안에서만 찾는다. */
 export async function suggestTitles(
   query: string,
   prefix = "",
   limit = 8,
-): Promise<string[]> {
+): Promise<TitleSuggestion[]> {
   // 제목 키와 같은 꼴로 맞춘 검색어 하나로, 넓힌 정규식(걸러 내기)과 글자 그대로의 순위를 함께 만든다.
   const needle = searchKey(query);
   const rows = unwrap(
@@ -330,5 +498,8 @@ export async function suggestTitles(
       p_limit: limit,
     }),
   );
-  return rows.map((row) => row.title);
+  return rows.map((row) => ({
+    title: row.title,
+    redirectTarget: row.redirect_target,
+  }));
 }

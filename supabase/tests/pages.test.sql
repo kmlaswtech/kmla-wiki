@@ -67,11 +67,31 @@ select is(
   'the same member keeps the same pseudonym on the same page'
 );
 select results_eq(
-  format($$select parent_revision_id, byte_delta from public.revisions where id = %s$$, :r3),
-  -- 크기는 보이는 글자로 잰다. 분류는 글자가 아니다.
-  format($$select %s::bigint, octet_length('셋째 판 신성 ') - octet_length('둘째 판')$$, :r2),
-  'a revision records its parent and size change'
+  format($$select parent_revision_id, text_size, text_added - text_removed from public.revisions where id = %s$$, :r3),
+  -- 크기는 보이는 글자 수로 잰다. 분류는 글자가 아니다.
+  format($$select %s::bigint, char_length('셋째 판 신성 '), char_length('셋째 판 신성 ') - char_length('둘째 판')$$, :r2),
+  'a revision records its parent, size and change'
 );
+
+-- ── 더한 글자·뺀 글자 ────────────────────────────────────────────────────────
+-- 내부 함수라 회원은 부를 수 없다. 관리 권한으로 직접 시험한다.
+select logout();
+select results_eq(
+  $$select change.added, change.removed from (values
+      (1, null, E'가나다\n라마'),
+      (2, E'가나다\n라마', E'가나다\n\n\n라마'),
+      (3, E'가나다라마바', E'가나X라마바'),
+      (4, E'첫째\n둘째\n셋째', E'셋째\n첫째\n둘째'),
+      (5, E'문단 하나입니다\n문단 둘', E'새 문단\n문단 하나였습니다\n문단 둘'),
+      (6, E'가나다\n라마', ''),
+      -- 한 줄 안의 두 곳: 판 비교의 낱말 표시처럼 "더한"→"고친", "입"→"이었습"만 센다.
+      (7, '새로 더한 문단입니다.', '새로 고친 문단이었습니다.')
+    ) as sample (n, old, new), private.text_change(sample.old, sample.new) as change
+    order by sample.n$$,
+  $$values (5, 0), (0, 0), (1, 1), (0, 0), (6, 1), (0, 5), (5, 3)$$,
+  'text change counts the characters added and removed, not line breaks or moved paragraphs'
+);
+select login(:alice);
 
 -- 다른 문서에서는 다른 가명이다. 문서 사이를 잇는 단서가 화면 데이터에 없어야 한다.
 select page_id as p2, revision_id as r4 from public.save_revision('신성', null, wiki('신성 시간은…')) \gset
@@ -144,6 +164,11 @@ select lives_ok(
     ]}]}'::jsonb)$$,
   'a safe external link is kept');
 select throws_ok(
+  $$select * from public.save_revision('형식', null, '{"type":"doc","content":[
+      {"type":"youtube","attrs":{"videoId":"dQw4w9WgXcQ","caption":"학교 소개"}}
+    ]}'::jsonb)$$,
+  'WK012', null, 'a caption in the old attribute form is rejected (an editor tab from before the change)');
+select throws_ok(
   $$select * from public.save_revision('형식 고장', null,
       (select ('{"type":"doc","content":[' || repeat('{"type":"blockquote","content":[', 150)
                || '{"type":"paragraph"}' || repeat(']}', 150) || ']}')::jsonb))$$,
@@ -152,6 +177,44 @@ select throws_ok(
   $$select * from public.save_revision('형식 고장', null,
       '{"type":"doc","content":[{"type":"heading","attrs":{"level":-3},"content":[{"type":"text","text":"가"}]}]}'::jsonb)$$,
   'WK012', null, 'heading levels outside 2-4 are rejected');
+
+-- ── 프로필 ──────────────────────────────────────────────────────────────────
+-- 프로필은 본문과 같은 블록 노드 목록이다(`attrs.profile`).
+select page_id as p_profile from public.save_revision('프로필만 있는 문서', null,
+  '{"type":"doc","content":[{"type":"paragraph"}],"attrs":{"profile":[
+     {"type":"paragraph","content":[{"type":"text","text":"은하수 동아리"}]},
+     {"type":"paragraph","content":[
+       {"type":"text","text":"분야 천문 관측 "},
+       {"type":"text","text":"과학관","marks":[{"type":"wikiLink","attrs":{"target":"과학관","section":""}}]}
+     ]}]}}'::jsonb) \gset
+select ok(:p_profile is not null, 'a page with only a profile is not empty');
+select is(
+  (select body_text from public.revisions where page_id = :p_profile),
+  E'은하수 동아리\n분야 천문 관측 과학관',
+  'the profile text is part of the searchable body text'
+);
+select ok(
+  exists (select 1 from public.page_refs where from_page_id = :p_profile and kind = 'link'),
+  'links in the profile are references'
+);
+select throws_ok(
+  $$select * from public.save_revision('프로필 고장', null,
+      '{"type":"doc","content":[],"attrs":{"profile":{"title":"가"}}}'::jsonb)$$,
+  'WK012', null, 'a profile is a list of blocks');
+select throws_ok(
+  $$select * from public.save_revision('프로필 고장', null,
+      '{"type":"doc","content":[],"attrs":{"profile":["가"]}}'::jsonb)$$,
+  'WK012', null, 'profile blocks are nodes');
+select throws_ok(
+  $$select * from public.save_revision('프로필 고장', null,
+      '{"type":"doc","content":[],"attrs":{"profile":[{"type":"paragraph","content":[
+        {"type":"text","text":"x","marks":[{"type":"link","attrs":{"href":"javascript:alert(1)"}}]}]}]}}'::jsonb)$$,
+  'WK012', null, 'links in the profile are checked like the body');
+select throws_ok(
+  $$select * from public.save_revision('프로필 넘겨주기', null,
+      '{"type":"doc","content":[{"type":"paragraph"}],"attrs":{"redirect":"과학관",
+        "profile":[{"type":"paragraph","content":[{"type":"text","text":"가"}]}]}}'::jsonb)$$,
+  'WK015', null, 'a redirect page has no profile');
 
 -- 대소문자만 다른 제목은 같은 문서다.
 select page_id as p3, revision_id as r5 from public.save_revision('PRISM', null, wiki('프리즘')) \gset
@@ -311,8 +374,8 @@ select logout();
 
 -- ── 저장 빈도 상한 ───────────────────────────────────────────────────────────
 with written as (
-  insert into public.revisions (page_id, body, author_pseudonym, kind, byte_size, byte_delta)
-  select :p1, wiki('x'), '익명#000000', 'edit', 1, 0 from generate_series(1, 60)
+  insert into public.revisions (page_id, body, author_pseudonym, kind, text_size, text_added, text_removed)
+  select :p1, wiki('x'), '익명#000000', 'edit', 1, 0, 0 from generate_series(1, 60)
   returning id
 )
 insert into private.revision_authors (revision_id, member_id)

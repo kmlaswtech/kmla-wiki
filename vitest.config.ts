@@ -6,6 +6,8 @@ import { defineConfig } from "vitest/config";
 const pureLayers = [
   "test/**/model/**/*.{test,spec}.ts",
   "test/shared/lib/**/*.{test,spec}.ts",
+  // Edge Function의 판정 로직(Deno API를 쓰지 않는 부분).
+  "test/supabase/functions/**/*.{test,spec}.ts",
 ];
 
 const nodeFiles = globSync(pureLayers).map((file) =>

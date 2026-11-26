@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-import { formatByteDelta, revisionKindLabel } from "../model/errors";
+import { TextChange } from "./text-change";
+import { revisionKindLabel } from "../model/errors";
 import type { RevisionSummary } from "../model/types";
 import { pageHref } from "~/features/markup";
 import { RelativeTime } from "~/shared/components/relative-time";
@@ -16,10 +17,14 @@ interface RevisionListProps<Row extends RevisionSummary> {
   showPage?: boolean;
   /** 이 문서에서의 내 가명. 내가 쓴 판에 "나"를 붙인다. */
   myPseudonym?: string | null;
+  /** 가명 오른쪽에 붙일 것(판 기록의 판별 토론 수). */
+  afterAuthor?: (revision: Row) => ReactNode;
   /** 줄 끝에 붙일 버튼들(되돌리기, 관리 메뉴). */
   actions?: (revision: Row) => ReactNode;
   /** 줄 맨 앞에 붙일 것(판 기록의 비교할 판 고르기). */
   leading?: (revision: Row) => ReactNode;
+  /** 줄 아래 전체 폭에 펼칠 것(관리자의 "다른 편집 보기"에서 바로 전 판과의 비교). */
+  detail?: (revision: Row) => ReactNode;
 }
 
 /** 판 목록 한 벌. 판 기록, 최근 변경, 관리자의 "다른 편집 보기"가 같이 쓴다. */
@@ -28,8 +33,10 @@ export function RevisionList<Row extends RevisionSummary>({
   pageTitle,
   showPage = false,
   myPseudonym,
+  afterAuthor,
   actions,
   leading,
+  detail,
 }: RevisionListProps<Row>) {
   if (revisions.length === 0) {
     return (
@@ -41,6 +48,7 @@ export function RevisionList<Row extends RevisionSummary>({
     <ul className="divide-y text-sm">
       {revisions.map((revision) => {
         const title = pageTitle(revision);
+        const extra = detail?.(revision);
         const kind = revisionKindLabel(revision.kind);
         return (
           <li
@@ -51,7 +59,7 @@ export function RevisionList<Row extends RevisionSummary>({
             )}
           >
             {leading?.(revision)}
-            <span className="w-20 shrink-0 text-muted-foreground">
+            <span className="shrink-0 text-muted-foreground sm:w-20">
               <RelativeTime value={revision.createdAt} />
             </span>
 
@@ -71,17 +79,7 @@ export function RevisionList<Row extends RevisionSummary>({
               </Link>
             )}
 
-            <span
-              className={cn(
-                "tabular-nums",
-                revision.byteDelta > 0 &&
-                  "text-emerald-600 dark:text-emerald-400",
-                revision.byteDelta < 0 && "text-destructive",
-                revision.byteDelta === 0 && "text-muted-foreground",
-              )}
-            >
-              {formatByteDelta(revision.byteDelta)}
-            </span>
+            <TextChange revision={revision} />
 
             <span className="font-mono text-xs text-muted-foreground">
               {revision.authorPseudonym}
@@ -91,11 +89,13 @@ export function RevisionList<Row extends RevisionSummary>({
                 </Badge>
               ) : null}
             </span>
+            {afterAuthor?.(revision)}
 
             {kind ? <Badge variant="outline">{kind}</Badge> : null}
             {revision.hiddenAt ? <Badge variant="outline">숨김</Badge> : null}
 
-            <span className="min-w-0 flex-1 basis-40 break-words text-muted-foreground">
+            {/* 폰에서는 요약을 둘째 줄 전체로 보낸다. 그대로 두면 시간 칸 밑으로 들어가 시간의 일부처럼 읽힌다. */}
+            <span className="min-w-0 flex-1 basis-40 break-words text-muted-foreground max-sm:order-last max-sm:basis-full">
               {revision.summary}
             </span>
 
@@ -110,6 +110,10 @@ export function RevisionList<Row extends RevisionSummary>({
               ) : null}
               {actions?.(revision)}
             </span>
+            {extra ? (
+              // 줄 맨 끝(폰에서 요약 다음) 전체 폭.
+              <div className="order-last basis-full pt-1">{extra}</div>
+            ) : null}
           </li>
         );
       })}

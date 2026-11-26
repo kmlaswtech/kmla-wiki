@@ -20,6 +20,12 @@ select is(
   pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"신성","marks":[{"type":"wikiLink","attrs":{"target":"신성","section":""}}]}]}]}'),
   'link=신성', 'a link');
 select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"footnote","content":[{"type":"text","text":"출처","marks":[{"type":"wikiLink","attrs":{"target":"학사 규정","section":""}}]}]}]}]}'),
+  'link=학사 규정', 'a link inside a footnote');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"youtube","attrs":{"videoId":"dQw4w9WgXcQ"},"content":[{"type":"caption","content":[{"type":"text","text":"본관","marks":[{"type":"wikiLink","attrs":{"target":"본관","section":""}}]}]}]}]}'),
+  'link=본관', 'a link inside a media caption');
+select is(
   pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"중베","marks":[{"type":"wikiLink","attrs":{"target":"덕고관/엘리베이터","section":""}}]}]}]}'),
   'link=덕고관/엘리베이터', 'a link with a label');
 select is(
@@ -86,11 +92,22 @@ select is(
   private.doc_text('{"type":"doc","content":[
     {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"제목"}]},
     {"type":"paragraph","content":[{"type":"text","text":"굵","marks":[{"type":"bold"}]},{"type":"text","text":"게"},
-      {"type":"footnote","attrs":{"note":"각주"}}]},
+      {"type":"footnote","content":[{"type":"text","text":"각"},{"type":"hardBreak"},{"type":"text","text":"주","marks":[{"type":"wikiLink","attrs":{"target":"각주"}}]}]}]},
     {"type":"fold","attrs":{"title":"접기"},"content":[{"type":"paragraph","content":[{"type":"text","text":"안"}]}]}
   ]}'),
-  E'제목\n굵게 각주\n접기\n안',
+  E'제목\n굵게 각\n주\n접기\n안',
   'visible text joins pieces of a paragraph and puts blocks on their own lines'
+);
+select is(
+  private.doc_text('{"type":"doc","content":[
+    {"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":"대체"},
+      "content":[{"type":"caption","content":[{"type":"text","text":" 본관 "},{"type":"text","text":"앞 ","marks":[{"type":"bold"}]}]}]},
+    {"type":"youtube","attrs":{"videoId":"dQw4w9WgXcQ"},
+      "content":[{"type":"caption","content":[{"type":"text","text":"학교 소개"},{"type":"footnote","content":[{"type":"text","text":"주"}]}]}]},
+    {"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":"대체만"},"content":[{"type":"caption"}]}
+  ]}'),
+  E'본관 앞\n학교 소개 주\n',
+  'image and video captions are visible text, alt text is not'
 );
 
 select * from finish();

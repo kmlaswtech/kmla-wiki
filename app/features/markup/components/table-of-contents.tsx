@@ -15,7 +15,7 @@ export function TableOfContents({
     <nav
       id={TOC_ID}
       aria-label="목차"
-      className="my-4 inline-block max-w-full scroll-mt-16 rounded-lg border bg-muted/40 px-4 py-3 text-sm"
+      className="my-4 w-fit max-w-full rounded-lg border bg-muted/40 px-4 py-3 text-sm"
     >
       <p className="mb-1 font-semibold">목차</p>
       <ol className="space-y-0.5">
@@ -24,11 +24,14 @@ export function TableOfContents({
             key={heading.id}
             style={{ paddingLeft: `${(heading.level - 1) * 1}rem` }}
           >
+            {/* 번호만 링크 색으로 두어 목차 상자가 온통 파랗게 보이지 않게 한다. */}
             <a
               href={`#${encodeURI(heading.id)}`}
-              className="text-primary hover:underline"
+              className="hover:text-primary hover:underline focus-visible:text-primary coarse:inline-block coarse:py-0.5"
             >
-              <span className="mr-1.5 tabular-nums">{heading.number}.</span>
+              <span className="mr-1.5 text-primary tabular-nums">
+                {heading.number}.
+              </span>
               {heading.text}
             </a>
           </li>

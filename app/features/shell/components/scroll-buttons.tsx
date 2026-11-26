@@ -1,11 +1,13 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { cn } from "~/shared/lib/utils";
+
 /** 이만큼 내려온 뒤에 단추를 보인다. 짧은 화면에는 필요 없다. */
 const SHOW_AFTER_PX = 400;
 
 /** 화면 오른쪽 아래의 맨 위로·맨 아래로 단추. 긴 문서를 오갈 때 쓴다. */
-export function ScrollButtons() {
+export function ScrollButtons({ className }: { className?: string }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -21,7 +23,12 @@ export function ScrollButtons() {
     "flex size-9 items-center justify-center rounded-full border bg-background/95 text-muted-foreground shadow-sm backdrop-blur hover:bg-muted hover:text-foreground";
 
   return (
-    <div className="fixed right-4 bottom-4 z-20 flex flex-col gap-2 print:hidden">
+    <div
+      className={cn(
+        "fixed right-4 bottom-4 z-20 flex flex-col gap-2 print:hidden",
+        className,
+      )}
+    >
       <button
         type="button"
         className={button}
