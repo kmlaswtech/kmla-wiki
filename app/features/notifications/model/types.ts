@@ -2,7 +2,7 @@ interface NotificationBase {
   pageTitle: string;
   /** 새 판·글 수. 읽지 않은 것이 있으면 그것만, 모두 읽었으면 전체. `discussion`이면 1. */
   newCount: number;
-  /** 마지막 판·글(새 토론이면 첫 글)의 이름. 그 문서의 가명이거나 '관리자'다. */
+  /** 마지막 판·글(새 토론이면 첫 글)의 이름. 그 문서의 가명이거나 관리자 이름(`관리자 B`)이다. */
   authorName: string;
   lastAt: string;
   unread: boolean;

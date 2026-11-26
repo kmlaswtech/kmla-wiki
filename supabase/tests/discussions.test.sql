@@ -102,7 +102,7 @@ select is(
   'an early close is in the admin log without the discussion title or the conclusion text');
 select is(
   (select author_name from private.discussion_posts where discussion_id = :d1 order by id desc limit 1),
-  '관리자', 'the admin close is written as the admin');
+  '관리자 A', 'the admin close is written under the admin''s handle');
 
 select login(:bob);
 select public.reopen_discussion(:d1, '다시 이야기해 봅시다, 열 글자.');
@@ -206,7 +206,7 @@ select is((public.get_discussion(:d3) ->> 'title'), '바꾼 제목', 'the new ti
 select is(
   (select row(post ->> 'kind', post ->> 'author_name', post ->> 'as_admin')::text
     from (select public.get_discussion(:d3) -> 'posts' -> -1 as post) as last),
-  row('rename', '관리자', 'true')::text,
+  row('rename', '관리자 A', 'true')::text,
   'renaming leaves a post by the admin in the discussion');
 select throws_ok(format($$select public.rename_discussion(%s, '바꾼 제목')$$, :d3), 'WK011', null,
   'renaming to the same title fails');

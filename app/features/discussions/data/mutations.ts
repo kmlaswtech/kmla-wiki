@@ -79,7 +79,7 @@ export async function setPostHidden(
   if (hidden) notifyOpenReportsChanged();
 }
 
-/** 관리자 전용. 관리 기록 대신 토론에 '관리자' 이름으로 바꾼 사실이 남는다. */
+/** 관리자 전용. 관리 기록 대신 토론에 그 관리자의 이름으로 바꾼 사실이 남는다. */
 export async function renameDiscussion(
   discussionId: number,
   title: string,

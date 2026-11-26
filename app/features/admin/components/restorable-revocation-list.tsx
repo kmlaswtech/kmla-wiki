@@ -51,7 +51,7 @@ export function RestorableRevocationList({
         open={restoring !== null}
         onOpenChange={(open) => !open && setRestoring(null)}
         title="관리자 해제 되돌리기"
-        description={`‘${restoring?.handle ?? ""}’의 해제를 되돌려 같은 사람에게 관리자 권한을 다시 줍니다. 공개 기록에는 어느 해제를 되돌렸는지만 표시됩니다.`}
+        description={`‘${restoring?.handle ?? ""}’의 해제를 되돌려 같은 사람에게 관리자 권한을 다시 줍니다. 공개 기록에는 어느 해제를 되돌렸는지와 관리자 이름이 표시됩니다.`}
         confirmLabel="되돌리기"
         onConfirm={async (reason) => {
           if (restoring) await restoreRevokedAdmin(restoring.logId, reason);

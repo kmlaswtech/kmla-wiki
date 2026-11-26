@@ -22,7 +22,7 @@ export type AdminAction =
   | "restore_discussion"
   | "close_discussion_early";
 
-/** 공개 관리 기록의 한 줄. 누가 했는지는 없다("관리자"로만 보인다). */
+/** 공개 관리 기록의 한 줄. 누가 했는지는 관리자 이름(`관리자 B`)으로만 보인다. */
 export interface AdminLogEntry {
   id: number;
   action: AdminAction;
@@ -34,6 +34,10 @@ export interface AdminLogEntry {
   note: string | null;
   /** 대상 토론(토론 동작). */
   discussionId: number | null;
+  /** 조치한 관리자의 이름. 이름을 공개하기 전의 기록은 `null`이다. */
+  actorHandle: string | null;
+  /** 관리자 지정·해제·되돌림의 대상 관리자 이름. 이름을 공개하기 전의 기록은 `null`이다. */
+  targetHandle: string | null;
   createdAt: string;
 }
 
@@ -82,12 +86,19 @@ export function describeAdminLog(entry: AdminLogEntry): string {
       return `${who} 차단 해제`;
     case "change_ban":
       return `${who} 차단 기간 변경${note}`;
+    // 대상은 관리자 이름으로만 적는다. 근거 판의 가명은 남기지 않는다.
     case "grant_admin":
-      return "관리자 1명 지정";
+      return entry.targetHandle
+        ? `${entry.targetHandle} 지정`
+        : "관리자 1명 지정";
     case "revoke_admin":
-      return "관리자 권한 1건 해제";
+      return entry.targetHandle
+        ? `${entry.targetHandle} 권한 해제`
+        : "관리자 권한 1건 해제";
     case "restore_admin":
-      return `관리자 권한 해제 되돌림${note}`;
+      return entry.targetHandle
+        ? `${entry.targetHandle} 권한 해제 되돌림${note}`
+        : `관리자 권한 해제 되돌림${note}`;
     case "protect":
       return `‘${page}’ 문서 보호`;
     case "unprotect":

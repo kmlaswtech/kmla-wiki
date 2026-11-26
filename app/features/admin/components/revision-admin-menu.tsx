@@ -108,7 +108,7 @@ export function RevisionAdminMenu({
         open={open === "grant"}
         onOpenChange={close}
         title="관리자로 지정"
-        description={`${target}를 쓴 사람을 관리자로 지정합니다. 누가 관리자로 등록되었는지는 남지 않습니다.`}
+        description={`${target}를 쓴 사람을 관리자로 지정합니다. 공개 기록에는 새 관리자의 이름만 남고, 이 판의 가명은 남지 않습니다. 전에 관리자였던 사람이면 그때 이름을 다시 받습니다.`}
         confirmLabel="지정"
         onConfirm={(reason) => grantAdmin(revision.id, reason)}
         onDone={onDone}

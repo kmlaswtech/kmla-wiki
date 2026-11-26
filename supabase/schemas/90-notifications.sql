@@ -44,7 +44,7 @@ CREATE INDEX watched_pages_page_idx ON private.watched_pages USING btree (page_i
 -- 토론은 모든 회원에게 보이는 것만 알린다(`discussion_is_public`, 관리자에게도). edit와 reply는 읽지 않은
 -- 판·글이 있으면 `new_count`와 첫 판·글이 그것만 가리키고, 모두 읽었으면 전체를 가리킨다.
 -- `author_name`과 `last_at`은 알림의 마지막 판·글(discussion이면 첫 글)의 이름과 시각이다. 이름은 그
--- 문서의 가명이거나 '관리자'다. `unread`는 알림 화면을 마지막으로 연 뒤에 온 알림이다.
+-- 문서의 가명이거나 관리자 이름(`관리자 B`)이다. `unread`는 알림 화면을 마지막으로 연 뒤에 온 알림이다.
 CREATE OR REPLACE FUNCTION private.notifications_for (
   p_member_id bigint
 )

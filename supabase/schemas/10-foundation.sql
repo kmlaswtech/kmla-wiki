@@ -133,6 +133,22 @@ GRANT EXECUTE ON FUNCTION "private"."is_admin"() TO "authenticated";
 
 REVOKE ALL ON FUNCTION "private"."is_admin"() FROM PUBLIC;
 
+-- 관리자가 관리자로 한 일에 공개로 남는 이름(`관리자 B`). 판 작성자, 토론 글 작성자, 관리 기록의
+-- 행위자가 이 이름이다. `admin_handles`에서 읽으므로 해제된 뒤에도 같고, 받은 적이 없으면 NULL이다.
+CREATE OR REPLACE FUNCTION private.admin_handle_of (
+  p_member_id bigint
+)
+  RETURNS text
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+  select handle from private.admin_handles where member_id = p_member_id;
+$function$;
+
+REVOKE ALL ON FUNCTION "private"."admin_handle_of"(bigint) FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION private.member_is_banned (
   p_member_id bigint
 )
@@ -316,7 +332,8 @@ CREATE TABLE "private"."members" (
   "kmla_profile_id" bigint                   NOT NULL,
   "verified_until"  timestamp with time zone,
   "is_admin"        boolean                  NOT NULL DEFAULT false,
-  -- 관리자끼리 서로를 구분하는 이름(`관리자 A`). 문서 가명과 연결해 보여 주지 않는다.
+  -- 관리자 이름(`관리자 A`). 관리자로 한 일(판, 토론 글, 관리 기록)에 공개로 남는다. 문서 가명과
+  -- 연결해 보여 주지 않는다. 한 번 준 이름은 `admin_handles`에 남는다.
   "admin_handle"    text,
   -- 관리자가 스스로 정하는 별명. 관리 화면 관리자 목록에만 보이고, 공개 기록에는 남기지 않는다.
   -- 관리자 이름과 달리 겹쳐도 된다. 해제하면 지운다.
@@ -333,6 +350,26 @@ CREATE TABLE "private"."members" (
 
 ALTER TABLE "private"."members"
   ENABLE ROW LEVEL SECURITY;
+
+-- 한 번이라도 준 관리자 이름과 그 사람. 관리자 이름은 판, 토론 글, 관리 기록에 공개로 남으므로
+-- 한 이름은 늘 한 사람이다. 해제해도 행을 지우지 않는다. 그래서 그 이름을 다른 사람에게 주지 않고,
+-- 같은 사람을 다시 지정하면 같은 이름을 준다. 회원 행이 지워져도 이름은 남긴다. 이름을 주는 곳은
+-- `promote_member` 하나다. 회원의 `admin_handle`은 외래 키로 이 표의 (이름, 그 사람)만 가리킬 수 있다.
+CREATE TABLE "private"."admin_handles" (
+  "handle"     text                     NOT NULL,
+  "member_id"  bigint,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT "admin_handles_pkey" PRIMARY KEY (handle),
+  CONSTRAINT "admin_handles_member_id_key" UNIQUE (member_id),
+  CONSTRAINT "admin_handles_handle_member_id_key" UNIQUE (handle, member_id),
+  CONSTRAINT "admin_handles_member_id_fkey" FOREIGN KEY (member_id) REFERENCES private.members(id) ON DELETE SET NULL
+);
+
+ALTER TABLE "private"."admin_handles"
+  ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "private"."members"
+  ADD CONSTRAINT "members_admin_handle_fkey" FOREIGN KEY (admin_handle, id) REFERENCES private.admin_handles(handle, member_id);
 
 -- ── 차단 ─────────────────────────────────────────────────────────────────────
 -- 차단은 편집만 막는다. 열람은 그대로다. 대상은 가명이 아니라 사람(member)이라 모든 문서에 적용된다.
