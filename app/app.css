@@ -690,6 +690,21 @@
     :is(.wiki-image-frame, img, .wiki-youtube, .wiki-media-caption) {
     @apply rounded-none;
   }
+  /* 폰의 프로필 표는 폭을 다 채운다(위). 그림만 있는 칸의 그림이 칸보다 작으면 둘레에 칸 배경이
+   * 보이므로, 고른 크기와 상관없이 칸 폭을 채운다(작은 원본은 늘어난다). 칸에 글이 함께 있으면 그대로
+   * 둔다. */
+  @media (width < 40rem) {
+    .wiki-profile
+      :is(td, th):has(> figure.wiki-media:only-child)
+      .wiki-media:not([data-youtube])
+      :is(.wiki-media-item, .wiki-image-frame),
+    .wiki-profile
+      :is(td, th):has(> :only-child > .wiki-image-edit .wiki-media-item)
+      .wiki-media:not([data-youtube])
+      :is(.wiki-media-item, .wiki-image-frame) {
+      @apply w-full max-w-full;
+    }
+  }
 
   /* 편집기. 본문은 문서 보기와 같은 `.wiki-content` 규칙으로 그리고, 편집에만 필요한 것을 더한다. */
   .wiki-editor {
