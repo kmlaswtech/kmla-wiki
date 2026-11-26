@@ -8,7 +8,12 @@ import {
 
 import type { Route } from "./+types/gate";
 import { useOpenReportCount } from "~/features/admin";
-import { loadMemberStatus, loginHref, pathOf } from "~/features/auth";
+import {
+  loadMemberStatus,
+  loginHref,
+  pathOf,
+  unverifiedReason,
+} from "~/features/auth";
 import { pageHref } from "~/features/markup";
 import { useUnreadNotificationCount } from "~/features/notifications";
 import { RecentChangesPanel, useRecentChangesPanel } from "~/features/pages";
@@ -43,11 +48,8 @@ const BOX = "sm:rounded-lg sm:border sm:border-surface-border sm:shadow-xs";
  */
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const status = await loadMemberStatus();
-  if (!status) throw redirect(loginHref(pathOf(request)));
-  if (!status.verified) {
-    throw redirect(
-      loginHref(pathOf(request), status.isMember ? "expired" : "not-member"),
-    );
+  if (!status?.verified) {
+    throw redirect(loginHref(pathOf(request), unverifiedReason(status)));
   }
   return status;
 }
@@ -78,7 +80,7 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
   const editing = handles.some((handle) => handle?.editor);
   const reading = handles.some((handle) => handle?.reading);
 
-  const recentChanges = useRecentChangesPanel(RECENT_PANEL_PATH);
+  const recentPanel = useRecentChangesPanel(RECENT_PANEL_PATH);
   const openReports = useOpenReportCount(loaderData.isAdmin);
   const notifications = useUnreadNotificationCount();
   const idle = useAfterIdle();
@@ -106,11 +108,11 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
         </p>
       ) : null}
       {/* 본문과 곁 칸은 바깥(`canvas`) 위에 뜬 상자다. 면과 테두리는 테마 토큰(`surface`,
-       * `panel`)이 정한다. 최근 변경은 넓은 화면(xl)에서 본문 곁에, 그보다 좁으면 본문 아래에 둔다. */}
+       * `panel`)이 정한다. 최근 변경은 넓은 화면(`side`)에서 본문 곁에, 그보다 좁으면 본문 아래에 둔다. */}
       <div className="flex-1 sm:px-6 sm:py-4 lg:px-8">
         <div
           className={cn(
-            "mx-auto flex flex-col gap-4 xl:flex-row xl:items-start",
+            "mx-auto flex flex-col gap-4 side:flex-row side:items-start",
             SHELL_WIDTH,
           )}
         >
@@ -118,12 +120,12 @@ export default function WikiLayout({ loaderData }: Route.ComponentProps) {
             <Outlet context={loaderData} />
           </main>
           <RecentChangesPanel
-            changes={recentChanges}
+            state={recentPanel}
             className={cn(
-              "bg-panel px-4 py-4 xl:sticky xl:top-[calc(var(--site-header-height)+1rem)] xl:w-64 xl:shrink-0",
+              "bg-panel px-4 py-4 side:sticky side:top-[calc(var(--site-header-height)+1rem)] side:w-64 side:shrink-0",
               BOX,
               // 좁은 화면의 편집 화면에서는 글 아래에 목록이 붙으면 저장 단추를 찾기 어렵다.
-              editing && "max-xl:hidden",
+              editing && "max-side:hidden",
             )}
           />
         </div>

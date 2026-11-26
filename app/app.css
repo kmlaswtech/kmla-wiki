@@ -16,6 +16,10 @@
     sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
     "Noto Color Emoji";
 
+  /* 최근 변경을 본문 아래가 아니라 곁에 두는 폭(1100px). 가로로 둔 태블릿(iPad mini 약 1133px,
+   * iPad·Air·Pro 11" 약 1180~1194px)이 들어가고, 1024px(큰 iPad 세로)는 본문이 좁아져 빠진다. */
+  --breakpoint-side: 68.75rem;
+
   /* 화면 이동 중 상단 진행 막대. */
   --animate-navigation-progress: navigation-progress 1.1s ease-in-out infinite;
 
@@ -25,6 +29,27 @@
     }
     to {
       transform: translateX(300%);
+    }
+  }
+
+  /* 곁의 최근 변경을 다음에 다시 읽기까지 남은 시간. 길이는 화면이 `animation-duration`으로 준다. */
+  --animate-recent-countdown: recent-countdown linear forwards;
+
+  @keyframes recent-countdown {
+    from {
+      transform: scaleX(1);
+    }
+    to {
+      transform: scaleX(0);
+    }
+  }
+
+  /* 곁의 최근 변경에 새로 들어온 줄을 잠깐 칠한다. */
+  --animate-recent-arrive: recent-arrive 2.5s ease-out;
+
+  @keyframes recent-arrive {
+    from {
+      background-color: color-mix(in oklab, var(--primary) 18%, transparent);
     }
   }
 }
@@ -395,6 +420,34 @@
   }
   .wiki-content details[open] > summary {
     @apply mb-2;
+  }
+  /* 접기를 펼칠 때 내용이 갑자기 나타나지 않게 한다. 높이가 늘어나는 것은 지원하는 브라우저에서만
+   * 보인다(지금은 Chromium). 다른 브라우저는 내용이 서서히 나타나기만 한다. */
+  @media (prefers-reduced-motion: no-preference) {
+    .wiki-content details[open] > :not(summary) {
+      animation: fold-reveal 180ms ease-out;
+    }
+    @supports selector(::details-content) and (interpolate-size: allow-keywords) {
+      .wiki-content details {
+        interpolate-size: allow-keywords;
+      }
+      .wiki-content details::details-content {
+        block-size: 0;
+        overflow-y: clip;
+        transition:
+          block-size 200ms ease-out,
+          content-visibility 200ms allow-discrete;
+      }
+      .wiki-content details[open]::details-content {
+        block-size: auto;
+      }
+    }
+  }
+  @keyframes fold-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25rem);
+    }
   }
   .wiki-content img {
     @apply h-auto max-w-full rounded-md;

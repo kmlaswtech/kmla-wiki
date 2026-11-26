@@ -56,6 +56,10 @@ test("확인 기간이 지난 회원은 보던 곳을 기억한 채 로그인 �
   page,
 }) => {
   await login(page, "expired@wiki.test");
+  // 로그인이 끝나 만료 안내가 뜬 뒤에 옮긴다. 세션이 생기기 전이면 사유 없이 로그인으로 간다.
+  await expect(
+    page.getByText("회원 확인 기간이 만료되었습니다."),
+  ).toBeVisible();
   await page.goto("/w/귀가");
   await expect(page).toHaveURL(/\/login\?next=%2Fw%2F.*reason=expired/);
   await expect(
