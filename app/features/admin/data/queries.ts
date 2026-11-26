@@ -274,3 +274,17 @@ export async function listRestorableRevocations(): Promise<
 export async function getAdminCount(): Promise<number> {
   return unwrap(await getSupabase().rpc("admin_count")) ?? 0;
 }
+
+/**
+ * 판 작성자가 지금까지 받은 차단 수(관리자 전용). 문서가 달라도 같은 사람으로 센다. `lifted`는 그중
+ * 해제한 차단 수다.
+ */
+export async function getBanHistory(
+  revisionId: number,
+): Promise<{ total: number; lifted: number }> {
+  const rows = unwrap(
+    await getSupabase().rpc("ban_history", { p_revision_id: revisionId }),
+  );
+  const row = rows[0];
+  return { total: row?.total ?? 0, lifted: row?.lifted ?? 0 };
+}

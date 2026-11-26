@@ -295,6 +295,13 @@ export type Database = {
         Args: { p_length: string; p_reason: string; p_revision_id: number }
         Returns: number
       }
+      ban_history: {
+        Args: { p_revision_id: number }
+        Returns: {
+          lifted: number
+          total: number
+        }[]
+      }
       bulk_revert: {
         Args: {
           p_from_revision_id: number

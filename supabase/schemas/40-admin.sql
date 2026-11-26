@@ -315,6 +315,46 @@ GRANT EXECUTE ON FUNCTION "public"."ban_editor"(bigint, interval, text) TO "post
 
 REVOKE ALL ON FUNCTION "public"."ban_editor"(bigint, interval, text) FROM PUBLIC, "anon";
 
+-- 판 작성자가 지금까지 받은 차단 수(관리자 전용). 차단 창이 기간을 정하는 데 쓴다. 해제한 차단은
+-- 잘못 건 것일 수 있어 따로 센다. 횟수만 돌려주고 가명·문서는 돌려주지 않는다. 같은 사람 편집 조회보다
+-- 적게 드러내므로 관리 기록에 남기지 않는다.
+CREATE OR REPLACE FUNCTION public.ban_history (
+  p_revision_id bigint
+)
+  RETURNS TABLE (
+    total  integer,
+    lifted integer
+  )
+  LANGUAGE plpgsql
+  STABLE
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  v_member_id bigint;
+begin
+  perform private.require_admin();
+  select target.member_id into v_member_id from private.revision_target(p_revision_id) as target;
+  if v_member_id is null then
+    raise exception 'revision not found' using errcode = 'WK006';
+  end if;
+  return query
+    select count(*)::integer, (count(*) filter (where ban.lifted_at is not null))::integer
+    from private.bans as ban
+    where ban.member_id = v_member_id;
+end;
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."ban_history"(bigint) TO "authenticated";
+
+GRANT EXECUTE ON FUNCTION "public"."ban_history"(bigint) TO "service_role";
+
+REVOKE ALL ON FUNCTION "public"."ban_history"(bigint) FROM "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."ban_history"(bigint) TO "postgres";
+
+REVOKE ALL ON FUNCTION "public"."ban_history"(bigint) FROM PUBLIC, "anon";
+
 -- 진행 중인 차단의 기간을 지금부터 다시 정한다(연장, 단축, 기한 없음으로). 해제했다 다시 차단하지
 -- 않아도 된다.
 CREATE OR REPLACE FUNCTION public.change_ban_end (

@@ -16,6 +16,8 @@ select logout();
 select login(:alice);
 select throws_ok(format($$select public.ban_editor(%s, interval '7 days', '도배')$$, :b1), '42501', null,
   'a member cannot ban');
+select throws_ok(format($$select * from public.ban_history(%s)$$, :b1), '42501', null,
+  'a member cannot read ban counts');
 select throws_ok(format($$select public.open_author_lookup(%s, '확인')$$, :b1), '42501', null,
   'a member cannot open a lookup of another author''s edits');
 select throws_ok(format($$select public.find_author_lookup(%s)$$, :b1), '42501', null,
@@ -184,6 +186,21 @@ select login(:admin);
 select lives_ok(format($$select public.lift_ban(%s, '오해였음')$$, :ban1), 'an admin lifts the ban');
 select throws_ok(format($$select public.lift_ban(%s, '또 해제')$$, :ban1), 'WK011', null,
   'a lifted ban cannot be lifted again');
+select ban_editor as ban2 from public.ban_editor(:b2, interval '1 day', '다시 훼손') \gset
+select lives_ok(format($$select public.lift_ban(%s, '테스트 정리')$$, :ban2), 'an admin lifts the second ban');
+-- 둘 다 해제했다. 첫 차단은 다른 문서의 판에서 걸었지만 같은 사람으로 센다.
+select results_eq(
+  format($$select total, lifted from public.ban_history(%s)$$, :b2),
+  $$values (2, 2)$$,
+  'ban counts follow the person across pages and count lifted bans apart'
+);
+select results_eq(
+  format($$select total, lifted from public.ban_history(%s)$$, :a1),
+  $$values (0, 0)$$,
+  'a member with no bans has a zero count'
+);
+select throws_ok($$select * from public.ban_history(0)$$, 'WK006', null,
+  'ban counts need an existing revision');
 select logout();
 select login(:bob);
 select lives_ok(
