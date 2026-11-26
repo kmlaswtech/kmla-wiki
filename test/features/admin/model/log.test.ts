@@ -45,6 +45,7 @@ describe("withParticle", () => {
     expect(withParticle("관리자 A", "이", "가")).toBe("관리자 A가");
     expect(withParticle("관리자 L", "이", "가")).toBe("관리자 L이");
     expect(withParticle("관리자 M", "을", "를")).toBe("관리자 M을");
+    expect(withParticle("관리자 R", "이", "가")).toBe("관리자 R이");
   });
 
   it("reads a number by its last digit", () => {

@@ -345,7 +345,7 @@ export function BulkRevertView({
         open={confirming}
         onOpenChange={setConfirming}
         title="일괄 되돌리기"
-        description={`선택한 문서 ${selected.length}개를 되돌리거나 삭제합니다. 새 판의 작성자는 ‘관리자’로 표시되며, 관리 기록에는 한 건으로 남습니다. 여러 문서가 동시에 변경되므로 기록을 보는 사람이 문서별 가명을 같은 작성자로 추정할 수 있습니다.`}
+        description={`선택한 문서 ${selected.length}개를 되돌리거나 삭제합니다. 새 판의 작성자는 내 관리자 이름(예: ‘관리자 B’)으로 표시되며, 관리 기록에도 그 이름으로 한 건 남습니다. 여러 문서가 동시에 변경되므로 기록을 보는 사람이 문서별 가명을 같은 작성자로 추정할 수 있습니다.`}
         confirmLabel="처리"
         destructive
         onConfirm={async (reason) => {

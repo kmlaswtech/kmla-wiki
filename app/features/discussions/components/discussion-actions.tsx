@@ -165,7 +165,8 @@ function RenameForm({
       <DialogHeader>
         <DialogTitle>토론 제목 바꾸기</DialogTitle>
         <DialogDescription>
-          토론에 ‘관리자’ 이름으로 앞 제목과 새 제목이 글로 남습니다.
+          토론에 내 관리자 이름(예: ‘관리자 B’)으로 앞 제목과 새 제목이 글로
+          남습니다.
         </DialogDescription>
       </DialogHeader>
       <div className="grid gap-1.5">

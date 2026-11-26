@@ -69,11 +69,11 @@ export function isBanActive(ban: BanEntry, now: number): boolean {
 
 /**
  * 이름 끝소리에 받침이 있는가(조사 고르기). 관리자 이름은 `관리자 B`, `관리자 27`처럼 영문자나 숫자로
- * 끝난다. 영문자는 읽는 소리로 본다(엘·엠·엔만 받침). 숫자는 끝 자리로 보고, 0은 십·백처럼 받침이 있다.
+ * 끝난다. 영문자는 읽는 소리로 본다(엘·엠·엔·알만 받침). 숫자는 끝 자리로 보고, 0은 십·백처럼 받침이 있다.
  */
 function endsWithFinal(name: string): boolean {
   const last = name.at(-1) ?? "";
-  if (/[a-z]/i.test(last)) return /[lmn]/i.test(last);
+  if (/[a-z]/i.test(last)) return /[lmnr]/i.test(last);
   if (/\d/.test(last)) return "013678".includes(last);
   const code = last.charCodeAt(0) - 0xac00;
   return code >= 0 && code < 11172 && code % 28 !== 0;
