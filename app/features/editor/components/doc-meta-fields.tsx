@@ -1,21 +1,25 @@
-import { Tag, X } from "lucide-react";
+import { Braces, Tag, X } from "lucide-react";
 import { useState } from "react";
 
 import type { DocMeta } from "../model/doc-io";
 import { TitleInput } from "./title-input";
-import { baseName, categoryTitle } from "~/features/markup";
+import { baseName, categoryTitle, type ParamMeta } from "~/features/markup";
+import { Input } from "~/shared/ui/input";
 
 /**
- * 본문 흐름 밖의 문서 정보: 분류. 편집기 위에 따로 둔다.
+ * 본문 흐름 밖의 문서 정보: 분류, 틀 문서의 값 자리 설명·기본값. 편집기 위에 따로 둔다.
  *
  * 넘겨주기는 여기서 고치지 않는다. 넘겨주기 문서는 따로 된 입력(`RedirectForm`)을 쓴다.
  */
 export function DocMetaFields({
   meta,
   onChange,
+  paramNames = [],
 }: {
   meta: DocMeta;
   onChange: (meta: DocMeta) => void;
+  /** 틀 문서 본문에 있는 값 자리 이름. 있으면 설명·기본값 칸을 보인다. */
+  paramNames?: readonly string[];
 }) {
   const [category, setCategory] = useState("");
 
@@ -88,6 +92,83 @@ export function DocMetaFields({
           </p>
         ) : null}
       </div>
+      {paramNames.length > 0 ? (
+        <ParamMetaFields
+          names={paramNames}
+          params={meta.params ?? {}}
+          onChange={(params) => onChange({ ...meta, params })}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * 틀 값: 값 자리마다 설명과 기본값. 설명은 틀을 넣는 대화상자의 칸 아래에 보인다. 기본값은 쓰는
+ * 문서가 값을 비웠을 때 들어간다. 이름 목록은 본문의 값 자리에서 온다.
+ */
+function ParamMetaFields({
+  names,
+  params,
+  onChange,
+}: {
+  names: readonly string[];
+  params: Record<string, ParamMeta>;
+  onChange: (params: Record<string, ParamMeta>) => void;
+}) {
+  const update = (name: string, field: keyof ParamMeta, value: string) =>
+    onChange({ ...params, [name]: { ...params[name], [field]: value } });
+
+  return (
+    <fieldset className="grid gap-1.5 border-t pt-2.5">
+      <legend className="float-left mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+        <Braces className="size-4" aria-hidden />틀 값
+      </legend>
+      <p className="clear-left text-xs text-muted-foreground">
+        설명은 틀을 넣을 때 칸 아래에 보입니다. 기본값은 값을 비웠을 때
+        들어갑니다. 값이 모두 빈 표 줄은 보이지 않습니다.
+      </p>
+      <div className="grid grid-cols-[minmax(4rem,auto)_1fr_1fr] items-center gap-x-2 gap-y-1.5 text-sm">
+        <span className="text-xs text-muted-foreground">이름</span>
+        <span className="text-xs text-muted-foreground">설명</span>
+        <span className="text-xs text-muted-foreground">기본값</span>
+        {names.map((name) => (
+          <ParamRow
+            key={name}
+            name={name}
+            meta={params[name] ?? {}}
+            onChange={(field, value) => update(name, field, value)}
+          />
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function ParamRow({
+  name,
+  meta,
+  onChange,
+}: {
+  name: string;
+  meta: ParamMeta;
+  onChange: (field: keyof ParamMeta, value: string) => void;
+}) {
+  return (
+    <>
+      <code className="truncate font-mono text-xs">{name}</code>
+      <Input
+        value={meta.hint ?? ""}
+        aria-label={`${name} 설명`}
+        placeholder="예: 토론 문서 주소"
+        onChange={(event) => onChange("hint", event.target.value)}
+      />
+      <Input
+        value={meta.default ?? ""}
+        aria-label={`${name} 기본값`}
+        placeholder="없음"
+        onChange={(event) => onChange("default", event.target.value)}
+      />
+    </>
   );
 }

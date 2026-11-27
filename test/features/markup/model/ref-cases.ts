@@ -87,7 +87,7 @@ export const REF_CASES: { name: string; body: WikiDoc; expected: string }[] = [
     name: "a template",
     body: doc({
       type: "template",
-      attrs: { name: "틀:오래된 정보", args: [] },
+      attrs: { name: "틀:오래된 정보" },
     }),
     expected: "template=틀:오래된 정보",
   },
@@ -95,13 +95,35 @@ export const REF_CASES: { name: string; body: WikiDoc; expected: string }[] = [
     name: "a template without the prefix",
     body: doc({
       type: "template",
-      attrs: { name: "상위 문서", args: ["외출·외박"] },
+      attrs: { name: "상위 문서" },
+      content: [
+        {
+          type: "templateArg",
+          attrs: { name: "문서" },
+          content: [text("외출·외박")],
+        },
+      ],
     }),
     expected: "template=틀:상위 문서",
   },
   {
+    name: "a link inside a template value",
+    body: doc({
+      type: "template",
+      attrs: { name: "틀:알림" },
+      content: [
+        {
+          type: "templateArg",
+          attrs: { name: "사유" },
+          content: [link("합의")],
+        },
+      ],
+    }),
+    expected: "link=합의 template=틀:알림",
+  },
+  {
     name: "a template parameter",
-    body: doc(para({ type: "templateParam", attrs: { index: 1 } })),
+    body: doc(para({ type: "templateParam", attrs: { name: "사유" } })),
     expected: "",
   },
   {

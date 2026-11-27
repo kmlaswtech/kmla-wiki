@@ -8,6 +8,7 @@ export {
   isWikiDoc,
   MARK,
   NODE,
+  nodeText,
   redirectDoc,
   SAFE_HREF,
   type WikiDoc,
@@ -44,6 +45,19 @@ export {
   type HeadingInfo,
   type ParsedDocument,
 } from "./model/parse";
+export {
+  isBlankValue,
+  isParamName,
+  PARAM_NAME_MAX,
+  paramMetaOf,
+  paramNamesOf,
+  pruneParamMeta,
+  templateArgsOf,
+  templateParamsOf,
+  type ParamMeta,
+  type ParamMetaMap,
+  type TemplateParamInfo,
+} from "./model/template-params";
 export {
   categoryTitle,
   normalizeCategories,

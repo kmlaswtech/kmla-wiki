@@ -56,13 +56,16 @@ select is(
   pg_temp.refs('{"type":"doc","content":[],"attrs":{"categories":["나쁜<분류>",""]}}'),
   '', 'an invalid category');
 select is(
-  pg_temp.refs('{"type":"doc","content":[{"type":"template","attrs":{"name":"틀:오래된 정보","args":[]}}]}'),
+  pg_temp.refs('{"type":"doc","content":[{"type":"template","attrs":{"name":"틀:오래된 정보"}}]}'),
   'template=틀:오래된 정보', 'a template');
 select is(
-  pg_temp.refs('{"type":"doc","content":[{"type":"template","attrs":{"name":"상위 문서","args":["외출·외박"]}}]}'),
+  pg_temp.refs('{"type":"doc","content":[{"type":"template","attrs":{"name":"상위 문서"},"content":[{"type":"templateArg","attrs":{"name":"문서"},"content":[{"type":"text","text":"외출·외박"}]}]}]}'),
   'template=틀:상위 문서', 'a template without the prefix');
 select is(
-  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"templateParam","attrs":{"index":1}}]}]}'),
+  pg_temp.refs('{"type":"doc","content":[{"type":"template","attrs":{"name":"틀:알림"},"content":[{"type":"templateArg","attrs":{"name":"사유"},"content":[{"type":"text","text":"합의","marks":[{"type":"wikiLink","attrs":{"target":"합의","section":""}}]}]}]}]}'),
+  'link=합의 template=틀:알림', 'a link inside a template value');
+select is(
+  pg_temp.refs('{"type":"doc","content":[{"type":"paragraph","content":[{"type":"templateParam","attrs":{"name":"사유"}}]}]}'),
   '', 'a template parameter');
 select is(
   pg_temp.refs('{"type":"doc","content":[{"type":"image","attrs":{"id":"0b9f4c1e-8a57-4c8f-9b0a-1f2e3d4c5b6a","alt":"지도"}}]}'),

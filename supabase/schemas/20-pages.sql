@@ -4,6 +4,23 @@
 
 SET check_function_bodies = false;
 
+-- 틀 값 이름(`features/markup/model/template-params.ts`의 `isParamName`): 비지 않고, 앞뒤 빈칸이 없고,
+-- 20자 이하.
+CREATE OR REPLACE FUNCTION private.is_param_name (
+  p_name text
+)
+  RETURNS boolean
+  LANGUAGE sql
+  IMMUTABLE
+  SET search_path TO ''
+  AS $function$
+  select coalesce(p_name <> '' and p_name !~ '^\s|\s$' and char_length(p_name) <= 20, false)
+$function$;
+
+GRANT EXECUTE ON FUNCTION "private"."is_param_name"(text) TO "authenticated";
+
+REVOKE ALL ON FUNCTION "private"."is_param_name"(text) FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION private.check_body (
   p_body jsonb
 )
@@ -14,6 +31,7 @@ CREATE OR REPLACE FUNCTION private.check_body (
   AS $function$
 declare
   v_profile jsonb;
+  v_params jsonb;
 begin
   -- 노드 한 겹이 JSON 두 겹(`content` 배열과 노드)이다. 편집기에서 만드는 문서는 이보다 훨씬 얕다.
   if jsonb_path_exists(p_body, 'strict $.**{200}') then
@@ -53,6 +71,53 @@ begin
     'strict $.** ? (@.type == "image" || @.type == "youtube").attrs.caption'
   ) then
     raise exception 'outdated body' using errcode = 'WK012', detail = 'caption';
+  end if;
+
+  -- 틀 값은 이름으로 넘긴다(`features/markup/model/template-params.ts`). 배포 전에 연 탭의 편집기는 번호
+  -- 값(`template`의 `attrs.args`, `templateParam`의 `attrs.index`)을 보낸다. 받으면 값이 오류 없이
+  -- 사라지므로 저장을 막는다.
+  if jsonb_path_exists(p_body, 'strict $.** ? (@.type == "template").attrs.args')
+     or jsonb_path_exists(p_body, 'strict $.** ? (@.type == "templateParam").attrs.index') then
+    raise exception 'outdated body' using errcode = 'WK012', detail = 'template';
+  end if;
+
+  -- 값 이름은 앞뒤 빈칸이 없는 1~20자 글자다. 한 틀에 같은 이름의 값을 둘 넘기지 않는다.
+  if exists (
+    select
+    from jsonb_path_query(
+      p_body,
+      'strict $.** ? (@.type == "templateArg" || @.type == "templateParam")'
+    ) as node (value)
+    where jsonb_typeof(node.value -> 'attrs' -> 'name') is distinct from 'string'
+       or not private.is_param_name(node.value -> 'attrs' ->> 'name')
+  ) or exists (
+    select
+    from jsonb_path_query(p_body, 'strict $.** ? (@.type == "template").content') as args (value)
+    where jsonb_typeof(args.value) = 'array'
+      and (select count(*) <> count(distinct arg.value -> 'attrs' ->> 'name')
+           from jsonb_array_elements(args.value) as arg (value))
+  ) then
+    raise exception 'invalid body' using errcode = 'WK012', detail = 'template';
+  end if;
+
+  -- 틀 문서의 값 자리 설명·기본값. `{ 이름: { hint?: 글자, default?: 글자 } }`.
+  v_params := p_body -> 'attrs' -> 'params';
+  if v_params is not null and (
+    jsonb_typeof(v_params) <> 'object'
+    or exists (
+      select
+      from jsonb_each(v_params) as item (key, value)
+      where not private.is_param_name(item.key)
+         or jsonb_typeof(item.value) is distinct from 'object'
+         or exists (
+           select
+           from jsonb_each(item.value) as field (key, value)
+           where field.key not in ('hint', 'default')
+              or jsonb_typeof(field.value) <> 'string'
+         )
+    )
+  ) then
+    raise exception 'invalid body' using errcode = 'WK012', detail = 'params';
   end if;
 
   -- 프로필(`features/markup/model/profile.ts`). 본문과 같은 블록 노드 목록이다. 링크 주소와 제목 단계는
@@ -253,7 +318,8 @@ begin
   end case;
 
   -- 이미지·영상은 내용(캡션 노드)의 글자만 보인다. 대체 텍스트는 보이지 않는다.
-  v_separator := case when v_type in ('paragraph', 'heading', 'codeBlock', 'footnote', 'caption') then '' else E'\n' end;
+  -- 틀에 넘긴 값(`templateArg`)은 inline 내용이다. 값과 값 사이는 줄바꿈이다.
+  v_separator := case when v_type in ('paragraph', 'heading', 'codeBlock', 'footnote', 'caption', 'templateArg') then '' else E'\n' end;
   -- 접기는 제목도 보이는 글자다.
   v_out := case when v_type = 'fold' then nullif(p_body -> 'attrs' ->> 'title', '') end;
   -- 자식 글자는 한 번에 잇는다. 하나씩 덧붙이면 글이 길수록 앞부분을 거듭 복사한다.

@@ -8,6 +8,8 @@ export type EditorRequest =
   | { kind: "link" }
   /** `pos`가 있으면 그 자리의 틀을 고친다. */
   | { kind: "template"; pos?: number }
+  /** 틀 문서의 값 자리 넣기. `existing`은 이 문서에 이미 있는 이름. */
+  | { kind: "templateParam"; existing: string[] }
   /** `pos`가 있으면 그 자리의 각주를 고친다. */
   | { kind: "footnote"; pos?: number }
   | { kind: "table" }

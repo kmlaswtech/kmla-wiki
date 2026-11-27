@@ -1,8 +1,8 @@
-import { Extension, type Editor } from "@tiptap/core";
+import { Extension, InputRule, type Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { Link2 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { footnoteExtensions } from "../model/schema";
 import type { EditorRequest } from "./editor-ui";
@@ -12,15 +12,22 @@ import { TitleInput } from "./title-input";
 import {
   baseName,
   EMPTY_CAPTION,
+  isBlankValue,
+  isParamName,
   MARK,
   NODE,
+  PARAM_NAME_MAX,
   parseYoutubeUrl,
   SAFE_HREF,
+  templateArgsOf,
+  templateParamsOf,
   templateTitle,
+  titleKey,
+  type WikiDoc,
   type WikiNode,
   youtubeWatchUrl,
 } from "~/features/markup";
-import { resolveRedirect } from "~/features/pages";
+import { resolveBody, resolveRedirect } from "~/features/pages";
 import { Button } from "~/shared/ui/button";
 import {
   Dialog,
@@ -33,7 +40,6 @@ import {
 import { Input } from "~/shared/ui/input";
 import { Label } from "~/shared/ui/label";
 import { Spinner } from "~/shared/ui/spinner";
-import { Textarea } from "~/shared/ui/textarea";
 
 /**
  * 편집기의 대화상자. 하나만 열리고, 닫히면 편집기로 초점을 돌린다.
@@ -72,6 +78,12 @@ export function EditorDialogs({
           <LinkForm editor={editor} onDone={close} />
         ) : shown?.kind === "template" ? (
           <TemplateForm editor={editor} pos={shown.pos} onDone={close} />
+        ) : shown?.kind === "templateParam" ? (
+          <TemplateParamForm
+            editor={editor}
+            existing={shown.existing}
+            onDone={close}
+          />
         ) : shown?.kind === "footnote" ? (
           <FootnoteForm editor={editor} pos={shown.pos} onDone={close} />
         ) : shown?.kind === "table" ? (
@@ -338,7 +350,45 @@ function RemoveNodeButton({
   );
 }
 
-/** 틀 삽입·편집. 값은 한 줄에 하나씩 적는다(틀 문서의 {{{1}}}, {{{2}}} 자리에 차례로 들어간다). */
+/** 틀 문서를 불러오는 상태. `null`은 없는 틀이다. */
+type TemplateBody = WikiDoc | null | "loading";
+
+/** 틀 이름을 치는 동안 틀 문서를 받는다. 치기를 멈추면 받는다. */
+function useTemplateBody(title: string | null): TemplateBody {
+  const [state, setState] = useState<{ key: string; body: WikiDoc | null }>();
+  const key = title ? titleKey(title) : "";
+  useEffect(() => {
+    if (!title) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      resolveBody({
+        type: "doc",
+        content: [{ type: NODE.template, attrs: { name: title } }],
+      }).then(
+        (resolved) =>
+          !cancelled &&
+          setState({ key, body: resolved.templates.get(key) ?? null }),
+        () => !cancelled && setState({ key, body: null }),
+      );
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [title, key]);
+  if (!title) return null;
+  return state?.key === key ? state.body : "loading";
+}
+
+/**
+ * 틀 삽입·편집. 틀 문서의 값 자리마다 칸을 하나씩 보인다. 칸은 각주처럼 꾸밈과 링크를 넣을 수 있는
+ * 작은 편집기다. 빈 칸은 저장하지 않는다(틀이 기본값을 쓰거나, 그 줄을 숨긴다).
+ *
+ * 틀 문서에서 값 자리의 이름을 바꾸거나 지우면, 그 이름으로 넘기던 값은 "쓰지 않는 값"으로 보인다.
+ * 저절로 옮기지 않는다. 비우면 저장할 때 빠진다.
+ *
+ * 링크 넣기는 각주처럼 대화상자를 바꾸지 않고 이 안에서 화면만 바꾼다.
+ */
 function TemplateForm({
   editor,
   pos,
@@ -352,69 +402,320 @@ function TemplateForm({
   const [name, setName] = useState(
     current ? baseName(String(current.node.attrs.name ?? "")) : "",
   );
-  const [values, setValues] = useState(
+  const [initialArgs] = useState(() =>
     current
-      ? ((current.node.attrs.args as string[] | undefined) ?? []).join("\n")
-      : "",
+      ? templateArgsOf(current.node.toJSON() as WikiNode)
+      : new Map<string, WikiNode[]>(),
   );
+  const fields = useRef(new Map<string, Editor>());
+  const [linkTarget, setLinkTarget] = useState<Editor | null>(null);
 
   const title = name.trim() === "" ? null : templateTitle(name);
   const invalid = name.trim() !== "" && title === null;
+  const body = useTemplateBody(title);
+  const params = body && body !== "loading" ? templateParamsOf(body) : [];
+  const unused =
+    body === "loading"
+      ? []
+      : [...initialArgs.keys()].filter(
+          (key) => !params.some((param) => param.name === key),
+        );
 
   const submit = () => {
     if (!title) return;
-    upsertNode(editor, current, NODE.template, {
-      name: title,
-      args: values === "" ? [] : values.split("\n").map((line) => line.trim()),
-    });
+    const args: WikiNode[] = [];
+    const names = [...params.map((param) => param.name), ...unused];
+    // 불러오는 중에 저장하면 칸이 없다. 그때는 넘기던 값을 그대로 둔다.
+    for (const key of body === "loading" ? [...initialArgs.keys()] : names) {
+      const field = fields.current.get(key);
+      const content = field
+        ? ((field.state.doc.firstChild?.content.toJSON() ?? []) as WikiNode[])
+        : (initialArgs.get(key) ?? []);
+      if (isBlankValue(content)) continue;
+      args.push({ type: NODE.templateArg, attrs: { name: key }, content });
+    }
+    const node: WikiNode = {
+      type: NODE.template,
+      attrs: { name: title },
+      ...(args.length > 0 ? { content: args } : {}),
+    };
+    if (current) {
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(
+          { from: current.pos, to: current.pos + current.node.nodeSize },
+          node,
+        )
+        .run();
+    } else {
+      editor.chain().focus().leaveCaption().insertContent(node).run();
+    }
+    onDone();
+  };
+
+  const field = (key: string, label: ReactNode, hint?: string) => (
+    <ValueField
+      key={key}
+      name={key}
+      label={label}
+      hint={hint}
+      initial={initialArgs.get(key) ?? []}
+      onEditor={(next) => {
+        if (next) fields.current.set(key, next);
+        else fields.current.delete(key);
+      }}
+      onLink={setLinkTarget}
+    />
+  );
+
+  return (
+    <>
+      {/* `hidden`은 화면에서도, 화면 읽기 프로그램에서도 숨긴다(제목이 둘로 읽히지 않는다). */}
+      <div className="contents" hidden={linkTarget !== null}>
+        <DialogForm
+          title={current ? "틀 설정" : "틀 삽입"}
+          description="틀의 공통 내용은 틀 문서에서 편집할 수 있습니다."
+          onSubmit={submit}
+          footer={
+            <>
+              {current ? (
+                <RemoveNodeButton
+                  editor={editor}
+                  target={current}
+                  onDone={onDone}
+                >
+                  틀 제거
+                </RemoveNodeButton>
+              ) : null}
+              <Button type="submit" disabled={title === null}>
+                {current ? "저장" : "삽입"}
+              </Button>
+            </>
+          }
+        >
+          <div className="grid gap-1.5">
+            <Label htmlFor="template-name">틀 이름</Label>
+            <TitleInput
+              id="template-name"
+              value={name}
+              onChange={setName}
+              prefix="틀:"
+              placeholder="예: 오래된 정보"
+              focusOnMount
+              aria-invalid={invalid || undefined}
+              aria-describedby={invalid ? "template-name-error" : undefined}
+            />
+            {invalid ? (
+              <p id="template-name-error" className="text-sm text-destructive">
+                쓸 수 없는 이름입니다({"[ ] { } | # < >"}는 제목에 쓸 수
+                없습니다).
+              </p>
+            ) : null}
+          </div>
+          {body === "loading" ? (
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Spinner /> 틀을 불러오는 중
+            </p>
+          ) : title && body === null ? (
+            <p className="text-sm text-muted-foreground">
+              아직 없는 틀입니다. 틀 문서를 만들면 값 칸이 생깁니다.
+            </p>
+          ) : null}
+          {params.length > 0 || unused.length > 0 ? (
+            <div className="-mx-1 grid max-h-[50dvh] gap-3 overflow-y-auto px-1">
+              {params.map((param) =>
+                field(
+                  param.name,
+                  param.name,
+                  [
+                    param.hint,
+                    param.default ? `비우면 "${param.default}"` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || undefined,
+                ),
+              )}
+              {unused.map((key) =>
+                field(
+                  key,
+                  <>
+                    {key}{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (쓰지 않는 값)
+                    </span>
+                  </>,
+                  "틀 문서에 이 이름의 값 자리가 없습니다. 비우면 저장할 때 빠집니다.",
+                ),
+              )}
+            </div>
+          ) : null}
+        </DialogForm>
+      </div>
+      {linkTarget ? (
+        <LinkForm
+          editor={linkTarget}
+          onDone={() => {
+            const target = linkTarget;
+            setLinkTarget(null);
+            requestAnimationFrame(() => target.commands.focus());
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** 틀 값 칸 하나: 꾸밈 단추와 작은 편집기. 각주 편집기와 같은 스키마다. */
+function ValueField({
+  name,
+  label,
+  hint,
+  initial,
+  onEditor,
+  onLink,
+}: {
+  name: string;
+  label: ReactNode;
+  hint?: string;
+  initial: readonly WikiNode[];
+  onEditor: (editor: Editor | null) => void;
+  onLink: (editor: Editor) => void;
+}) {
+  const hintId = useId();
+  // 편집기의 키가 부를 함수. 편집기는 한 번만 만들므로 상자에 최신 함수를 둔다.
+  const [keys] = useState(() => createBox({ link: () => {} }));
+  const [extensions] = useState(() => [
+    ...footnoteExtensions(),
+    FootnoteKeys.configure({ link: () => keys.current.link() }),
+    ParamInputRule,
+  ]);
+  const value = useEditor({
+    extensions,
+    content: {
+      type: "doc",
+      content: [{ type: NODE.paragraph, content: [...initial] }],
+    },
+    immediatelyRender: true,
+    shouldRerenderOnTransaction: false,
+    editorProps: {
+      attributes: {
+        "aria-label": `${name} 값`,
+        ...(hint ? { "aria-describedby": hintId } : {}),
+        class: "wiki-content wiki-footnote min-h-9 px-3 py-1.5 outline-none",
+      },
+    },
+  });
+  const latestOnEditor = useRef(onEditor);
+  useEffect(() => {
+    latestOnEditor.current = onEditor;
+    if (value) keys.update({ link: () => onLink(value) });
+  });
+  // 칸이 생길 때와 사라질 때만 알린다.
+  useEffect(() => {
+    latestOnEditor.current(value);
+    return () => latestOnEditor.current(null);
+  }, [value]);
+
+  if (!value) return null;
+  return (
+    <div className="grid gap-1.5">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="overflow-hidden rounded-md border focus-within:ring-2 focus-within:ring-ring/50">
+        <div
+          role="toolbar"
+          aria-label={`${name} 값 꾸밈`}
+          className="flex flex-wrap items-center gap-0.5 border-b bg-muted/90 p-1"
+        >
+          <MarkTools editor={value} />
+          <Divider />
+          <ToolButton label="링크" onClick={() => onLink(value)}>
+            <Link2 />
+          </ToolButton>
+        </div>
+        <EditorContent editor={value} />
+      </div>
+      {hint ? (
+        <p id={hintId} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * 값 자리 넣기(틀 문서). 이름을 쓰거나, 이 문서에 이미 있는 이름을 고른다. 같은 이름의 자리는 같은
+ * 값으로 채워진다.
+ */
+function TemplateParamForm({
+  editor,
+  existing,
+  onDone,
+}: {
+  editor: Editor;
+  existing: readonly string[];
+  onDone: () => void;
+}) {
+  const [name, setName] = useState("");
+  const trimmed = name.trim();
+  const valid = isParamName(trimmed);
+  const tooLong = [...trimmed].length > PARAM_NAME_MAX;
+
+  const insert = (value: string) => {
+    editor
+      .chain()
+      .focus()
+      .insertContent({ type: NODE.templateParam, attrs: { name: value } })
+      .run();
     onDone();
   };
 
   return (
     <DialogForm
-      title={current ? "틀 설정" : "틀 삽입"}
-      description="틀의 공통 내용은 틀 문서에서 편집할 수 있습니다."
-      onSubmit={submit}
+      title="값 자리 넣기"
+      description="틀을 쓰는 문서가 이 이름으로 넘긴 값이 이 자리에 들어갑니다. 설명과 기본값은 편집기 위의 '틀 값' 칸에서 정합니다."
+      onSubmit={() => valid && insert(trimmed)}
       footer={
-        <>
-          {current ? (
-            <RemoveNodeButton editor={editor} target={current} onDone={onDone}>
-              틀 제거
-            </RemoveNodeButton>
-          ) : null}
-          <Button type="submit" disabled={title === null}>
-            {current ? "저장" : "삽입"}
-          </Button>
-        </>
+        <Button type="submit" disabled={!valid}>
+          넣기
+        </Button>
       }
     >
       <div className="grid gap-1.5">
-        <Label htmlFor="template-name">틀 이름</Label>
-        <TitleInput
-          id="template-name"
+        <Label htmlFor="template-param-name">값 이름</Label>
+        <Input
+          id="template-param-name"
           value={name}
-          onChange={setName}
-          prefix="틀:"
-          placeholder="예: 오래된 정보"
-          focusOnMount
-          aria-invalid={invalid || undefined}
-          aria-describedby={invalid ? "template-name-error" : undefined}
+          placeholder="예: 이름, 기간, 사유"
+          aria-invalid={tooLong || undefined}
+          aria-describedby={tooLong ? "template-param-error" : undefined}
+          onChange={(event) => setName(event.target.value)}
         />
-        {invalid ? (
-          <p id="template-name-error" className="text-sm text-destructive">
-            쓸 수 없는 이름입니다({"[ ] { } | # < >"}는 제목에 쓸 수 없습니다).
+        {tooLong ? (
+          <p id="template-param-error" className="text-sm text-destructive">
+            이름은 {PARAM_NAME_MAX}자까지 쓸 수 있습니다.
           </p>
         ) : null}
       </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="template-values">매개변수 (선택, 한 줄에 하나)</Label>
-        <Textarea
-          id="template-values"
-          value={values}
-          rows={3}
-          onChange={(event) => setValues(event.target.value)}
-        />
-      </div>
+      {existing.length > 0 ? (
+        <div className="grid gap-1.5">
+          <span className="text-sm font-medium">이 틀에 있는 값</span>
+          <div className="flex flex-wrap gap-1.5">
+            {existing.map((item) => (
+              <Button
+                key={item}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => insert(item)}
+              >
+                {item}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </DialogForm>
   );
 }
@@ -435,6 +736,30 @@ const FootnoteKeys = Extension.create<{ link: () => void }>({
         return true;
       },
     };
+  },
+});
+
+/**
+ * 틀 값 칸에서 `{{{이름}}}`을 치면 값 자리가 된다. 틀 문서 안에서 다른 틀을 부를 때, 이 틀이 받은 값을
+ * 그대로 넘기는 데 쓴다.
+ */
+const ParamInputRule = Extension.create({
+  name: "paramInputRule",
+
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /\{\{\{([^{}]+)\}\}\}$/,
+        handler: ({ range, match, chain }) => {
+          const name = match[1]!.trim();
+          if (!isParamName(name)) return null;
+          chain()
+            .deleteRange(range)
+            .insertContent({ type: NODE.templateParam, attrs: { name } })
+            .run();
+        },
+      }),
+    ];
   },
 });
 

@@ -43,14 +43,24 @@ export const caption = (...content: (string | WikiNode)[]): WikiNode[] => [
     : { type: "caption" },
 ];
 
-export const template = (name: string, args: string[] = []): WikiNode => ({
-  type: "template",
-  attrs: { name, args },
-});
+/** 틀 끼워 넣기. 값은 이름 → 글자(글자 노드 하나) 또는 inline 노드 목록. */
+export const template = (
+  name: string,
+  args: Record<string, string | WikiNode[]> = {},
+): WikiNode => {
+  const content = Object.entries(args).map(([argName, value]) => ({
+    type: "templateArg",
+    attrs: { name: argName },
+    content: typeof value === "string" ? [text(value)] : value,
+  }));
+  return content.length > 0
+    ? { type: "template", attrs: { name }, content }
+    : { type: "template", attrs: { name } };
+};
 
-export const param = (index: number): WikiNode => ({
+export const param = (name: string): WikiNode => ({
   type: "templateParam",
-  attrs: { index },
+  attrs: { name },
 });
 
 export const doc = (...content: WikiNode[]): WikiDoc => ({

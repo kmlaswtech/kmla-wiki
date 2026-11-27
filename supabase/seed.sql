@@ -77,7 +77,7 @@ declare
       )
     ) || jsonb_build_object('attrs', v_category)),
     jsonb_build_array('귀가/정기 귀가', private.doc_of(
-      jsonb_build_object('type', 'template', 'attrs', jsonb_build_object('name', '틀:오래된 정보', 'args', '[]'::jsonb)),
+      jsonb_build_object('type', 'template', 'attrs', jsonb_build_object('name', '틀:오래된 정보')),
       private.doc_para(
         private.doc_text_node('귀가주에 집에 가는 것. '),
         private.doc_text_node('금요일', 'underline'),

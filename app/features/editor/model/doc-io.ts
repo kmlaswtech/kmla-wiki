@@ -8,7 +8,11 @@ import {
   isEmptyProfile,
   NODE,
   normalizeCategories,
+  paramMetaOf,
+  paramNamesOf,
   profileOf,
+  pruneParamMeta,
+  type ParamMetaMap,
   type WikiDoc,
   type WikiDocAttrs,
   type WikiNode,
@@ -21,6 +25,8 @@ export interface DocMeta {
   categories: string[];
   /** 프로필 블록. 없으면 `null`. 본문과 따로 된 편집기에서 고친다. */
   profile: WikiProfile | null;
+  /** 틀 문서의 값 자리 설명·기본값. 본문에 없는 이름의 것은 저장할 때 빠진다. */
+  params?: ParamMetaMap;
 }
 
 /**
@@ -35,6 +41,7 @@ export function splitDoc(doc: WikiDoc): { content: WikiDoc; meta: DocMeta } {
     meta: {
       categories: doc.attrs?.categories ?? [],
       profile: profileOf(doc),
+      params: paramMetaOf(doc),
     },
   };
 }
@@ -43,7 +50,7 @@ export function splitDoc(doc: WikiDoc): { content: WikiDoc; meta: DocMeta } {
  * 편집기 본문과 문서 정보를 저장할 문서 하나로 합친다.
  *
  * 같은 내용은 언제나 같은 값이 되게 맞춘다: 끝의 빈 문단을 떼고, 분류는 제목으로 바꿔 겹친 것을
- * 빼고, 빈 문서 정보(빈 프로필 포함)는 적지 않는다. 그래야 "바뀐 것이 있는가"를 값 비교로 알 수 있다.
+ * 빼고, 빈 문서 정보(빈 프로필, 본문에 없는 값 자리의 설명 포함)는 적지 않는다. 그래야 "바뀐 것이 있는가"를 값 비교로 알 수 있다.
  */
 export function joinDoc(content: WikiDoc, meta: DocMeta): WikiDoc {
   const blocks = trimTrailingEmpty(content.content.map(omitUnsetStyle));
@@ -59,6 +66,10 @@ export function joinDoc(content: WikiDoc, meta: DocMeta): WikiDoc {
   if (meta.profile && !isEmptyProfile(meta.profile)) {
     attrs.profile = trimTrailingEmpty(meta.profile.map(omitUnsetStyle));
   }
+  const params = meta.params
+    ? pruneParamMeta(meta.params, paramNamesOf({ ...doc, attrs }))
+    : null;
+  if (params) attrs.params = params;
   if (Object.keys(attrs).length > 0) doc.attrs = attrs;
   return doc;
 }

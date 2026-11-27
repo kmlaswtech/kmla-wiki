@@ -234,6 +234,16 @@ function linkHref(state: EditorState, pos: number): string | null {
   return null;
 }
 
+/**
+ * 내용 자리(contentDOM)를 뗀 노드 뷰. 내용을 대화상자에서 고치는 atom 노드(각주, 틀)에 쓴다. React
+ * 노드 뷰는 내용이 있는 노드에 내용 자리를 저절로 붙이므로 여기서 뗀다.
+ */
+function withoutContentDom<T extends object>(view: T): T {
+  (view as { contentDOM?: HTMLElement | null }).contentDOM?.remove();
+  Object.defineProperty(view, "contentDOM", { value: null });
+  return view;
+}
+
 /** 편집 화면의 확장 전부: 스키마에 노드 뷰와 지름길을 더한다. */
 export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
   const views = new Map<string, AnyExtension>([
@@ -244,7 +254,9 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
     [
       Template.name,
       Template.extend({
-        addNodeView: () => ReactNodeViewRenderer(TemplateView),
+        // 넘기는 값은 대화상자에서 고친다. 본문에는 펼친 틀만 그린다.
+        addNodeView: () => (props) =>
+          withoutContentDom(ReactNodeViewRenderer(TemplateView)(props)),
       }),
     ],
     [
@@ -258,16 +270,11 @@ export function editorExtensions(options: WikiEditorOptions): AnyExtension[] {
     [
       Footnote.name,
       Footnote.extend({
-        addNodeView: () => (props) => {
-          const view = ReactNodeViewRenderer(FootnoteView, { as: "span" })(
-            props,
-          );
-          // 각주 내용은 대화상자에서 고친다. 본문에는 번호만 그리고, 내용 자리(contentDOM)는 두지
-          // 않는다. React 노드 뷰는 내용이 있는 노드에 내용 자리를 저절로 붙이므로 여기서 뗀다.
-          (view as { contentDOM?: HTMLElement | null }).contentDOM?.remove();
-          Object.defineProperty(view, "contentDOM", { value: null });
-          return view;
-        },
+        // 각주 내용은 대화상자에서 고친다. 본문에는 번호만 그린다.
+        addNodeView: () => (props) =>
+          withoutContentDom(
+            ReactNodeViewRenderer(FootnoteView, { as: "span" })(props),
+          ),
       }),
     ],
   ]);

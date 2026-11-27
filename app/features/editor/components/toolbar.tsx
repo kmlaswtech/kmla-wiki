@@ -7,6 +7,7 @@ import {
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
+  Braces,
   CircleHelp,
   Code,
   CornerDownRight,
@@ -39,8 +40,10 @@ import {
   MARK,
   NODE,
   pageHref,
+  paramNamesOf,
   type CellVAlign,
   type TextAlign,
+  type WikiDoc,
 } from "~/features/markup";
 import { cn } from "~/shared/lib/utils";
 import { Button } from "~/shared/ui/button";
@@ -359,21 +362,16 @@ export function Toolbar({
         {isTemplatePage ? (
           <>
             <DropdownMenuSeparator />
-            {[1, 2, 3].map((index) => (
-              <DropdownMenuItem
-                key={index}
-                onClick={() =>
-                  chain()
-                    .insertContent({
-                      type: NODE.templateParam,
-                      attrs: { index },
-                    })
-                    .run()
-                }
-              >
-                매개변수 {`{{{${index}}}}`}
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuItem
+              onClick={() =>
+                request({
+                  kind: "templateParam",
+                  existing: paramNamesOf(editor.getJSON() as WikiDoc),
+                })
+              }
+            >
+              <Braces />값 자리 넣기
+            </DropdownMenuItem>
           </>
         ) : null}
       </Menu>

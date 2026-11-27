@@ -29,6 +29,8 @@ export interface WikiDocAttrs {
   categories?: string[];
   /** 넘겨주기 문서면 대상 제목. */
   redirect?: string;
+  /** 틀 문서의 값 자리 설명·기본값(`model/template-params.ts`). `paramMetaOf`로 검사해 읽는다. */
+  params?: unknown;
 }
 
 export interface WikiDoc {
@@ -56,9 +58,14 @@ export const NODE = {
   tableCell: "tableCell",
   /** 접기. `attrs.title`. */
   fold: "fold",
-  /** 틀 끼워 넣기. `attrs.name`(틀 제목), `attrs.args`(값 목록). */
+  /** 틀 끼워 넣기. `attrs.name`(틀 제목). 내용은 넘기는 값(`templateArg`)들이다. */
   template: "template",
-  /** 틀 본문 안의 값 자리. `attrs.index`(1부터). */
+  /**
+   * 틀에 넘기는 값 하나. 틀 노드 안에만 있다. `attrs.name`(값 이름). 내용은 글자(꾸밈 포함), 줄바꿈,
+   * 값 자리(틀 안에서 다른 틀에 값을 넘길 때)다.
+   */
+  templateArg: "templateArg",
+  /** 틀 본문 안의 값 자리. `attrs.name`(값 이름, `model/template-params.ts`). */
   templateParam: "templateParam",
   /**
    * 올린 이미지. `attrs.id`(uuid), `attrs.alt`, `attrs.size`, `attrs.align`(`model/media.ts`). 내용은
@@ -140,13 +147,6 @@ export function numberAttr(
 ): number | null {
   const value = node.attrs?.[name];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-export function stringListAttr(node: WikiNode, name: string): string[] {
-  const value = node.attrs?.[name];
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
 }
 
 /** 노드 안의 글자를 모두 이어 붙인다(제목 글자, 각주 미리보기 등). */

@@ -31,8 +31,29 @@ describe("document attributes", () => {
     };
     const { content, meta } = splitDoc(body);
     expect(content.attrs).toBeUndefined();
-    expect(meta).toEqual({ categories: ["분류:생활"], profile: null });
+    expect(meta).toEqual({
+      categories: ["분류:생활"],
+      profile: null,
+      params: {},
+    });
     expect(joinDoc(content, meta)).toEqual(body);
+  });
+
+  it("keeps value hints only for value places still in the body", () => {
+    const body = {
+      ...doc(para(param("사유"))),
+      attrs: {
+        params: {
+          사유: { hint: " 왜 ", default: "" },
+          지운값: { hint: "옛 설명" },
+        },
+      },
+    };
+    const { content, meta } = splitDoc(body);
+    expect(joinDoc(content, meta)).toEqual({
+      ...doc(para(param("사유"))),
+      attrs: { params: { 사유: { hint: "왜" } } },
+    });
   });
 
   it("leaves the redirect out, because the body editor does not edit it", () => {
@@ -69,8 +90,8 @@ describe("normalizeDoc", () => {
   it("keeps every wiki node and mark", () => {
     const body = doc(
       heading(2, "개요"),
-      para(link("신성", "신성 시간", "규칙"), footnote("출처"), param(1)),
-      template("틀:오래된 정보", ["값"]),
+      para(link("신성", "신성 시간", "규칙"), footnote("출처"), param("값")),
+      template("틀:오래된 정보", { 사유: [text("값"), param("값")] }),
       {
         type: "image",
         attrs: {

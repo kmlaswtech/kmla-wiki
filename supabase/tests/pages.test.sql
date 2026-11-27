@@ -178,6 +178,62 @@ select throws_ok(
       '{"type":"doc","content":[{"type":"heading","attrs":{"level":-3},"content":[{"type":"text","text":"가"}]}]}'::jsonb)$$,
   'WK012', null, 'heading levels outside 2-4 are rejected');
 
+-- ── 틀 값 ───────────────────────────────────────────────────────────────────
+-- 값은 이름으로 넘긴다(`templateArg{name}`). 값 자리는 `templateParam{name}`이다.
+select page_id as p_named from public.save_revision('틀 값을 넘기는 문서', null,
+  '{"type":"doc","content":[{"type":"template","attrs":{"name":"틀:알림"},"content":[
+     {"type":"templateArg","attrs":{"name":"사유"},"content":[
+       {"type":"text","text":"합의 "},
+       {"type":"text","text":"토론","marks":[{"type":"wikiLink","attrs":{"target":"토론 문서","section":""}}]}
+     ]},
+     {"type":"templateArg","attrs":{"name":"기간"},"content":[{"type":"text","text":"한 주"}]}
+   ]}]}'::jsonb) \gset
+select is(
+  (select body_text from public.revisions where page_id = :p_named),
+  E'합의 토론\n한 주',
+  'template values are searchable text'
+);
+select ok(
+  exists (select 1 from public.page_refs where from_page_id = :p_named and kind = 'link'),
+  'links in template values are references'
+);
+select lives_ok(
+  $$select * from public.save_revision('틀:알림', null,
+      '{"type":"doc","attrs":{"params":{"사유":{"hint":"왜 붙였나","default":"없음"}}},
+        "content":[{"type":"paragraph","content":[{"type":"templateParam","attrs":{"name":"사유"}}]}]}'::jsonb)$$,
+  'a template page keeps hints and defaults for its values');
+select throws_ok(
+  $$select * from public.save_revision('형식 고장', null,
+      '{"type":"doc","content":[{"type":"template","attrs":{"name":"틀:알림","args":["가"]}}]}'::jsonb)$$,
+  'WK012', null, 'numbered template values are rejected (an editor tab from before the change)');
+select throws_ok(
+  $$select * from public.save_revision('형식 고장', null,
+      '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"templateParam","attrs":{"index":1}}]}]}'::jsonb)$$,
+  'WK012', null, 'numbered value places are rejected');
+select throws_ok(
+  $$select * from public.save_revision('형식 고장', null,
+      '{"type":"doc","content":[{"type":"template","attrs":{"name":"틀:알림"},"content":[
+         {"type":"templateArg","attrs":{"name":" 사유"}}]}]}'::jsonb)$$,
+  'WK012', null, 'a value name may not start or end with a space');
+select throws_ok(
+  $$select * from public.save_revision('형식 고장', null,
+      '{"type":"doc","content":[{"type":"paragraph","content":[
+         {"type":"templateParam","attrs":{"name":"일이삼사오육칠팔구십일이삼사오육칠팔구십일"}}]}]}'::jsonb)$$,
+  'WK012', null, 'a value name has at most 20 characters');
+select throws_ok(
+  $$select * from public.save_revision('형식 고장', null,
+      '{"type":"doc","content":[{"type":"template","attrs":{"name":"틀:알림"},"content":[
+         {"type":"templateArg","attrs":{"name":"사유"}},{"type":"templateArg","attrs":{"name":"사유"}}]}]}'::jsonb)$$,
+  'WK012', null, 'a template call may not pass the same value twice');
+select throws_ok(
+  $$select * from public.save_revision('형식 고장', null,
+      '{"type":"doc","attrs":{"params":{"사유":{"hint":3}}},"content":[]}'::jsonb)$$,
+  'WK012', null, 'a value hint must be text');
+select throws_ok(
+  $$select * from public.save_revision('형식 고장', null,
+      '{"type":"doc","attrs":{"params":{"사유":{"color":"빨강"}}},"content":[]}'::jsonb)$$,
+  'WK012', null, 'value settings are only a hint and a default');
+
 -- ── 프로필 ──────────────────────────────────────────────────────────────────
 -- 프로필은 본문과 같은 블록 노드 목록이다(`attrs.profile`).
 select page_id as p_profile from public.save_revision('프로필만 있는 문서', null,

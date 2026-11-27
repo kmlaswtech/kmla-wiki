@@ -93,7 +93,7 @@ select set_eq(
   array[
     'can_read', 'can_edit', 'is_admin',
     'normalize_title', 'is_valid_title', 'title_key', 'extract_refs',
-    'empty_doc', 'doc_text', 'doc_is_empty', 'check_body'
+    'empty_doc', 'doc_text', 'doc_is_empty', 'check_body', 'is_param_name'
   ],
   'authenticated can execute only the policy helpers and pure title/markup functions in private'
 );

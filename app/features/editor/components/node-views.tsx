@@ -34,8 +34,9 @@ import {
   MEDIA_SIZES,
   mediaAlign,
   mediaSize,
-  NODE,
+  nodeText,
   parseWiki,
+  templateArgsOf,
   templateTitle,
   WikiContent,
   youtubeThumbnailUrl,
@@ -87,23 +88,22 @@ export function TemplateView({
   editor,
 }: ReactNodeViewProps) {
   const { resolved, images, request } = useEditorUi();
-  const name = String(node.attrs.name ?? "");
-  const args = (node.attrs.args as string[] | undefined) ?? [];
-  const argsKey = JSON.stringify(args);
+  // 노드는 고칠 때마다 새 값이다. 같은 내용이면 다시 펼치지 않게 JSON으로 비교한다.
+  const json = JSON.stringify(node.toJSON());
+  const call = useMemo(() => JSON.parse(json) as WikiNode, [json]);
+  const name = typeof call.attrs?.name === "string" ? call.attrs.name : "";
   const title = templateTitle(name);
+  const summary = [...templateArgsOf(call)]
+    .map(([key, value]) => `${key}: ${value.map(nodeText).join("").trim()}`)
+    .join(", ");
 
-  const document = useMemo(() => {
-    const doc: WikiDoc = {
-      type: "doc",
-      content: [
-        {
-          type: NODE.template,
-          attrs: { name, args: JSON.parse(argsKey) as string[] },
-        },
-      ],
-    };
-    return parseWiki(doc, { templates: resolved.templates });
-  }, [name, argsKey, resolved.templates]);
+  const document = useMemo(
+    () =>
+      parseWiki({ type: "doc", content: [call] } satisfies WikiDoc, {
+        templates: resolved.templates,
+      }),
+    [call, resolved.templates],
+  );
 
   return (
     <NodeViewWrapper
@@ -118,9 +118,7 @@ export function TemplateView({
         <span className="font-medium">
           틀: {title ? baseName(title) : name}
         </span>
-        {args.length > 0 ? (
-          <span className="truncate">({args.join(", ")})</span>
-        ) : null}
+        {summary ? <span className="truncate">({summary})</span> : null}
         {editor.isEditable ? (
           <EditNodeButton
             className="ml-auto"

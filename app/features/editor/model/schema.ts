@@ -118,11 +118,17 @@ export const WikiLink = Mark.create({
  */
 export const FOOTNOTE_CONTENT = `(${NODE.text} | ${NODE.hardBreak} | ${NODE.templateParam})*`;
 
-/** 각주 내용의 글자. 줄바꿈은 띄어쓰기로, 값 자리는 `{{{n}}}`로 적는다(툴팁, 복사한 글자). */
+/**
+ * 틀에 넘기는 값 안에 들어갈 수 있는 것. 각주 내용과 같다. 값 자리는 틀 안에서 다른 틀에 값을 넘길
+ * 때 쓴다.
+ */
+const TEMPLATE_ARG_CONTENT = FOOTNOTE_CONTENT;
+
+/** 각주 내용의 글자. 줄바꿈은 띄어쓰기로, 값 자리는 `{{{이름}}}`로 적는다(툴팁, 복사한 글자). */
 export function footnoteText(node: PMNode): string {
   return node.textBetween(0, node.content.size, " ", (leaf) =>
     leaf.type.name === NODE.templateParam
-      ? `{{{${String(leaf.attrs.index ?? 1)}}}}`
+      ? `{{{${String(leaf.attrs.name ?? "")}}}}`
       : " ",
   );
 }
@@ -227,10 +233,16 @@ export const Fold = Node.create({
   },
 });
 
-/** 틀 끼워 넣기. 편집기 안에서는 틀 본문을 펼쳐 보여 주되, 직접 고치지는 않는다. */
+/**
+ * 틀 끼워 넣기. 편집기 안에서는 틀 본문을 펼쳐 보여 주되, 직접 고치지는 않는다.
+ *
+ * 넘기는 값은 자식 노드(`templateArg`)다. `atom`이라 커서가 값 안으로 들어가지 않는다. 값은 틀
+ * 대화상자의 작은 편집기에서 고친다(각주와 같다).
+ */
 export const Template = Node.create({
   name: NODE.template,
   group: "block",
+  content: `${NODE.templateArg}*`,
   atom: true,
   selectable: true,
   draggable: true,
@@ -242,20 +254,6 @@ export const Template = Node.create({
         parseHTML: (element) => element.getAttribute("data-name") ?? "",
         rendered: false,
       },
-      args: {
-        default: [],
-        parseHTML: (element) => {
-          try {
-            const value: unknown = JSON.parse(
-              element.getAttribute("data-args") ?? "[]",
-            );
-            return Array.isArray(value) ? value.map(String) : [];
-          } catch {
-            return [];
-          }
-        },
-        rendered: false,
-      },
     };
   },
 
@@ -264,20 +262,35 @@ export const Template = Node.create({
   },
 
   renderHTML({ node }) {
-    const args = (node.attrs.args as string[] | undefined) ?? [];
-    return [
-      "div",
-      {
-        "data-template": "",
-        "data-name": node.attrs.name,
-        "data-args": JSON.stringify(args),
-      },
-      `{{${String(node.attrs.name)}${args.map((arg) => `|${arg}`).join("")}}}`,
-    ];
+    return ["div", { "data-template": "", "data-name": node.attrs.name }, 0];
   },
 });
 
-/** 틀 본문 안의 값 자리(`{{{1}}}`). 틀을 쓰는 문서에서 넘긴 값으로 바뀐다. */
+/** 틀에 넘기는 값 하나. 틀 노드 안에만 들어간다. */
+export const TemplateArg = Node.create({
+  name: NODE.templateArg,
+  content: TEMPLATE_ARG_CONTENT,
+
+  addAttributes() {
+    return {
+      name: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-template-arg") ?? "",
+        rendered: false,
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-template-arg]" }];
+  },
+
+  renderHTML({ node }) {
+    return ["div", { "data-template-arg": node.attrs.name }, 0];
+  },
+});
+
+/** 틀 본문 안의 값 자리(`{{{이름}}}`). 틀을 쓰는 문서에서 넘긴 값으로 바뀐다. */
 export const TemplateParam = Node.create({
   name: NODE.templateParam,
   group: "inline",
@@ -286,10 +299,10 @@ export const TemplateParam = Node.create({
 
   addAttributes() {
     return {
-      index: {
-        default: 1,
+      name: {
+        default: "",
         parseHTML: (element) =>
-          Number(element.getAttribute("data-template-param")) || 1,
+          element.getAttribute("data-template-param") ?? "",
         rendered: false,
       },
     };
@@ -302,13 +315,13 @@ export const TemplateParam = Node.create({
   renderHTML({ node }) {
     return [
       "code",
-      { "data-template-param": String(node.attrs.index) },
-      `{{{${String(node.attrs.index)}}}}`,
+      { "data-template-param": String(node.attrs.name) },
+      `{{{${String(node.attrs.name)}}}}`,
     ];
   },
 
   renderText({ node }) {
-    return `{{{${String(node.attrs.index)}}}}`;
+    return `{{{${String(node.attrs.name)}}}}`;
   },
 });
 
@@ -880,6 +893,7 @@ export function schemaExtensions(): AnyExtension[] {
     Footnote,
     Fold,
     Template,
+    TemplateArg,
     TemplateParam,
     WikiImage,
     Youtube,

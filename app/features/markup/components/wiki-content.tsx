@@ -587,9 +587,9 @@ function renderInline(
           <code
             key={index}
             className="wiki-template-param"
-            data-template-param={numberAttr(node, "index") ?? 1}
+            data-template-param={stringAttr(node, "name")}
           >
-            {`{{{${numberAttr(node, "index") ?? 1}}}}`}
+            {`{{{${stringAttr(node, "name")}}}}`}
           </code>
         );
       default:

@@ -1,17 +1,19 @@
 import {
   asWikiDoc,
+  MARK,
   NODE,
   nodeText,
-  numberAttr,
   stringAttr,
-  stringListAttr,
+  walk,
   type WikiDoc,
+  type WikiMark,
   type WikiNode,
 } from "./doc";
 import { createHeadingIdAllocator } from "./heading-id";
 import { profileOf } from "./profile";
 import { normalizeCategories, redirectTargetOf, templateTitle } from "./refs";
 import { headingDepth } from "./sections";
+import { isBlankValue, paramMetaOf, templateArgsOf } from "./template-params";
 import { titleKey } from "./title";
 
 /** 틀 안의 틀은 3단계까지 끼워 넣는다. DB의 `resolve_body`가 같은 깊이까지 본문을 내려 준다. */
@@ -76,7 +78,7 @@ interface Context {
 /**
  * 저장된 문서를 화면에 그릴 모양으로 준비한다. 순수 함수다(같은 입력에 같은 출력, I/O 없음).
  *
- *  - 틀 자리에 틀 본문을 끼워 넣고 값 자리(`{{{1}}}`)를 채운다.
+ *  - 틀 자리에 틀 본문을 끼워 넣고 값 자리를 이름 값으로 채운다. 값이 모두 빈 표 행은 숨긴다.
  *  - 맨 바깥 제목에 id와 목차 번호를 매긴다.
  *  - 각주에 차례대로 번호를 붙인다.
  */
@@ -141,34 +143,33 @@ export function parseWiki(
   };
 }
 
+/**
+ * 틀 하나를 펼칠 때의 값. `values`는 쓰는 문서가 넘긴 값(이름 → inline 노드), `defaults`는 틀 문서의
+ * 기본값이다.
+ */
+interface Scope {
+  values: ReadonlyMap<string, readonly WikiNode[]>;
+  defaults: ReadonlyMap<string, string>;
+}
+
 /** 노드를 복사하면서 안쪽의 틀을 펼치고 각주에 번호를 붙인다. */
 function prepare(
   node: WikiNode,
   context: Context,
   stack: readonly string[],
-  values?: readonly string[],
+  scope?: Scope,
 ): WikiNode {
   if (node.type === NODE.footnote) {
     // 각주 안에는 각주가 없으므로 안을 채운 뒤에 번호를 받아도 순서가 같다.
-    const content = prepareContent(node.content ?? [], context, stack, values);
+    const content = prepareContent(node.content ?? [], context, stack, scope);
     const number = context.footnotes.length + 1;
     context.footnotes.push({ number, content });
     return { ...node, attrs: { ...node.attrs, number }, content };
   }
-
-  if (node.type === NODE.templateParam && values) {
-    const index = numberAttr(node, "index") ?? 1;
-    // 틀 작성자가 그 자리에 건 꾸밈(굵게, 링크 등)은 값에도 그대로 건다.
-    return {
-      type: NODE.text,
-      text: values[index - 1]?.trim() ?? "",
-      ...(node.marks ? { marks: node.marks } : {}),
-    };
-  }
   if (!node.content) return node;
   return {
     ...node,
-    content: prepareContent(node.content, context, stack, values),
+    content: prepareContent(node.content, context, stack, scope),
   };
 }
 
@@ -176,18 +177,29 @@ function prepareContent(
   nodes: readonly WikiNode[],
   context: Context,
   stack: readonly string[],
-  values?: readonly string[],
+  scope?: Scope,
 ): WikiNode[] {
   const content: WikiNode[] = [];
   for (const child of nodes) {
     if (child.type === NODE.template) {
-      content.push(...expandTemplate(child, context, stack, values));
-    } else {
-      const prepared = prepare(child, context, stack, values);
-      // 빈 값으로 채운 자리는 빈 글자 노드가 된다. 그리지 않는다.
-      if (prepared.type === NODE.text && !prepared.text) continue;
-      content.push(prepared);
+      content.push(...expandTemplate(child, context, stack, scope));
+      continue;
     }
+    if (scope && child.type === NODE.templateParam) {
+      content.push(...fillParam(child, scope));
+      continue;
+    }
+    // 값 자리가 있는데 값이 모두 빈 표 행은 그리지 않는다(정보 상자의 빈 줄). 틀 문서 자체를 볼
+    // 때(`scope` 없음)는 모든 행을 보인다.
+    if (scope && child.type === NODE.tableRow && isEmptyRow(child, scope)) {
+      continue;
+    }
+    const prepared = prepare(child, context, stack, scope);
+    // 행이 모두 숨은 표는 그리지 않는다.
+    if (scope && prepared.type === NODE.table && !prepared.content?.length) {
+      continue;
+    }
+    content.push(prepared);
   }
   return content;
 }
@@ -202,7 +214,7 @@ function expandTemplate(
   node: WikiNode,
   context: Context,
   stack: readonly string[],
-  outer?: readonly string[],
+  outer?: Scope,
 ): WikiNode[] {
   const title = templateTitle(stringAttr(node, "name"));
   if (!title) return [];
@@ -217,26 +229,69 @@ function expandTemplate(
     return [{ type: MISSING_TEMPLATE, attrs: { title } }];
   }
 
-  // 틀 안에서 다른 틀을 부를 때 값에 `{{{1}}}`을 적으면 바깥 틀이 받은 값을 넘긴다.
-  const values = stringListAttr(node, "args").map((arg) =>
-    outer ? fillValues(arg, outer) : arg,
-  );
-  const nextStack = [...stack, key];
-  const nodes: WikiNode[] = [];
-  for (const block of asWikiDoc(body).content) {
-    if (block.type === NODE.template) {
-      nodes.push(...expandTemplate(block, context, nextStack, values));
-    } else {
-      nodes.push(prepare(block, context, nextStack, values));
-    }
+  // 틀 안에서 다른 틀을 부를 때 값에 값 자리를 넣으면 바깥 틀이 받은 값을 넘긴다.
+  const values = new Map<string, readonly WikiNode[]>();
+  for (const [name, value] of templateArgsOf(node)) {
+    values.set(name, outer ? substitute(value, outer) : value);
   }
-  return nodes;
+  const template = asWikiDoc(body);
+  const defaults = new Map<string, string>();
+  for (const [name, meta] of Object.entries(paramMetaOf(template))) {
+    if (meta.default) defaults.set(name, meta.default);
+  }
+  return prepareContent(template.content, context, [...stack, key], {
+    values,
+    defaults,
+  });
 }
 
-/** 값 글자 안의 `{{{번호}}}`를 바깥 틀이 받은 값으로 바꾼다. 없는 번호는 빈 글자. */
-function fillValues(arg: string, outer: readonly string[]): string {
-  return arg.replace(
-    /\{\{\{(\d+)\}\}\}/g,
-    (_, index: string) => outer[Number(index) - 1]?.trim() ?? "",
+/** 값 안의 값 자리를 바깥 틀이 받은 값으로 바꾼다. */
+function substitute(nodes: readonly WikiNode[], scope: Scope): WikiNode[] {
+  return nodes.flatMap((node) =>
+    node.type === NODE.templateParam ? fillParam(node, scope) : [node],
+  );
+}
+
+/** 값 자리에 들어갈 노드. 값이 비면 기본값, 기본값도 없으면 아무것도 없다. */
+function resolveParam(name: string, scope: Scope): readonly WikiNode[] {
+  const value = scope.values.get(name);
+  if (!isBlankValue(value)) return value!;
+  const fallback = scope.defaults.get(name);
+  return fallback ? [{ type: NODE.text, text: fallback }] : [];
+}
+
+/**
+ * 값 자리를 값으로 채운다. 틀 작성자가 그 자리에 건 꾸밈(굵게, 색 등)은 값에도 건다. 값에 링크가
+ * 있으면 작성자의 링크는 빼고 값의 링크를 쓴다. 같은 종류의 꾸밈은 값의 것을 쓴다.
+ */
+function fillParam(node: WikiNode, scope: Scope): WikiNode[] {
+  const value = resolveParam(stringAttr(node, "name"), scope);
+  const outer = node.marks ?? [];
+  return value.map((item) => {
+    if (item.type !== NODE.text || outer.length === 0) return item;
+    const own = item.marks ?? [];
+    const linked = own.some(isLinkMark);
+    const kept = outer.filter(
+      (mark) =>
+        !own.some((mine) => mine.type === mark.type) &&
+        !(linked && isLinkMark(mark)),
+    );
+    return kept.length > 0 ? { ...item, marks: [...kept, ...own] } : item;
+  });
+}
+
+function isLinkMark(mark: WikiMark): boolean {
+  return mark.type === MARK.link || mark.type === MARK.wikiLink;
+}
+
+/** 값 자리가 있고, 그 값이 모두 비었는가(기본값도 없음). */
+function isEmptyRow(row: WikiNode, scope: Scope): boolean {
+  const names: string[] = [];
+  walk(row.content ?? [], (node) => {
+    if (node.type === NODE.templateParam) names.push(stringAttr(node, "name"));
+  });
+  return (
+    names.length > 0 &&
+    names.every((name) => resolveParam(name, scope).length === 0)
   );
 }

@@ -38,6 +38,7 @@ import {
   namespaceOf,
   NODE,
   pageHref,
+  paramNamesOf,
   sectionScrollState,
   starterProfile,
   titleKey,
@@ -173,6 +174,7 @@ export function EditorForm({
     ],
     [meta.categories, presetStart],
   );
+  const isTemplatePage = namespaceOf(target.title) === "template";
   const form = useRef<HTMLFormElement>(null);
   /** 저장에 성공했거나 사용자가 버리기로 했을 때 켠다. 그 뒤의 이동은 막지 않는다. */
   const allowLeave = useRef(false);
@@ -181,6 +183,11 @@ export function EditorForm({
   const current = useMemo(
     () => joinDoc(content, sectionMode ? NO_META : meta),
     [content, meta, sectionMode],
+  );
+  // 틀 문서의 값 자리 이름(설명·기본값 칸). 다른 문서에서는 보이지 않는다.
+  const paramNames = useMemo(
+    () => (isTemplatePage ? paramNamesOf(current) : []),
+    [isTemplatePage, current],
   );
   const baseline = useMemo(() => normalizeDoc(editingPart(base)), [base]);
   const baselineJson = useMemo(() => JSON.stringify(baseline), [baseline]);
@@ -508,7 +515,9 @@ export function EditorForm({
       ) : null}
 
       {/* 분류는 편집기 위에 둔다. 먼저 보여야 더 자주 단다. 템플릿 추천에도 쓰인다. */}
-      {sectionMode ? null : <DocMetaFields meta={meta} onChange={setMeta} />}
+      {sectionMode ? null : (
+        <DocMetaFields meta={meta} onChange={setMeta} paramNames={paramNames} />
+      )}
 
       {/* 저장 충돌로 다른 사람이 만든 판이 기준이 되면 사라진다. */}
       {presetOpen && presets.length > 0 && base.baseRevisionId === null ? (
@@ -557,7 +566,7 @@ export function EditorForm({
             editor={toolEditor}
             request={setRequest}
             onPickImage={() => fileInput.current?.click()}
-            isTemplatePage={namespaceOf(target.title) === "template"}
+            isTemplatePage={isTemplatePage}
             onConvertToRedirect={
               sectionMode || !onConvertToRedirect
                 ? undefined

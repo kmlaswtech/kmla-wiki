@@ -3,7 +3,6 @@ import {
   NODE,
   numberAttr,
   stringAttr,
-  stringListAttr,
   walk,
   type WikiDoc,
   type WikiMark,
@@ -126,9 +125,12 @@ function blockToText(node: WikiNode): string {
     case NODE.fold:
       return `:::접기 ${stringAttr(node, "title")}\n${blocksToText(node.content ?? [])}\n:::`;
     case NODE.template: {
-      const args = stringListAttr(node, "args");
       const name = stringAttr(node, "name");
-      return `{{${templateTitle(name) ?? name}${args.map((arg) => `|${arg}`).join("")}}}`;
+      const args = (node.content ?? []).map(
+        (arg) =>
+          `|${stringAttr(arg, "name")}=${inlineToText(arg.content ?? [])}`,
+      );
+      return `{{${templateTitle(name) ?? name}${args.join("")}}}`;
     }
     case NODE.image: {
       // 설명이 같은 다른 이미지로 바꾼 것도 비교에 보이게 이미지 번호 앞부분을 적는다.
@@ -266,7 +268,7 @@ function inlineToText(nodes: readonly WikiNode[]): string {
         case NODE.footnote:
           return `[* ${inlineToText(node.content ?? [])}]`;
         case NODE.templateParam:
-          return `{{{${numberAttr(node, "index") ?? 1}}}}`;
+          return `{{{${stringAttr(node, "name")}}}}`;
         default:
           return node.content ? inlineToText(node.content) : "";
       }

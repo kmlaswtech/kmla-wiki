@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { WikiNode } from "~/features/markup";
+
 import {
   doc,
   footnote,
@@ -123,12 +125,15 @@ describe("parseWiki", () => {
     const templates = new Map([
       [
         "틀:출처",
-        doc(para(text("본문"), footnote([text("출처: "), param(1)]))),
+        doc(para(text("본문"), footnote([text("출처: "), param("출처")]))),
       ],
     ]);
-    const { footnotes } = parseWiki(doc(template("출처", ["학사 규정"])), {
-      templates,
-    });
+    const { footnotes } = parseWiki(
+      doc(template("출처", { 출처: "학사 규정" })),
+      {
+        templates,
+      },
+    );
     expect(footnotes).toEqual([
       { number: 1, content: [text("출처: "), text("학사 규정")] },
     ]);
@@ -166,21 +171,27 @@ describe("parseWiki", () => {
   });
 
   describe("templates", () => {
-    const notice = doc(para(text("주의: "), param(1), text(" 끝")));
+    const notice = doc(para(text("주의: "), param("사유"), text(" 끝")));
 
     it("includes a template body and fills its values", () => {
-      const { blocks } = parseWiki(doc(template("오래된 정보", ["값"])), {
-        templates: new Map([["틀:오래된 정보", notice]]),
-      });
+      const { blocks } = parseWiki(
+        doc(template("오래된 정보", { 사유: "값" })),
+        {
+          templates: new Map([["틀:오래된 정보", notice]]),
+        },
+      );
       expect(blocks.map((block) => block.node)).toEqual([
         para(text("주의: "), text("값"), text(" 끝")),
       ]);
     });
 
     it("passes its own values on to a template it calls", () => {
-      const { blocks } = parseWiki(doc(template("감싸기", ["값"])), {
+      const { blocks } = parseWiki(doc(template("감싸기", { 내용: "값" })), {
         templates: new Map([
-          ["틀:감싸기", doc(template("오래된 정보", ["{{{1}}}"]))],
+          [
+            "틀:감싸기",
+            doc(template("오래된 정보", { 사유: [param("내용")] })),
+          ],
           ["틀:오래된 정보", notice],
         ]),
       });
@@ -191,13 +202,85 @@ describe("parseWiki", () => {
 
     it("keeps the formatting the template put on a value's slot", () => {
       const bold = { type: "bold" };
-      const body = doc(para({ ...param(1), marks: [bold] }));
-      const { blocks } = parseWiki(doc(template("강조", ["값"])), {
+      const body = doc(para({ ...param("글"), marks: [bold] }));
+      const { blocks } = parseWiki(doc(template("강조", { 글: "값" })), {
         templates: new Map([["틀:강조", body]]),
       });
       expect(blocks.map((block) => block.node)).toEqual([
         para({ type: "text", text: "값", marks: [bold] }),
       ]);
+    });
+
+    it("keeps the value's own link instead of the template's link", () => {
+      const outer = { type: "wikiLink", attrs: { target: "틀 링크" } };
+      const bold = { type: "bold" };
+      const body = doc(para({ ...param("글"), marks: [outer, bold] }));
+      const { blocks } = parseWiki(
+        doc(template("강조", { 글: [text("일반"), link("토론")] })),
+        { templates: new Map([["틀:강조", body]]) },
+      );
+      expect(blocks[0]!.node.content).toEqual([
+        { type: "text", text: "일반", marks: [outer, bold] },
+        { ...link("토론"), marks: [bold, ...link("토론").marks!] },
+      ]);
+    });
+
+    it("uses the default when a value is empty", () => {
+      const withDefault = {
+        ...notice,
+        attrs: { params: { 사유: { hint: "왜", default: "없음" } } },
+      };
+      const { blocks } = parseWiki(
+        doc(template("오래된 정보", { 사유: " " })),
+        { templates: new Map([["틀:오래된 정보", withDefault]]) },
+      );
+      expect(blocks[0]!.node).toEqual(
+        para(text("주의: "), text("없음"), text(" 끝")),
+      );
+    });
+
+    it("hides table rows whose values are all empty", () => {
+      const row = (label: string, name: string): WikiNode => ({
+        type: "tableRow",
+        content: [
+          { type: "tableHeader", content: [para(text(label))] },
+          { type: "tableCell", content: [para(param(name))] },
+        ],
+      });
+      const box = doc({
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [{ type: "tableHeader", content: [para(text("정보"))] }],
+          },
+          row("이름", "이름"),
+          row("기간", "기간"),
+        ],
+      });
+      const templates = new Map([["틀:정보", box]]);
+      const { blocks } = parseWiki(doc(template("정보", { 이름: "가" })), {
+        templates,
+      });
+      expect(blocks[0]!.node.content).toHaveLength(2);
+      // 틀 문서 자체를 볼 때는 모든 줄이 보인다.
+      expect(parseWiki(box).blocks[0]!.node.content).toHaveLength(3);
+    });
+
+    it("drops a table whose rows are all hidden", () => {
+      const box = doc({
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [{ type: "tableCell", content: [para(param("이름"))] }],
+          },
+        ],
+      });
+      const { blocks } = parseWiki(doc(template("정보")), {
+        templates: new Map([["틀:정보", box]]),
+      });
+      expect(blocks).toEqual([]);
     });
 
     it("drops an empty value", () => {
@@ -355,7 +438,7 @@ describe("docToText", () => {
           type: "bulletList",
           content: [{ type: "listItem", content: [para(text("하나"))] }],
         },
-        template("오래된 정보", ["값"]),
+        template("오래된 정보", { 사유: "값" }),
       ),
       attrs: { categories: ["분류:생활"], redirect: "" },
     });
@@ -367,7 +450,7 @@ describe("docToText", () => {
         "",
         "- 하나",
         "",
-        "{{틀:오래된 정보|값}}",
+        "{{틀:오래된 정보|사유=값}}",
         "",
         "[[분류:생활]]",
       ].join("\n"),
