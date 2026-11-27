@@ -22,6 +22,7 @@ import {
   titleKey,
   WikiContent,
 } from "~/features/markup";
+import { CategoryPresets } from "~/features/presets";
 import { LinkButton } from "~/shared/components/link-button";
 import { RelativeTime } from "~/shared/components/relative-time";
 import { formatDateTime } from "~/shared/lib/time";
@@ -333,6 +334,13 @@ export function PageArticle({
           beforeBody={<TableOfContents headings={document.headings} />}
         />
       )}
+
+      {view.presets.length > 0 ? (
+        <CategoryPresets
+          presets={view.presets}
+          canCreate={view.canEdit || view.isAdmin}
+        />
+      ) : null}
 
       {view.members.length > 0 ? (
         <TitleList

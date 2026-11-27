@@ -820,6 +820,8 @@ declare
   v_revision public.revisions;
   v_redirect_title text;
   v_redirect jsonb;
+  v_members jsonb := '[]'::jsonb;
+  v_presets jsonb := '[]'::jsonb;
 begin
   -- 회원 확인이 지난 사용자는 RLS 때문에 모든 문서가 "없는 문서"로 보인다. 그렇게 답하면 화면이
   -- 문서를 만들라고 안내하게 되므로, 권한 오류로 알려 로그인 화면으로 보내게 한다.
@@ -876,6 +878,26 @@ begin
     );
   end if;
 
+  -- 분류 문서는 속한 문서를, 틀 문서는 쓰는 문서를 보여 준다. 분류에 든 문서 템플릿은 속한 문서가
+  -- 아니라 `presets`에 따로 둔다(넘겨주기 템플릿은 뺀다). 틀을 쓰는 템플릿은 틀을 쓰는 문서에 그대로
+  -- 든다. 접두어는 `features/presets`의 `PRESET_PREFIX`와 맞춘다.
+  if v_page.namespace in ('category', 'template') then
+    select
+      coalesce(jsonb_agg(member.title order by member.title)
+        filter (where not member_kind.is_preset), '[]'::jsonb),
+      coalesce(jsonb_agg(member.title order by member.title)
+        filter (where member_kind.is_preset and member.redirect_key is null), '[]'::jsonb)
+    into v_members, v_presets
+    from public.page_refs as ref
+    join public.pages as member on member.id = ref.from_page_id
+    cross join lateral (
+      select v_page.namespace = 'category' and member.title_key like '위키:템플릿/%' as is_preset
+    ) as member_kind
+    where ref.kind = v_page.namespace
+      and ref.target_key = v_page.title_key
+      and member.deleted_at is null;
+  end if;
+
   return jsonb_build_object(
     'found', true,
     'title', v_page.title,
@@ -912,15 +934,8 @@ begin
       from public.pages as child
       where child.parent_key = v_page.title_key and child.deleted_at is null
     ), '[]'::jsonb),
-    -- 분류 문서는 속한 문서를, 틀 문서는 쓰는 문서를 보여 준다.
-    'members', case when v_page.namespace in ('category', 'template') then coalesce((
-      select jsonb_agg(member.title order by member.title)
-      from public.page_refs as ref
-      join public.pages as member on member.id = ref.from_page_id
-      where ref.kind = v_page.namespace
-        and ref.target_key = v_page.title_key
-        and member.deleted_at is null
-    ), '[]'::jsonb) else '[]'::jsonb end
+    'members', v_members,
+    'presets', v_presets
   );
 end;
 $function$;

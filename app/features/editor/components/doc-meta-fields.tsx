@@ -6,7 +6,7 @@ import { TitleInput } from "./title-input";
 import { baseName, categoryTitle } from "~/features/markup";
 
 /**
- * 본문 흐름 밖의 문서 정보: 분류. 편집기 아래에 따로 둔다.
+ * 본문 흐름 밖의 문서 정보: 분류. 편집기 위에 따로 둔다.
  *
  * 넘겨주기는 여기서 고치지 않는다. 넘겨주기 문서는 따로 된 입력(`RedirectForm`)을 쓴다.
  */

@@ -76,6 +76,7 @@ interface RawPageView {
   backlinks: RawBacklink[];
   children?: string[];
   members?: string[];
+  presets?: string[];
   open_discussions?: number;
   watched?: boolean;
   watchers?: number;
@@ -171,6 +172,7 @@ export async function getPageView(
     backlinks: backlinks.filter((link) => !isAlias(link)),
     children: raw.children ?? [],
     members: raw.members ?? [],
+    presets: raw.presets ?? [],
     openDiscussions: raw.open_discussions ?? 0,
     watched: raw.watched ?? false,
     watchers: raw.watchers ?? 0,

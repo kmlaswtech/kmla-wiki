@@ -9,6 +9,7 @@ import type { MemberStatus } from "~/features/auth";
 import type { ImageInfo } from "~/features/images";
 import { findSections, getSection, pageHref } from "~/features/markup";
 import type { ResolvedBody } from "~/features/pages";
+import type { PresetStartData } from "~/features/presets";
 import { formatDateTime } from "~/shared/lib/time";
 
 /** 편집할 수 없는 이유. 차단은 따로 받는다(`ban`). */
@@ -34,6 +35,7 @@ export function EditScreen({
   startAsRedirect,
   blocked,
   ban,
+  presetStart = null,
 }: {
   target: EditTarget;
   resolved: ResolvedBody;
@@ -43,6 +45,8 @@ export function EditScreen({
   blocked: EditBlocked | null;
   /** 편집 차단. 실제 차단은 서버가 한다. */
   ban: MemberStatus["ban"];
+  /** 없는 문서면 템플릿으로 시작하는 데 쓰는 것. */
+  presetStart?: PresetStartData | null;
 }) {
   const [redirectMode, setRedirectMode] = useState(startAsRedirect);
   const section =
@@ -124,6 +128,7 @@ export function EditScreen({
             initialResolved={resolved}
             initialImages={images}
             onConvertToRedirect={() => setRedirectMode(true)}
+            presetStart={presetStart}
           />
         </>
       )}
