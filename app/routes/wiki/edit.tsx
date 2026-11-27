@@ -11,6 +11,7 @@ import {
 } from "~/features/editor";
 import { emptyDoc, findSections } from "~/features/markup";
 import { canEditPage, getPageView, type ResolvedBody } from "~/features/pages";
+import { loadPresetStart, PRESET_PARAM } from "~/features/presets";
 
 export async function clientLoader({
   request,
@@ -35,6 +36,14 @@ export async function clientLoader({
       baseBody: emptyDoc(),
       sectionIndex: null,
     };
+    // `?preset=`: 분류 문서의 "이 템플릿으로 문서 만들기"에서 왔다. 있는 문서면 이 값은 쓰지 않는다.
+    const presetStart =
+      view.validTitle && !asRedirect
+        ? await loadPresetStart(
+            view.title ?? title,
+            searchParams.get(PRESET_PARAM),
+          )
+        : null;
     return {
       target,
       resolved: empty,
@@ -42,6 +51,7 @@ export async function clientLoader({
       isNew: true,
       startAsRedirect: asRedirect,
       blocked: (view.validTitle ? null : "invalid-title") as EditBlocked | null,
+      presetStart,
     };
   }
 
@@ -74,6 +84,7 @@ export async function clientLoader({
     startAsRedirect:
       Boolean(body.attrs?.redirect) || (asRedirect && sectionIndex === null),
     blocked,
+    presetStart: null,
   };
 }
 
@@ -85,12 +96,13 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function EditRoute({ loaderData }: Route.ComponentProps) {
-  const { target } = loaderData;
+  const { target, presetStart } = loaderData;
   const status = useOutletContext<MemberStatus>();
   // 다른 문서·문단·판으로 가면 화면을 새로 만든다(`EditScreen`).
   return (
     <EditScreen
-      key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}`}
+      // 고른 템플릿(`?preset=`)이 바뀌어도 새로 만든다. 편집기는 처음 받은 글로 한 번만 만든다.
+      key={`${target.title}#${target.sectionIndex}@${target.baseRevisionId}?${presetStart?.presetTitle ?? ""}`}
       {...loaderData}
       ban={status.ban}
     />

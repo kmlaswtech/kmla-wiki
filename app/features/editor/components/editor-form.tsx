@@ -17,6 +17,7 @@ import { clearDraft, loadDraft, saveDraft } from "../storage/drafts";
 import { DocMetaFields } from "./doc-meta-fields";
 import { EditorDialogs } from "./editor-dialogs";
 import type { EditorRequest } from "./editor-ui";
+import { PresetStart } from "./preset-start";
 import { ProfileEditor } from "./profile-editor";
 import { Toolbar } from "./toolbar";
 import { useWikiEditor, WikiEditorContent } from "./wiki-editor";
@@ -33,6 +34,7 @@ import {
   emptyDoc,
   extractRefs,
   getSection,
+  isBlank,
   namespaceOf,
   NODE,
   pageHref,
@@ -47,6 +49,7 @@ import {
   resolveBody,
   type ResolvedBody,
 } from "~/features/pages";
+import type { PresetStartData } from "~/features/presets";
 import { LinkButton } from "~/shared/components/link-button";
 import { cn } from "~/shared/lib/utils";
 import { Button } from "~/shared/ui/button";
@@ -71,6 +74,11 @@ interface EditorFormProps {
   initialImages: ReadonlyMap<string, ImageInfo>;
   /** "넘겨주기로 바꾸기": 넘겨주기 입력(`RedirectForm`)으로 바꾼다. 문단 편집에는 없다. */
   onConvertToRedirect?: () => void;
+  /**
+   * 템플릿으로 시작하는 데 쓰는 것(`features/presets`). 없는 문서일 때만 받는다. `initialBody`(`?preset=`으로
+   * 고른 템플릿)가 있으면 그것으로 시작한다.
+   */
+  presetStart?: PresetStartData | null;
 }
 
 /** 입력이 멈춘 뒤 틀·링크 정보와 임시 저장을 갱신하기까지의 시간. */
@@ -106,7 +114,10 @@ export function EditorForm({
   initialResolved,
   initialImages,
   onConvertToRedirect,
+  presetStart = null,
 }: EditorFormProps) {
+  const presets = presetStart?.presets ?? [];
+  const initialBody = presetStart?.initialBody ?? null;
   const navigate = useNavigate();
   const loginOnExpiry = useLoginOnExpiry();
   const key = titleKey(target.title);
@@ -114,10 +125,14 @@ export function EditorForm({
 
   // 충돌이 나면 최신 판이 새 기준이 된다. 그래서 기준은 props가 아니라 상태다.
   const [base, setBase] = useState(target);
-  const [draft] = useState(() => loadDraft(key, target.sectionIndex));
+  // 템플릿을 골라 왔으면(`?preset=`) 고른 템플릿으로 시작하고, 이 문서의 임시 저장은 안내에서 따로
+  // 불러오게 한다. 방금 고른 것을 예전 임시 저장이 가리지 않게 하기 위해서다.
+  const [saved] = useState(() => loadDraft(key, target.sectionIndex));
+  const draft = initialBody ? null : saved;
+  const [shelvedDraft, setShelvedDraft] = useState(initialBody ? saved : null);
   // 임시 저장도 편집기 스키마로 한 번 읽는다. 그래야 기준 판과 키 순서까지 같은 값이 된다.
   const [initial] = useState(() =>
-    splitDoc(normalizeDoc(draft?.body ?? editingPart(target))),
+    splitDoc(normalizeDoc(draft?.body ?? initialBody ?? editingPart(target))),
   );
 
   const [content, setContent] = useState<WikiDoc>(initial.content);
@@ -146,6 +161,18 @@ export function EditorForm({
   const [confirmDeletion, setConfirmDeletion] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [draftNotice, setDraftNotice] = useState(draft !== null);
+  // 템플릿 상자: 빈 편집기로 열었을 때 보이고, 적용하거나 닫으면 사라진다. 템플릿 목록은 없는 문서일
+  // 때만 받는다(템플릿 문서 자체를 만들 때는 받지 않는다).
+  const [presetOpen, setPresetOpen] = useState(
+    () => isBlank(initial.content) && !initial.meta.profile,
+  );
+  const presetCategoryKeys = useMemo(
+    () => [
+      ...meta.categories.map(titleKey),
+      ...(presetStart?.ancestorCategories ?? []),
+    ],
+    [meta.categories, presetStart],
+  );
   const form = useRef<HTMLFormElement>(null);
   /** 저장에 성공했거나 사용자가 버리기로 했을 때 켠다. 그 뒤의 이동은 막지 않는다. */
   const allowLeave = useRef(false);
@@ -169,11 +196,13 @@ export function EditorForm({
   );
 
   // 틀 본문·링크 대상·이미지 정보를 다시 받을 글. 가리키는 것(링크·틀·이미지)이 바뀔 때만 바뀐다.
-  // 처음 글의 정보는 화면을 열 때 이미 받았다. 임시 저장을 불러왔으면 글이 다르므로 다시 받는다.
+  // 처음 글의 정보는 화면을 열 때 이미 받았다. 임시 저장이나 템플릿으로 시작했으면 글이 다르므로 다시
+  // 받는다.
+  const startedOther = draft !== null || initialBody !== null;
   const [lookup, setLookup] = useState<WikiDoc | null>(() =>
-    draft ? current : null,
+    startedOther ? current : null,
   );
-  const lookupKey = useRef(draft ? null : refsKey(current));
+  const lookupKey = useRef(startedOther ? null : refsKey(current));
 
   const editor = useWikiEditor({
     initialContent: initial.content,
@@ -435,22 +464,16 @@ export function EditorForm({
       }}
     >
       {draftNotice ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-          <span>이 브라우저의 임시 저장 내용을 불러왔습니다.</span>
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            onClick={() => {
-              clearDraft(key, target.sectionIndex);
-              resetTo(baseline);
-              setSummary("");
-              setDraftNotice(false);
-            }}
-          >
-            임시 저장 내용 버리기
-          </Button>
-        </div>
+        <DraftNotice
+          message="이 브라우저의 임시 저장 내용을 불러왔습니다."
+          action="임시 저장 내용 버리기"
+          onAction={() => {
+            clearDraft(key, target.sectionIndex);
+            resetTo(baseline);
+            setSummary("");
+            setDraftNotice(false);
+          }}
+        />
       ) : null}
 
       {conflict !== null ? (
@@ -469,6 +492,46 @@ export function EditorForm({
         <p className="rounded-md bg-muted px-3 py-2 text-sm break-keep text-muted-foreground">
           본문을 저장하면 넘겨주기가 해제됩니다.
         </p>
+      ) : null}
+
+      {shelvedDraft ? (
+        <DraftNotice
+          message="이 문서를 작성하던 임시 저장 내용이 있습니다."
+          action="임시 저장 내용 불러오기"
+          onAction={() => {
+            resetTo(shelvedDraft.body);
+            setSummary(shelvedDraft.summary);
+            setShelvedDraft(null);
+            setPresetOpen(false);
+          }}
+        />
+      ) : null}
+
+      {/* 분류는 편집기 위에 둔다. 먼저 보여야 더 자주 단다. 템플릿 추천에도 쓰인다. */}
+      {sectionMode ? null : <DocMetaFields meta={meta} onChange={setMeta} />}
+
+      {/* 저장 충돌로 다른 사람이 만든 판이 기준이 되면 사라진다. */}
+      {presetOpen && presets.length > 0 && base.baseRevisionId === null ? (
+        <PresetStart
+          pageTitle={target.title}
+          presets={presets}
+          categoryKeys={presetCategoryKeys}
+          dirty={!isBlank(content) || meta.profile !== null}
+          onClose={() => setPresetOpen(false)}
+          onApply={(doc) => {
+            // 먼저 단 분류는 남기고 템플릿의 분류를 더한다.
+            const categories = [
+              ...new Set([
+                ...meta.categories,
+                ...(doc.attrs?.categories ?? []),
+              ]),
+            ];
+            resetTo({ ...doc, attrs: { ...doc.attrs, categories } });
+            // 임시 저장 안내의 "버리기"가 템플릿 내용까지 지우지 않게 안내를 닫는다.
+            setDraftNotice(false);
+            setPresetOpen(false);
+          }}
+        />
       ) : null}
 
       <div role="tablist" aria-label="편집과 변경 사항" className="flex gap-1">
@@ -593,8 +656,6 @@ export function EditorForm({
         </section>
       ) : null}
 
-      {sectionMode ? null : <DocMetaFields meta={meta} onChange={setMeta} />}
-
       <div className="grid gap-1.5">
         <Label htmlFor="edit-summary">편집 요약 (선택)</Label>
         <Input
@@ -673,7 +734,7 @@ export function EditorForm({
                 void navigate(pageHref(target.title));
               }}
             >
-              버리고 나가기
+              나가기
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -755,4 +816,24 @@ function refsKey(doc: WikiDoc): string {
     .map((ref) => `${ref.kind}:${ref.target}`)
     .sort()
     .join("\n");
+}
+
+/** 임시 저장 안내 한 줄과 단추 하나. */
+function DraftNotice({
+  message,
+  action,
+  onAction,
+}: {
+  message: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+      <span>{message}</span>
+      <Button type="button" size="xs" variant="outline" onClick={onAction}>
+        {action}
+      </Button>
+    </div>
+  );
 }

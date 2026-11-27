@@ -372,6 +372,26 @@ select is_empty($$select 1 from public.revisions$$, 'no revisions');
 select is_empty($$select 1 from public.page_refs$$, 'and no references');
 select logout();
 
+-- ── 분류의 문서 템플릿 ─────────────────────────────────────────────────────────
+select login(:alice);
+select public.save_revision('분류:템플릿 분류', null, wiki('분류 문서'));
+select public.save_revision('템플릿 분류 문서', null, wiki('본문 [[분류:템플릿 분류]]'));
+select public.save_revision('위키:템플릿/템플릿 분류', null, wiki('템플릿 [[분류:템플릿 분류]]'));
+
+select is(
+  public.get_page_view('분류:템플릿 분류') -> 'members',
+  '["템플릿 분류 문서"]'::jsonb,
+  'a category lists its pages without its presets');
+select is(
+  public.get_page_view('분류:템플릿 분류') -> 'presets',
+  '["위키:템플릿/템플릿 분류"]'::jsonb,
+  'a category lists its presets apart');
+select is(
+  public.get_page_view('템플릿 분류 문서') -> 'presets',
+  '[]'::jsonb,
+  'a page that is not a category has no presets');
+select logout();
+
 -- ── 저장 빈도 상한 ───────────────────────────────────────────────────────────
 with written as (
   insert into public.revisions (page_id, body, author_pseudonym, kind, text_size, text_added, text_removed)
