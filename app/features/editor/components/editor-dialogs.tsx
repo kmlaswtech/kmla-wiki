@@ -687,6 +687,8 @@ function TemplateParamForm({
         <Input
           id="template-param-name"
           value={name}
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- 대화상자를 열자마자 칠 수 있게 한다.
+          autoFocus
           placeholder="예: 이름, 기간, 사유"
           aria-invalid={tooLong || undefined}
           aria-describedby={tooLong ? "template-param-error" : undefined}
