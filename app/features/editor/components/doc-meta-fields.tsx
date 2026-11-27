@@ -126,7 +126,7 @@ function ParamMetaFields({
       </legend>
       <p className="clear-left text-xs text-muted-foreground">
         설명은 틀을 넣을 때 칸 아래에 보입니다. 기본값은 값을 비웠을 때
-        들어갑니다. 값이 모두 빈 표 줄은 보이지 않습니다.
+        들어갑니다.
       </p>
       <div className="grid grid-cols-[minmax(4rem,auto)_1fr_1fr] items-center gap-x-2 gap-y-1.5 text-sm">
         <span className="text-xs text-muted-foreground">이름</span>

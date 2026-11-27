@@ -4,7 +4,6 @@ import {
   NODE,
   nodeText,
   stringAttr,
-  walk,
   type WikiDoc,
   type WikiMark,
   type WikiNode,
@@ -78,7 +77,7 @@ interface Context {
 /**
  * 저장된 문서를 화면에 그릴 모양으로 준비한다. 순수 함수다(같은 입력에 같은 출력, I/O 없음).
  *
- *  - 틀 자리에 틀 본문을 끼워 넣고 값 자리를 이름 값으로 채운다. 값이 모두 빈 표 행은 숨긴다.
+ *  - 틀 자리에 틀 본문을 끼워 넣고 값 자리를 이름 값으로 채운다.
  *  - 맨 바깥 제목에 id와 목차 번호를 매긴다.
  *  - 각주에 차례대로 번호를 붙인다.
  */
@@ -189,17 +188,7 @@ function prepareContent(
       content.push(...fillParam(child, scope));
       continue;
     }
-    // 값 자리가 있는데 값이 모두 빈 표 행은 그리지 않는다(정보 상자의 빈 줄). 틀 문서 자체를 볼
-    // 때(`scope` 없음)는 모든 행을 보인다.
-    if (scope && child.type === NODE.tableRow && isEmptyRow(child, scope)) {
-      continue;
-    }
-    const prepared = prepare(child, context, stack, scope);
-    // 행이 모두 숨은 표는 그리지 않는다.
-    if (scope && prepared.type === NODE.table && !prepared.content?.length) {
-      continue;
-    }
-    content.push(prepared);
+    content.push(prepare(child, context, stack, scope));
   }
   return content;
 }
@@ -282,16 +271,4 @@ function fillParam(node: WikiNode, scope: Scope): WikiNode[] {
 
 function isLinkMark(mark: WikiMark): boolean {
   return mark.type === MARK.link || mark.type === MARK.wikiLink;
-}
-
-/** 값 자리가 있고, 그 값이 모두 비었는가(기본값도 없음). */
-function isEmptyRow(row: WikiNode, scope: Scope): boolean {
-  const names: string[] = [];
-  walk(row.content ?? [], (node) => {
-    if (node.type === NODE.templateParam) names.push(stringAttr(node, "name"));
-  });
-  return (
-    names.length > 0 &&
-    names.every((name) => resolveParam(name, scope).length === 0)
-  );
 }

@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import type { WikiNode } from "~/features/markup";
-
 import {
   doc,
   footnote,
@@ -237,50 +235,6 @@ describe("parseWiki", () => {
       expect(blocks[0]!.node).toEqual(
         para(text("주의: "), text("없음"), text(" 끝")),
       );
-    });
-
-    it("hides table rows whose values are all empty", () => {
-      const row = (label: string, name: string): WikiNode => ({
-        type: "tableRow",
-        content: [
-          { type: "tableHeader", content: [para(text(label))] },
-          { type: "tableCell", content: [para(param(name))] },
-        ],
-      });
-      const box = doc({
-        type: "table",
-        content: [
-          {
-            type: "tableRow",
-            content: [{ type: "tableHeader", content: [para(text("정보"))] }],
-          },
-          row("이름", "이름"),
-          row("기간", "기간"),
-        ],
-      });
-      const templates = new Map([["틀:정보", box]]);
-      const { blocks } = parseWiki(doc(template("정보", { 이름: "가" })), {
-        templates,
-      });
-      expect(blocks[0]!.node.content).toHaveLength(2);
-      // 틀 문서 자체를 볼 때는 모든 줄이 보인다.
-      expect(parseWiki(box).blocks[0]!.node.content).toHaveLength(3);
-    });
-
-    it("drops a table whose rows are all hidden", () => {
-      const box = doc({
-        type: "table",
-        content: [
-          {
-            type: "tableRow",
-            content: [{ type: "tableCell", content: [para(param("이름"))] }],
-          },
-        ],
-      });
-      const { blocks } = parseWiki(doc(template("정보")), {
-        templates: new Map([["틀:정보", box]]),
-      });
-      expect(blocks).toEqual([]);
     });
 
     it("drops an empty value", () => {
